@@ -46,4 +46,4 @@ echo -e "\nGet cleos version:"
 ./cleos.sh version client
 
 docker-compose down
-docker system prune
+yes | docker system prune
