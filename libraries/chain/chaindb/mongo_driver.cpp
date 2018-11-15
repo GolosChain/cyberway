@@ -544,6 +544,12 @@ namespace cyberway { namespace chaindb {
             lazy_open();
             if (is_end() || !object_.is_null()) return object_;
 
+            auto itr = source_->begin();
+            if (source_->end() == itr) {
+                object_.clear();
+                return object_;
+            }
+
             auto& view = *source_->begin();
             object_ = _detail::build_variant(view);
             pk = _detail::get_pk_value(index, view);
@@ -685,9 +691,7 @@ namespace cyberway { namespace chaindb {
 
         void init_pk_value() {
             auto itr = source_->begin();
-            if (source_->end() == itr) {
-                open_end();
-            } else {
+            if (source_->end() != itr) {
                 pk = _detail::get_pk_value(index, *itr);
             }
         }
