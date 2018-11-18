@@ -486,6 +486,8 @@ namespace cyberway { namespace chaindb {
                 dst.object_ = object_;
             }
 
+            dst.reached_end_ = reached_end_;
+
             return dst;
         }
 
@@ -542,13 +544,13 @@ namespace cyberway { namespace chaindb {
 
         const variant& get_object_value() {
             lazy_open();
-            if (is_end() || !object_.is_null()) return object_;
 
-            auto itr = source_->begin();
-            if (source_->end() == itr) {
+            if (is_end()) {
                 object_.clear();
                 return object_;
             }
+
+            if (!object_.is_null()) { return object_; }
 
             auto& view = *source_->begin();
             object_ = _detail::build_variant(view);
@@ -568,7 +570,7 @@ namespace cyberway { namespace chaindb {
         variant object_;
 
         bool is_end() const {
-            return end_primary_key == pk;
+            return end_primary_key == pk || reached_end_;
         }
 
         void change_direction(const cmp_info& find_cmp) {
@@ -590,10 +592,10 @@ namespace cyberway { namespace chaindb {
             document find;
 
             find.append(kvp(get_scope_field_name(), get_scope_name(index)));
-            if (!find_key_.is_object()) return find;
+            if (!find_key_.is_object()) { return find; }
 
             auto& find_object = find_key_.get_object();
-            if (!find_object.size()) return find;
+            if (!find_object.size()) { return find; }
 
             auto& orders = index.index->orders;
             for (auto& o: orders) {
@@ -691,8 +693,12 @@ namespace cyberway { namespace chaindb {
 
         void init_pk_value() {
             auto itr = source_->begin();
-            if (source_->end() != itr) {
+            if (source_->end() == itr) {
+                open_end();
+                reached_end_ = true;
+            } else {
                 pk = _detail::get_pk_value(index, *itr);
+                reached_end_ = false;
             }
         }
 

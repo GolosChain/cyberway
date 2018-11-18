@@ -16,6 +16,7 @@ namespace cyberway { namespace chaindb {
         index_info    index;
         primary_key_t pk = end_primary_key;
         bytes         blob; // serialized by controller value
+        bool reached_end_ = false;
     }; // struct cursor_info
 
     class driver_interface {
