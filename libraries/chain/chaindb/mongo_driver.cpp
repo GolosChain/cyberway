@@ -263,7 +263,7 @@ namespace cyberway { namespace chaindb {
                         break;
                     case variant::type_id::time_type:
                         dst.append(to_date(item.as_time_point()));
-                         break;
+                        break;
                     case variant::type_id::array_type:
                         dst.append([&](sub_array array){ build_document(array, item.get_array()); });
                         break;
