@@ -231,6 +231,7 @@ private:
 
     Allocator allocator_;
     chaindb_controller& controller_;
+    uint64_t table_code_;
 
     struct item_data: public cache_item_data {
         struct item_type: public T {
@@ -617,10 +618,10 @@ public:
 
 public:
     multi_index(Allocator* allocator, chaindb_controller& controller)
-    : allocator_(*allocator), controller_(controller), variant_converter_(allocator_), primary_idx_(this)
+    : allocator_(*allocator), controller_(controller), table_code_(code_extractor<TableName>::get_code()), variant_converter_(allocator_), primary_idx_(this)
     { }
 
-    constexpr static table_name_t table_name()  { return code_extractor<TableName>::get_code(); }
+    table_name_t table_name() const { return table_code_; }
     constexpr static account_name_t get_code()  { return 0; }
     constexpr static account_name_t get_scope() { return 0; }
 
