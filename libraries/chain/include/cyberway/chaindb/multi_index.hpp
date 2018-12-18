@@ -423,7 +423,7 @@ private:
         }
     }; // struct multi_index::const_iterator_impl
 
-    cache_item_ptr load_object(const cursor_t cursor, const primary_key_t pk) const {
+    cache_item_ptr load_object(const cursor_t& cursor, const primary_key_t& pk) const {
         // controller will call as to convert_object()
         auto ptr = controller_.get_cache_item({get_code(), cursor}, get_table_request(), pk, variant_converter_);
 

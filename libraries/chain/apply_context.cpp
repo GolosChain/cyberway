@@ -73,7 +73,7 @@ void apply_context::exec_one( action_trace& trace )
             try {
                cyberway::chaindb::chaindb_guard guard(chaindb, receiver);
                control.get_wasm_interface().apply( a.code_version, a.code, *this );
-               chaindb.apply_changes(receiver);
+               chaindb.apply_code_changes(receiver);
             } catch( const wasm_exit& ) {}
          }
       } FC_RETHROW_EXCEPTIONS(warn, "pending console output: ${console}", ("console", _pending_console_output.str()))
@@ -143,6 +143,10 @@ void apply_context::exec( action_trace& trace )
    }
 
 } /// exec()
+
+bool apply_context::is_domain(const domain_name& domain) const {
+   return nullptr != db.find<domain_object,by_name>(domain);
+}
 
 bool apply_context::is_account( const account_name& account )const {
    return nullptr != db.find<account_object,by_name>( account );
