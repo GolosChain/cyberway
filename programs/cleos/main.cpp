@@ -195,6 +195,10 @@ vector<string> tx_permission;
 
 eosio::client::http::http_context context;
 
+const string token_cntr_name = "cyber.token";
+const string wrap_cntr_name = "cyber.wrap";
+const string msig_cntr_name = "cyber.msig";
+
 void add_standard_transaction_options(CLI::App* cmd, string default_permission = "") {
    CLI::callback_t parse_expiration = [](CLI::results_t res) -> bool {
       double value_s;
@@ -782,7 +786,7 @@ asset to_asset( account_name code, const string& s ) {
 }
 
 inline asset to_asset( const string& s ) {
-   return to_asset( N(eosio.token), s );
+   return to_asset( N(cyber.token), s );
 }
 
 struct set_account_permission_subcommand {
@@ -2604,7 +2608,6 @@ int main( int argc, char** argv ) {
    auto setActionPermission = set_action_permission_subcommand(setAction);
 
    // Transfer subcommand
-   string con = "eosio.token";
    string sender;
    string recipient;
    string amount;
@@ -2615,7 +2618,7 @@ int main( int argc, char** argv ) {
    transfer->add_option("recipient", recipient, localized("The account receiving EOS"))->required();
    transfer->add_option("amount", amount, localized("The amount of EOS to send"))->required();
    transfer->add_option("memo", memo, localized("The memo for the transfer"));
-   transfer->add_option("--contract,-c", con, localized("The contract which controls the token"));
+   transfer->add_option("--contract,-c", token_cntr_name, localized("The contract which controls the token"));
    transfer->add_flag("--pay-ram-to-open", pay_ram, localized("Pay ram to open recipient's token balance row"));
 
    add_standard_transaction_options(transfer, "sender@active");
@@ -2626,12 +2629,12 @@ int main( int argc, char** argv ) {
          tx_force_unique = false;
       }
 
-      auto transfer_amount = to_asset(con, amount);
-      auto transfer = create_transfer(con, sender, recipient, transfer_amount, memo);
+      auto transfer_amount = to_asset(token_cntr_name, amount);
+      auto transfer = create_transfer(token_cntr_name, sender, recipient, transfer_amount, memo);
       if (!pay_ram) {
          send_actions( { transfer });
       } else {
-         auto open_ = create_open(con, recipient, transfer_amount.get_symbol(), sender);
+         auto open_ = create_open(token_cntr_name, recipient, transfer_amount.get_symbol(), sender);
          send_actions( { open_, transfer } );
       }
    });
@@ -3027,7 +3030,7 @@ int main( int argc, char** argv ) {
          ("requested", requested_perm_var)
          ("trx", trx_var);
 
-      send_actions({chain::action{accountPermissions, "eosio.msig", "propose", variant_to_bin( N(eosio.msig), N(propose), args ) }});
+      send_actions({chain::action{accountPermissions, msig_cntr_name, "propose", variant_to_bin( N(cyber.msig), N(propose), args ) }});
    });
 
    //multisige propose transaction
@@ -3067,7 +3070,7 @@ int main( int argc, char** argv ) {
          ("requested", requested_perm_var)
          ("trx", trx_var);
 
-      send_actions({chain::action{accountPermissions, "eosio.msig", "propose", variant_to_bin( N(eosio.msig), N(propose), args ) }});
+      send_actions({chain::action{accountPermissions, msig_cntr_name, "propose", variant_to_bin( N(cyber.msig), N(propose), args ) }});
    });
 
 
@@ -3078,7 +3081,7 @@ int main( int argc, char** argv ) {
 
    review->set_callback([&] {
       auto result = call(get_table_func, fc::mutable_variant_object("json", true)
-                         ("code", "eosio.msig")
+                         ("code", msig_cntr_name)
                          ("scope", proposer)
                          ("table", "proposal")
                          ("table_key", "")
@@ -3123,7 +3126,7 @@ int main( int argc, char** argv ) {
          ("level", perm_var);
 
       auto accountPermissions = tx_permission.empty() ? vector<chain::permission_level>{{sender,config::active_name}} : get_account_permissions(tx_permission);
-      send_actions({chain::action{accountPermissions, "eosio.msig", action, variant_to_bin( N(eosio.msig), action, args ) }});
+      send_actions({chain::action{accountPermissions, msig_cntr_name, action, variant_to_bin( N(cyber.msig), action, args ) }});
    };
 
    // multisig approve
@@ -3166,7 +3169,7 @@ int main( int argc, char** argv ) {
          ("proposal_name", proposal_name)
          ("canceler", canceler);
 
-      send_actions({chain::action{accountPermissions, "eosio.msig", "cancel", variant_to_bin( N(eosio.msig), N(cancel), args ) }});
+      send_actions({chain::action{accountPermissions, msig_cntr_name, "cancel", variant_to_bin( N(cyber.msig), N(cancel), args ) }});
       }
    );
 
@@ -3195,7 +3198,7 @@ int main( int argc, char** argv ) {
          ("proposal_name", proposal_name)
          ("executer", executer);
 
-      send_actions({chain::action{accountPermissions, "eosio.msig", "exec", variant_to_bin( N(eosio.msig), N(exec), args ) }});
+      send_actions({chain::action{accountPermissions, msig_cntr_name, "exec", variant_to_bin( N(cyber.msig), N(exec), args ) }});
       }
    );
 
@@ -3204,14 +3207,13 @@ int main( int argc, char** argv ) {
    wrap->require_subcommand();
 
    // wrap exec
-   string wrap_con = "eosio.wrap";
    executer = "";
    string trx_to_exec;
    auto wrap_exec = wrap->add_subcommand("exec", localized("Execute a transaction while bypassing authorization checks"));
    add_standard_transaction_options(wrap_exec);
    wrap_exec->add_option("executer", executer, localized("Account executing the transaction and paying for the deferred transaction RAM"))->required();
    wrap_exec->add_option("transaction", trx_to_exec, localized("The JSON string or filename defining the transaction to execute"))->required();
-   wrap_exec->add_option("--contract,-c", wrap_con, localized("The account which controls the wrap contract"));
+   wrap_exec->add_option("--contract,-c", wrap_cntr_name, localized("The account which controls the wrap contract"));
 
    wrap_exec->set_callback([&] {
       fc::variant trx_var;
@@ -3221,18 +3223,18 @@ int main( int argc, char** argv ) {
 
       auto accountPermissions = get_account_permissions(tx_permission);
       if( accountPermissions.empty() ) {
-         accountPermissions = vector<permission_level>{{executer, config::active_name}, {wrap_con, config::active_name}};
+         accountPermissions = vector<permission_level>{{executer, config::active_name}, {wrap_cntr_name, config::active_name}};
       }
 
       auto args = fc::mutable_variant_object()
          ("executer", executer )
          ("trx", trx_var);
 
-      send_actions({chain::action{accountPermissions, wrap_con, "exec", variant_to_bin( wrap_con, N(exec), args ) }});
+      send_actions({chain::action{accountPermissions, wrap_cntr_name, "exec", variant_to_bin( wrap_cntr_name, N(exec), args ) }});
    });
 
    // system subcommand
-   auto system = app.add_subcommand("system", localized("Send eosio.system contract action to the blockchain."), false);
+   auto system = app.add_subcommand("system", localized("Send cyber.system contract action to the blockchain."), false);
    system->require_subcommand();
 
    auto createAccountSystem = create_account_subcommand( system, false /*simple*/ );
