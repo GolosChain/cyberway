@@ -175,6 +175,10 @@ struct controller_impl {
     */
    map<digest_type, transaction_metadata_ptr>     unapplied_transactions;
 
+   void set_abi(name account, const abi_def& abi) {
+       emit(self.setabi, std::make_tuple(account, std::ref(abi)));
+   }
+
    void pop_block() {
       auto prev = fork_db.get_block( head->header.previous );
       EOS_ASSERT( prev, block_validate_exception, "attempt to pop beyond last irreversible block" );
@@ -242,6 +246,10 @@ struct controller_impl {
    fork_db.irreversible.connect( [&]( auto b ) {
                                  on_irreversible(b);
                                  });
+
+   self.setabi.connect( [&]( auto b ) {
+       chaindb.add_abi( std::get<0>(b), std::get<1>(b) );
+   });
 
    }
 
@@ -2150,6 +2158,10 @@ db_read_mode controller::get_read_mode()const {
 
 validation_mode controller::get_validation_mode()const {
    return my->conf.block_validation_mode;
+}
+
+void controller::set_abi(name account, const abi_def &abi) {
+    my->set_abi(account, abi);
 }
 
 const apply_handler* controller::find_apply_handler( account_name receiver, account_name scope, action_name act ) const
