@@ -392,58 +392,62 @@ namespace bacc = boost::accumulators;
    }
 
    void transaction_context::finalize() {
-      EOS_ASSERT( is_initialized, transaction_exception, "must first initialize" );
+        validate_bw_usage();
 
-      if( is_input ) {
-         auto& am = control.get_mutable_authorization_manager();
-         for( const auto& act : trx.actions ) {
-            for( const auto& auth : act.authorization ) {
-               am.update_permission_usage( am.get_permission(auth) );
-            }
-         }
-      }
-
-      auto& rl = control.get_mutable_resource_limits_manager();
-      for( auto a : validate_ram_usage ) {
-         rl.verify_account_ram_usage( a );
-      }
-
-      // Calculate the new highest network usage and CPU time that all of the billed accounts can afford to be billed
-      int64_t account_net_limit = 0;
-      int64_t account_cpu_limit = 0;
-      bool greylisted_net = false, greylisted_cpu = false;
-      std::tie( account_net_limit, account_cpu_limit, greylisted_net, greylisted_cpu) = max_bandwidth_billed_accounts_can_pay();
-      net_limit_due_to_greylist |= greylisted_net;
-      cpu_limit_due_to_greylist |= greylisted_cpu;
-
-      // Possibly lower net_limit to what the billed accounts can pay
-      if( static_cast<uint64_t>(account_net_limit) <= net_limit ) {
-         // NOTE: net_limit may possibly not be objective anymore due to net greylisting, but it should still be no greater than the truly objective net_limit
-         net_limit = static_cast<uint64_t>(account_net_limit);
-         net_limit_due_to_block = false;
-      }
-
-      // Possibly lower objective_duration_limit to what the billed accounts can pay
-      if( account_cpu_limit <= objective_duration_limit.count() ) {
-         // NOTE: objective_duration_limit may possibly not be objective anymore due to cpu greylisting, but it should still be no greater than the truly objective objective_duration_limit
-         objective_duration_limit = fc::microseconds(account_cpu_limit);
-         billing_timer_exception_code = tx_cpu_usage_exceeded::code_value;
-      }
-
-      net_usage = ((net_usage + 7)/8)*8; // Round up to nearest multiple of word size (8 bytes)
-
-      eager_net_limit = net_limit;
-      check_net_usage();
-
-      auto now = fc::time_point::now();
-      trace->elapsed = now - start;
-
-      update_billed_cpu_time( now );
-
-      validate_cpu_usage_to_bill( billed_cpu_time_us );
-
-      rl.add_transaction_usage( bill_to_accounts, static_cast<uint64_t>(billed_cpu_time_us), net_usage,
+        control.get_mutable_resource_limits_manager().add_transaction_usage( bill_to_accounts, static_cast<uint64_t>(billed_cpu_time_us), net_usage,
                                 block_timestamp_type(control.pending_block_time()).slot ); // Should never fail
+   }
+
+   void transaction_context::validate_bw_usage() {
+       EOS_ASSERT( is_initialized, transaction_exception, "must first initialize" );
+
+       if( is_input ) {
+          auto& am = control.get_mutable_authorization_manager();
+          for( const auto& act : trx.actions ) {
+             for( const auto& auth : act.authorization ) {
+                am.update_permission_usage( am.get_permission(auth) );
+             }
+          }
+       }
+
+       auto& rl = control.get_mutable_resource_limits_manager();
+       for( auto a : validate_ram_usage ) {
+          rl.verify_account_ram_usage( a );
+       }
+
+       // Calculate the new highest network usage and CPU time that all of the billed accounts can afford to be billed
+       int64_t account_net_limit = 0;
+       int64_t account_cpu_limit = 0;
+       bool greylisted_net = false, greylisted_cpu = false;
+       std::tie( account_net_limit, account_cpu_limit, greylisted_net, greylisted_cpu) = max_bandwidth_billed_accounts_can_pay();
+       net_limit_due_to_greylist |= greylisted_net;
+       cpu_limit_due_to_greylist |= greylisted_cpu;
+
+       // Possibly lower net_limit to what the billed accounts can pay
+       if( static_cast<uint64_t>(account_net_limit) <= net_limit ) {
+          // NOTE: net_limit may possibly not be objective anymore due to net greylisting, but it should still be no greater than the truly objective net_limit
+          net_limit = static_cast<uint64_t>(account_net_limit);
+          net_limit_due_to_block = false;
+       }
+
+       // Possibly lower objective_duration_limit to what the billed accounts can pay
+       if( account_cpu_limit <= objective_duration_limit.count() ) {
+          // NOTE: objective_duration_limit may possibly not be objective anymore due to cpu greylisting, but it should still be no greater than the truly objective objective_duration_limit
+          objective_duration_limit = fc::microseconds(account_cpu_limit);
+          billing_timer_exception_code = tx_cpu_usage_exceeded::code_value;
+       }
+
+       net_usage = ((net_usage + 7)/8)*8; // Round up to nearest multiple of word size (8 bytes)
+
+       eager_net_limit = net_limit;
+       check_net_usage();
+
+       auto now = fc::time_point::now();
+       trace->elapsed = now - start;
+
+       update_billed_cpu_time( now );
+
+       validate_cpu_usage_to_bill( billed_cpu_time_us );
    }
 
    void transaction_context::squash() {

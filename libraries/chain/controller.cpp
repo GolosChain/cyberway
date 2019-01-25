@@ -1025,38 +1025,36 @@ struct controller_impl {
       return push_scheduled_transaction( *itr, deadline, billed_cpu_time_us, explicit_billed_cpu_time );
    }
 
-    std::map<account_name, provided_bandwith> call_approvebw_actions(vector<action>&& actions,  fc::time_point deadline) {
-        signed_transaction call_provide_trx;
-        call_provide_trx.actions = std::move(actions);
+    void call_approvebw_actions(signed_transaction& call_provide_trx, transaction_context& trx_context) {
         call_provide_trx.expiration = self.pending_block_time() + fc::microseconds(999'999); // Round up to avoid appearing expired
         call_provide_trx.set_reference_block( self.head_block_id() );
-        transaction_context trx_context( self, call_provide_trx, call_provide_trx.id());
-        trx_context.deadline = deadline;
 
         trx_context.init_for_implicit_trx();
         trx_context.exec();
-        trx_context.finalize();
+        trx_context.validate_bw_usage();
 
         auto restore = make_block_restore_point();
         fc::move_append( pending->_actions, move(trx_context.executed) );
         trx_context.squash();
         restore.cancel();
-        return trx_context.get_provided_bandwith();
     }
 
-    std::map<account_name, provided_bandwith> verify_bandwith_provided(const vector<action>& actions, fc::time_point deadline)  {
-        std::vector<action> approve_actions;
+    bandwith_request_result get_provided_bandwith(const vector<action>& actions, fc::time_point deadline)  {
+        signed_transaction call_provide_trx;
+        transaction_context trx_context( self, call_provide_trx, call_provide_trx.id());
         for (const auto& action : actions) {
             if (action.account == N(eosio) && action.name == N(requestbw)) {
                 const auto request_bw = action.data_as<requestbw>();
-                approve_actions.emplace_back(vector<permission_level>{{request_bw.provider, config::active_name}}, request_bw.provider, N(approvebw), fc::raw::pack(approvebw( request_bw.account)));
+                call_provide_trx.actions.emplace_back(vector<permission_level>{{request_bw.provider, config::active_name}}, request_bw.provider, N(approvebw), fc::raw::pack(approvebw( request_bw.account)));
             }
         }
 
-        if (!approve_actions.empty()) {
-            return call_approvebw_actions(std::move(approve_actions), deadline);
+        if (!call_provide_trx.actions.empty()) {
+            trx_context.deadline = deadline;
+            call_approvebw_actions(call_provide_trx, trx_context);
         }
-        return {};
+
+        return {trx_context.get_provided_bandwith(), trx_context.get_net_usage(), trx_context.get_cpu_usage()};
     }
 
    transaction_trace_ptr push_scheduled_transaction( const generated_transaction_object& gto, fc::time_point deadline, uint32_t billed_cpu_time_us, bool explicit_billed_cpu_time = false )
@@ -1115,7 +1113,10 @@ struct controller_impl {
       trx_context.billed_cpu_time_us = billed_cpu_time_us;
       trace = trx_context.trace;
       try {
-         trx_context.set_provided_bandwith(verify_bandwith_provided(trx->trx.actions, deadline));
+         auto bandwith_request_result = get_provided_bandwith(trx->trx.actions, deadline);
+         trx_context.set_provided_bandwith(std::move(bandwith_request_result.bandwith));
+         trx_context.add_cpu_usage(bandwith_request_result.used_cpu);
+         trx_context.add_net_usage(bandwith_request_result.used_net);
 
          trx_context.init_for_deferred_trx( gtrx.published );
          trx_context.exec();
@@ -1245,7 +1246,11 @@ struct controller_impl {
          trx_context.billed_cpu_time_us = billed_cpu_time_us;
          trace = trx_context.trace;
          try {
-            trx_context.set_provided_bandwith(verify_bandwith_provided(trx->trx.actions, deadline));
+            auto bandwith_request_result = get_provided_bandwith(trx->trx.actions, deadline);
+
+            trx_context.set_provided_bandwith(std::move(bandwith_request_result.bandwith));
+            trx_context.add_cpu_usage(bandwith_request_result.used_cpu);
+            trx_context.add_net_usage(bandwith_request_result.used_net);
 
             if( trx->implicit ) {
                trx_context.init_for_implicit_trx();

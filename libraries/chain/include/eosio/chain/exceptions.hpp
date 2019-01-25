@@ -196,7 +196,7 @@ namespace eosio { namespace chain {
                                     3040013, "Transaction is too big" )
       FC_DECLARE_DERIVED_EXCEPTION( unknown_transaction_compression, transaction_exception,
                                     3040014, "Unknown transaction compression" )
-      FC_DECLARE_DERIVED_EXCEPTION( bandwith_confirmed, transaction_exception,
+      FC_DECLARE_DERIVED_EXCEPTION( bandwith_already_confirmed, transaction_exception,
                                     3040015, "Bandwith has been already confirmed" )
 
 

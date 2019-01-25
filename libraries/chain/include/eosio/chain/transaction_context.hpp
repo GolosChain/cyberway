@@ -8,9 +8,6 @@ namespace eosio { namespace chain {
    struct provided_bandwith {
        provided_bandwith() = default;
 
-//       provided_bandwith(account_name account)
-//           : account_(account) {}
-
        void confirm(account_name provider);
 
        bool is_confirmed() const {return confirmed_;}
@@ -31,6 +28,13 @@ namespace eosio { namespace chain {
        int64_t cpu_limit_ = 0;
        bool confirmed_ = false;
        account_name provider_;
+   };
+
+
+   struct bandwith_request_result {
+       std::map<account_name, provided_bandwith> bandwith;
+       uint64_t used_net;
+       uint64_t used_cpu;
    };
 
    struct deadline_timer {
@@ -70,8 +74,13 @@ namespace eosio { namespace chain {
          void finalize();
          void squash();
          void undo();
+         void validate_bw_usage();
 
          inline void add_net_usage( uint64_t u ) { net_usage += u; check_net_usage(); }
+         inline void add_cpu_usage( uint64_t u ) { billed_cpu_time_us += u;}
+
+         uint64_t get_net_usage() const {return net_usage;}
+         uint64_t get_cpu_usage() const {return billed_cpu_time_us;}
 
          void check_net_usage()const;
 
