@@ -175,6 +175,10 @@ struct controller_impl {
     */
    map<digest_type, transaction_metadata_ptr>     unapplied_transactions;
 
+   void set_abi(name account, const abi_def& abi) {
+       emit(self.setabi, std::make_tuple(account, std::ref(abi)));
+   }
+
    void pop_block() {
       auto prev = fork_db.get_block( head->header.previous );
       EOS_ASSERT( prev, block_validate_exception, "attempt to pop beyond last irreversible block" );
@@ -202,7 +206,7 @@ struct controller_impl {
 
    controller_impl( const controller::config& cfg, controller& s  )
    :self(s),
-    chaindb(cfg.abi_serializer_max_time_ms, cfg.chaindb_address_type, cfg.chaindb_address),
+    chaindb(cfg.chaindb_address_type, cfg.chaindb_address),
     db( cfg.state_dir,
         cfg.read_only ? database::read_only : database::read_write,
         cfg.state_size ),
@@ -232,6 +236,13 @@ struct controller_impl {
 
    SET_APP_HANDLER( eosio, eosio, providebw );
    SET_APP_HANDLER( eosio, eosio, requestbw );
+
+    // TODO: at least `newdomain` must be in cyber.domain contract, add macro for it
+    SET_APP_HANDLER(eosio, eosio, newusername);
+    SET_APP_HANDLER(eosio, eosio, newdomain);
+    SET_APP_HANDLER(eosio, eosio, passdomain);
+    SET_APP_HANDLER(eosio, eosio, linkdomain);
+    SET_APP_HANDLER(eosio, eosio, unlinkdomain);
 /*
    SET_APP_HANDLER( eosio, eosio, postrecovery );
    SET_APP_HANDLER( eosio, eosio, passrecovery );
@@ -243,6 +254,10 @@ struct controller_impl {
    fork_db.irreversible.connect( [&]( auto b ) {
                                  on_irreversible(b);
                                  });
+
+   self.setabi.connect( [&]( auto b ) {
+       chaindb.add_abi( std::get<0>(b), std::get<1>(b) );
+   });
 
    }
 
@@ -649,7 +664,7 @@ struct controller_impl {
         "username",
         {{"id", cyberway::chaindb::tag<by_id>::get_code(), true, {{"id", "asc"}}},
          {"scopename", cyberway::chaindb::tag<by_scope_name>::get_code(), true, {{"scope", "asc"},{"name", "asc"}}},
-         {"owner", cyberway::chaindb::tag<by_owner>::get_code(), true, {{"owner", "asc"}}}}
+         {"owner", cyberway::chaindb::tag<by_owner>::get_code(), true, {{"owner","asc"},{"scope","asc"},{"name","asc"}}}}
       });
 
    }
@@ -2190,6 +2205,10 @@ validation_mode controller::get_validation_mode()const {
    return my->conf.block_validation_mode;
 }
 
+void controller::set_abi(name account, const abi_def &abi) {
+    my->set_abi(account, abi);
+}
+
 const apply_handler* controller::find_apply_handler( account_name receiver, account_name scope, action_name act ) const
 {
    auto native_handler_scope = my->apply_handlers.find( receiver );
@@ -2219,7 +2238,7 @@ const username_object& controller::get_username(account_name scope, const userna
     const auto* user = my->db.find<username_object, by_scope_name>(boost::make_tuple(scope,name));
     EOS_ASSERT(user != nullptr, username_query_exception,
         "username `${name}` not found in scope `${scope}`", ("name",name)("scope",scope));
-   return *user;
+    return *user;
 } FC_CAPTURE_AND_RETHROW((scope)(name)) }
 
 vector<transaction_metadata_ptr> controller::get_unapplied_transactions() const {

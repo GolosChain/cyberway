@@ -106,6 +106,16 @@ void apply_context::exec_one( action_trace& trace )
    }
 }
 
+void apply_context::lazy_init_chaindb_abi(account_name code) {
+   if (chaindb.has_abi(code)) return;
+
+   const auto& a = control.get_account(code);
+   EOS_ASSERT(a.abi.size() > 0, cyberway::chaindb::no_abi_exception,
+       "Account ${a} doesn't have ABI description", ("a", code));
+
+   chaindb.add_abi(code, a.get_abi());
+}
+
 void apply_context::finalize_trace( action_trace& trace, const fc::time_point& start )
 {
    trace.account_ram_deltas = std::move( _account_ram_deltas );
@@ -115,6 +125,9 @@ void apply_context::finalize_trace( action_trace& trace, const fc::time_point& s
    reset_console();
 
    trace.elapsed = fc::time_point::now() - start;
+
+   trace.events = _events;
+   _events.clear();
 }
 
 void apply_context::exec( action_trace& trace )
@@ -358,6 +371,10 @@ bool apply_context::cancel_deferred_transaction( const uint128_t& sender_id, acc
       generated_transaction_idx.remove(*gto);
    }
    return gto;
+}
+
+void apply_context::push_event( event evt ) {
+   _events.emplace_back(std::move(evt));
 }
 
 const table_id_object* apply_context::find_table( name code, name scope, name table ) {
