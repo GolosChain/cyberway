@@ -102,9 +102,7 @@ namespace bacc = boost::accumulators;
    }
 
    void provided_bandwith::verify_limits_not_confirmed() {
-       if (confirmed_) {
-           EOS_THROW( bandwith_confirmed, "bandwith has been already confirmed. No changes could be done");
-       }
+        EOS_ASSERT(!confirmed_,  bandwith_already_confirmed, "Bandwith has been already confirmed. No changes could be done");
    }
 
    deadline_timer::deadline_timer() {
