@@ -54,7 +54,7 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-    command: bash -c "mkfifo /queue/msg.pipe; /opt/cyberway/bin/nodeosd.sh --data-dir /opt/cyberway/bin/data-dir -e --http-alias=nodeosd:8888 --http-alias=127.0.0.1:8888 --http-alias=localhost:8888 --plugin eosio::event_engine_plugin --event-engine-dumpfile /queue/msg.pipe"
+    command: bash -c "mkfifo /queue/msg.pipe; exec /opt/cyberway/bin/nodeosd.sh --data-dir /opt/cyberway/bin/data-dir -e --http-alias=nodeosd:8888 --http-alias=127.0.0.1:8888 --http-alias=localhost:8888 --plugin eosio::event_engine_plugin --event-engine-dumpfile /queue/msg.pipe"
     hostname: nodeosd
     ports:
       - 8888:8888
@@ -72,27 +72,10 @@ services:
     networks:
       - cyberway-net
 
-  keosd:
-    container_name: keosd
-    image: cyberway/cyberway:latest
-    command: /opt/cyberway/bin/keosd --unlock-timeout 999999999 --wallet-dir /opt/cyberway/bin/data-dir --http-server-address=127.0.0.1:8900 --http-alias=keosd:8900 --http-alias=localhost:8900
-    hostname: keosd
-    links:
-      - nodeosd
-    volumes:
-      - cyberway-keosd-data:/opt/cyberway/bin/data-dir
-      - /home/deploy/deploy/golos-smart:/opt/cyberway/bin/data-dir/golos-smart  
-      - /home/deploy/deploy/golos-smart/build:/opt/cyberway/bin/data-dir/contracts
-    stop_grace_period: 10m
-    networks:
-      - cyberway-net
-
 volumes:
  cyberway-mongodb-data:
    external: true
  cyberway-nodeos-data:
-   external: true
- cyberway-keosd-data:
    external: true
  cyberway-queue:
    external: true
