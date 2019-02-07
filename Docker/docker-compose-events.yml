@@ -26,7 +26,7 @@ services:
     container_name: nats-exporter
     image: cyberway/nats-exporter:latest
     restart: always
-    command: -varz -http_pass=${NATS_PASS} -http_user=${NATS_USER} "http://nats-streaming:8222"
+    command: -varz -http_pass=${NATS_PASS:?Can't start without auth variable NATS_PASS} -http_user=${NATS_USER:?Can't start without auth variable NATS_USER} "http://nats-streaming:8222"
     ports:
       - 7777:7777
     networks:
@@ -34,17 +34,37 @@ services:
 
   mongo:
     container_name: mongo
-    image: mongo
+    image: mongo:4.0.6-xenial
     restart: always
     healthcheck:
        test: mongo --eval 'db.getCollectionNames()'
-       interval: 2s
+       interval: 10s
        timeout: 2s
        retries: 10
     volumes:
       - cyberway-mongodb-data:/data/db
     ports:
       - 127.0.0.1:27018:27017
+    networks:
+      - cyberway-net
+
+  mongodb-exporter:
+    container_name: mongodb-exporter
+    image: cyberway/mongodb-exporter:${MONGODB_EXPORTER_TAG:-v0.6.2}
+    build:
+      context: ./mongodb-exporter/
+      dockerfile: Dockerfile
+      args:
+        tag: ${MONGODB_EXPORTER_TAG:-v0.6.2}
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - 9216:9216
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - HTTP_AUTH=${MONGODB_EXPORTER_USER:?Can't start without auth variable MONGODB_EXPORTER_USER}:${MONGODB_EXPORTER_PASS:?Can't start without auth variable MONGODB_EXPORTER_PASS}
     networks:
       - cyberway-net
 
