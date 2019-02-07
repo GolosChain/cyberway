@@ -5,7 +5,7 @@ services:
     container_name: nats-streaming
     image: nats-streaming:0.11.2-linux
     restart: always
-    entrypoint: /nats-streaming-server -p 4222 -m 8222 --cluster_id=cyberway --user=${EXPORTER_USER} --pass=${EXPORTER_PASS}
+    entrypoint: /nats-streaming-server -p 4222 -m 8222 --cluster_id=cyberway --user=${NATS_USER} --pass=${NATS_PASS}
     ports:
       - 0.0.0.0:4222:4222
       - 127.0.0.1:8222:8222
@@ -16,7 +16,7 @@ services:
     container_name: cyberway-notifier
     image: cyberway/cyberway-notifier:latest
     restart: always
-    command: bash -c "/opt/cyberway/bin/cyber-notifier </queue/msg.pipe -s nats://${EXPORTER_USER}:${EXPORTER_PASS}@nats-streaming:4222"
+    command: bash -c "/opt/cyberway/bin/cyber-notifier </queue/msg.pipe -s nats://${NATS_USER}:${NATS_PASS}@nats-streaming:4222"
     volumes:
       - cyberway-queue:/queue:ro
     networks:
@@ -26,7 +26,7 @@ services:
     container_name: nats-exporter
     image: cyberway/nats-exporter:latest
     restart: always
-    command: -varz -http_pass=${EXPORTER_PASS} -http_user=${EXPORTER_USER} "http://nats-streaming:8222"
+    command: -varz -http_pass=${NATS_PASS} -http_user=${NATS_USER} "http://nats-streaming:8222"
     ports:
       - 7777:7777
     networks:
@@ -63,8 +63,7 @@ services:
       - "8888"
     volumes:
       - cyberway-nodeos-data:/opt/cyberway/bin/data-dir
-      - /etc/cyberway/config.ini:/opt/cyberway/bin/data-dir/config.ini
-      - /home/deploy/deploy/golos-smart:/opt/cyberway/bin/data-dir/golos-smart  
+      - ${PWD}/config.ini:/opt/cyberway/bin/data-dir/config.ini
       - cyberway-queue:/queue
     cap_add:
       - IPC_LOCK
