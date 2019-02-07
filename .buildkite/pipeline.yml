@@ -22,8 +22,8 @@ steps:
 
   - wait
 
-  - label: ":docker: mongo-exporter"
-    command: ".buildkite/steps/mongo-exporter.sh"
+  - label: ":docker: mongodb-exporter"
+    command: ".buildkite/steps/mongodb-exporter.sh"
     branches: "master"
     timeout: 20
 
