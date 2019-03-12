@@ -1259,15 +1259,13 @@ read_only::get_table_by_scope_result read_only::get_table_by_scope( const read_o
 
 vector<asset> read_only::get_currency_balance( const read_only::get_currency_balance_params& p )const {
     vector<asset> results;
-    auto& chaindb_controller = db.chaindb();
+    auto& chaindb = db.chaindb();
 
     const cyberway::chaindb::index_request request{p.code, p.account, N(accounts), cyberway::chaindb::names::primary_index};
 
-    const auto end_it = chaindb_controller.end(request);
+    for (auto accounts_it = chaindb.begin(request); accounts_it.pk != cyberway::chaindb::end_primary_key; ++accounts_it.pk) {
 
-    for (auto accounts_it = chaindb_controller.begin(request); accounts_it.pk != end_it.pk; ++accounts_it.pk) {
-
-        const auto value = chaindb_controller.value_at_cursor({p.code, accounts_it.cursor});
+        const auto value = chaindb.value_at_cursor({p.code, accounts_it.cursor});
 
         const auto balance_object = value["balance"];
         eosio::chain::asset asset_value;

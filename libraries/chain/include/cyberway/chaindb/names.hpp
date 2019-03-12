@@ -35,7 +35,7 @@ namespace cyberway { namespace chaindb {
         static const string asc_order;
         static const string desc_order;
 
-        const static uint64_t primary_index;
+        static constexpr uint64_t primary_index = N(primary);
     }; // struct names
 
 
