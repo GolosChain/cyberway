@@ -28,7 +28,6 @@ public:
     chain_api_plugin_impl(chain::controller& chain_controller, const fc::microseconds& abi_serializer_max_time, bool shorten_abi_errors)
       : chain_controller_(chain_controller), abi_serializer_max_time_(abi_serializer_max_time), shorten_abi_errors_(shorten_abi_errors) {}
 
-    get_account_results get_account( const get_account_params& params )const;
     chain::symbol extract_core_symbol() const;
     get_code_results get_code( const get_code_params& params )const;
     get_code_hash_results get_code_hash( const get_code_hash_params& params )const;
@@ -148,125 +147,6 @@ get_raw_abi_results chain_api_plugin_impl::get_raw_abi( const get_raw_abi_params
    if( !params.abi_hash || *params.abi_hash != result.abi_hash )
       result.abi = fc::base64_encode({accnt.abi.begin(), accnt.abi.end()});
 
-   return result;
-}
-
-get_account_results chain_api_plugin_impl::get_account( const get_account_params& params )const {
-   get_account_results result;
-   result.account_name = params.account_name;
-
-   auto& d = chain_controller_.chaindb();
-   const auto& rm = chain_controller_.get_resource_limits_manager();
-
-   result.head_block_num  = chain_controller_.head_block_num();
-   result.head_block_time = chain_controller_.head_block_time();
-
-   const auto& a = chain_controller_.get_account(result.account_name);
-
-   result.privileged       = a.privileged;
-   result.last_code_update = a.last_code_update;
-   result.created          = a.creation_date;
-
-   int64_t now = chain_controller_.pending_block_time().sec_since_epoch();
-   //TODO:
-   result.net_limit = {};
-   result.cpu_limit = {};
-
-   result.ram_usage = rm.get_account_usage( result.account_name )[chain::resource_limits::ram_code];
-
-   auto table = d.get_table<chain::permission_object>();
-   auto permissions = table.get_index<chain::by_owner>();
-   auto perm = permissions.lower_bound( boost::make_tuple( params.account_name ) );
-   while( perm != permissions.end() && perm->owner == params.account_name ) {
-      /// TODO: lookup perm->parent name
-      chain::name parent;
-
-      // Don't lookup parent if null
-      if( perm->parent._id ) {
-         const auto* p = d.find<chain::permission_object, by_id>( perm->parent );
-         if( p ) {
-            EOS_ASSERT(perm->owner == p->owner, chain::invalid_parent_permission, "Invalid parent permission");
-            parent = p->name;
-         }
-      }
-
-      result.permissions.push_back( permission{ perm->name, parent, perm->auth.to_authority() } );
-      ++perm;
-   }
-
-   const auto& code_account = chain_controller_.chaindb().get<chain::account_object, chain::by_name>( chain::config::system_account_name );
-
-//   TODO: Move out this logic in correct place
-//   abi_def abi;
-//   if( abi_serializer::to_abi(code_account.abi, abi) ) {
-//      abi_serializer abis( abi, abi_serializer_max_time );
-//
-//      const auto token_code = N(cyber.token);
-//
-//      auto core_symbol = extract_core_symbol();
-//
-//      if (params.expected_core_symbol.valid())
-//         core_symbol = *(params.expected_core_symbol);
-//
-//      const auto* t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( token_code, params.account_name, N(accounts) ));
-//      if( t_id != nullptr ) {
-//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
-//         auto it = idx.find(boost::make_tuple( t_id->id, core_symbol.to_symbol_code() ));
-//         if( it != idx.end() && it->value.size() >= sizeof(asset) ) {
-//            asset bal;
-//            fc::datastream<const char *> ds(it->value.data(), it->value.size());
-//            fc::raw::unpack(ds, bal);
-//
-//            if( bal.get_symbol().valid() && bal.get_symbol() == core_symbol ) {
-//               result.core_liquid_balance = bal;
-//            }
-//         }
-//      }
-//
-//      t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( config::system_account_name, params.account_name, N(userres) ));
-//      if (t_id != nullptr) {
-//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
-//         auto it = idx.find(boost::make_tuple( t_id->id, params.account_name ));
-//         if ( it != idx.end() ) {
-//            vector<char> data;
-//            copy_inline_row(*it, data);
-//            result.total_resources = abis.binary_to_variant( "user_resources", data, abi_serializer_max_time, shorten_abi_errors );
-//         }
-//      }
-//
-//      t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( config::system_account_name, params.account_name, N(delband) ));
-//      if (t_id != nullptr) {
-//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
-//         auto it = idx.find(boost::make_tuple( t_id->id, params.account_name ));
-//         if ( it != idx.end() ) {
-//            vector<char> data;
-//            copy_inline_row(*it, data);
-//            result.self_delegated_bandwidth = abis.binary_to_variant( "delegated_bandwidth", data, abi_serializer_max_time, shorten_abi_errors );
-//         }
-//      }
-//
-//      t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( config::system_account_name, params.account_name, N(refunds) ));
-//      if (t_id != nullptr) {
-//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
-//         auto it = idx.find(boost::make_tuple( t_id->id, params.account_name ));
-//         if ( it != idx.end() ) {
-//            vector<char> data;
-//            copy_inline_row(*it, data);
-//            result.refund_request = abis.binary_to_variant( "refund_request", data, abi_serializer_max_time, shorten_abi_errors );
-//         }
-//      }
-//
-//      t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( config::system_account_name, config::system_account_name, N(voters) ));
-//      if (t_id != nullptr) {
-//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
-//         auto it = idx.find(boost::make_tuple( t_id->id, params.account_name ));
-//         if ( it != idx.end() ) {
-//            vector<char> data;
-//            copy_inline_row(*it, data);
-//            result.voter_info = abis.binary_to_variant( "voter_info", data, abi_serializer_max_time, shorten_abi_errors );
-//         }
-//      }
-//   }
    return result;
 }
 
@@ -719,7 +599,6 @@ void chain_api_plugin::plugin_startup() {
     my.reset(new chain_api_plugin_impl(chain.chain(), chain.get_abi_serializer_max_time(), !http.verbose_errors()));
 
     http.add_api({
-      CREATE_READ_HANDLER((*my), get_account, 200),
       CREATE_READ_HANDLER((*my), get_code, 200),
       CREATE_READ_HANDLER((*my), get_code_hash, 200),
       CREATE_READ_HANDLER((*my), get_abi, 200),

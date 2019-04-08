@@ -10,35 +10,6 @@
 
 namespace eosio {
 
-    struct permission {
-        chain::name      perm_name;
-        chain::name      parent;
-        chain::authority required_auth;
-    };
-
-    struct get_account_results {
-       chain::name                                           account_name;
-       uint32_t                                              head_block_num = 0;
-       fc::time_point                                        head_block_time;
-       bool                                                  privileged = false;
-       fc::time_point                                        last_code_update;
-       fc::time_point                                        created;
-       fc::optional<chain::asset>                            core_liquid_balance;
-    //TODO: replace it (? with ram/net/cpu staked)
-       int64_t                                               ram_quota  = 0;
-       int64_t                                                net_weight = 0;
-       int64_t                                               cpu_weight = 0;
-
-       eosio::chain::resource_limits::account_resource_limit net_limit;
-       eosio::chain::resource_limits::account_resource_limit cpu_limit;
-       int64_t                                               ram_usage = 0;
-       std::vector<permission>                               permissions;
-       fc::variant                                           total_resources;
-       fc::variant                                           self_delegated_bandwidth;
-       fc::variant                                           refund_request;
-       fc::variant                                           voter_info;
-    };
-
     struct get_code_results {
        chain::name                  account_name;
        std::string                  wast;
@@ -88,7 +59,6 @@ namespace eosio {
     struct get_required_keys_result {
        chain::flat_set<chain::public_key_type> required_keys;
     };
-
     using get_transaction_id_result = chain::transaction_id_type;
 
     struct get_table_rows_result {
@@ -139,11 +109,6 @@ FC_REFLECT( eosio::get_currency_stats_result, (supply)(max_supply)(issuer))
 FC_REFLECT( eosio::get_producers_result, (rows)(total_producer_vote_weight)(more) )
 FC_REFLECT( eosio::get_producer_schedule_result, (active)(pending)(proposed) )
 FC_REFLECT( eosio::get_scheduled_transactions_result, (transactions)(more) )
-FC_REFLECT( eosio::permission, (perm_name)(parent)(required_auth) )
-FC_REFLECT( eosio::get_account_results,
-            (account_name)(head_block_num)(head_block_time)(privileged)(last_code_update)(created)
-            (core_liquid_balance)(ram_quota)(net_weight)(cpu_weight)(net_limit)(cpu_limit)(ram_usage)(permissions)
-            (total_resources)(self_delegated_bandwidth)(refund_request)(voter_info) )
 FC_REFLECT( eosio::get_code_results, (account_name)(code_hash)(wast)(wasm)(abi) )
 FC_REFLECT( eosio::get_code_hash_results, (account_name)(code_hash) )
 FC_REFLECT( eosio::get_abi_results, (account_name)(abi) )

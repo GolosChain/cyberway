@@ -11,11 +11,6 @@
 
 namespace eosio {
 
-    struct get_account_params {
-       chain::name                 account_name;
-       fc::optional<chain::symbol> expected_core_symbol;
-    };
-
     struct get_code_params {
        chain::name account_name;
        bool code_as_wasm = false;
@@ -118,7 +113,6 @@ FC_REFLECT( eosio::get_currency_stats_params, (code)(symbol))
 FC_REFLECT( eosio::get_producers_params, (json)(lower_bound)(limit) )
 FC_REFLECT_EMPTY( eosio::get_producer_schedule_params )
 FC_REFLECT( eosio::get_scheduled_transactions_params, (json)(lower_bound)(limit) )
-FC_REFLECT( eosio::get_account_params, (account_name)(expected_core_symbol) )
 FC_REFLECT( eosio::get_code_params, (account_name)(code_as_wasm) )
 FC_REFLECT( eosio::get_code_hash_params, (account_name) )
 FC_REFLECT( eosio::get_abi_params, (account_name) )

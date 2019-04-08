@@ -208,6 +208,7 @@ public:
 
    void validate() const;
 
+   get_account_results get_account( const get_account_params& params ) const;
    get_info_results get_info(const get_info_params&) const;
    fc::variant get_block(const get_block_params& params) const;
    fc::variant get_block_header_state(const get_block_header_state_params& params) const;
@@ -311,6 +312,125 @@ static std::string itoh(I n, size_t hlen = sizeof(I)<<1) {
    for(size_t i = 0, j = (hlen - 1) * 4 ; i < hlen; ++i, j -= 4)
       r[i] = digits[(n>>j) & 0x0f];
    return r;
+}
+
+get_account_results chain_plugin_impl::get_account( const get_account_params& params )const {
+   get_account_results result;
+   result.account_name = params.account_name;
+
+   auto& d = chain->chaindb();
+   const auto& rm = chain->get_resource_limits_manager();
+
+   result.head_block_num  = chain->head_block_num();
+   result.head_block_time = chain->head_block_time();
+
+   const auto& a = chain->get_account(result.account_name);
+
+   result.privileged       = a.privileged;
+   result.last_code_update = a.last_code_update;
+   result.created          = a.creation_date;
+
+   int64_t now = chain->pending_block_time().sec_since_epoch();
+   //TODO:
+   result.net_limit = {};
+   result.cpu_limit = {};
+
+  // result.ram_usage = rm.get_account_ram_usage( result.account_name );
+
+   auto table = d.get_table<chain::permission_object>();
+   auto permissions = table.get_index<chain::by_owner>();
+   auto perm = permissions.lower_bound( boost::make_tuple( params.account_name ) );
+   while( perm != permissions.end() && perm->owner == params.account_name ) {
+      /// TODO: lookup perm->parent name
+      chain::name parent;
+
+      // Don't lookup parent if null
+      if( perm->parent._id ) {
+         const auto* p = d.find<chain::permission_object, by_id>( perm->parent );
+         if( p ) {
+            EOS_ASSERT(perm->owner == p->owner, chain::invalid_parent_permission, "Invalid parent permission");
+            parent = p->name;
+         }
+      }
+
+      result.permissions.push_back( permission{ perm->name, parent, perm->auth.to_authority() } );
+      ++perm;
+   }
+
+   const auto& code_account = chain->chaindb().get<chain::account_object, chain::by_name>( chain::config::system_account_name );
+
+//   TODO: Move out this logic in correct place
+//   abi_def abi;
+//   if( abi_serializer::to_abi(code_account.abi, abi) ) {
+//      abi_serializer abis( abi, abi_serializer_max_time );
+//
+//      const auto token_code = N(cyber.token);
+//
+//      auto core_symbol = extract_core_symbol();
+//
+//      if (params.expected_core_symbol.valid())
+//         core_symbol = *(params.expected_core_symbol);
+//
+//      const auto* t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( token_code, params.account_name, N(accounts) ));
+//      if( t_id != nullptr ) {
+//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
+//         auto it = idx.find(boost::make_tuple( t_id->id, core_symbol.to_symbol_code() ));
+//         if( it != idx.end() && it->value.size() >= sizeof(asset) ) {
+//            asset bal;
+//            fc::datastream<const char *> ds(it->value.data(), it->value.size());
+//            fc::raw::unpack(ds, bal);
+//
+//            if( bal.get_symbol().valid() && bal.get_symbol() == core_symbol ) {
+//               result.core_liquid_balance = bal;
+//            }
+//         }
+//      }
+//
+//      t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( config::system_account_name, params.account_name, N(userres) ));
+//      if (t_id != nullptr) {
+//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
+//         auto it = idx.find(boost::make_tuple( t_id->id, params.account_name ));
+//         if ( it != idx.end() ) {
+//            vector<char> data;
+//            copy_inline_row(*it, data);
+//            result.total_resources = abis.binary_to_variant( "user_resources", data, abi_serializer_max_time, shorten_abi_errors );
+//         }
+//      }
+//
+//      t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( config::system_account_name, params.account_name, N(delband) ));
+//      if (t_id != nullptr) {
+//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
+//         auto it = idx.find(boost::make_tuple( t_id->id, params.account_name ));
+//         if ( it != idx.end() ) {
+//            vector<char> data;
+//            copy_inline_row(*it, data);
+//            result.self_delegated_bandwidth = abis.binary_to_variant( "delegated_bandwidth", data, abi_serializer_max_time, shorten_abi_errors );
+//         }
+//      }
+//
+//      t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( config::system_account_name, params.account_name, N(refunds) ));
+//      if (t_id != nullptr) {
+//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
+//         auto it = idx.find(boost::make_tuple( t_id->id, params.account_name ));
+//         if ( it != idx.end() ) {
+//            vector<char> data;
+//            copy_inline_row(*it, data);
+//            result.refund_request = abis.binary_to_variant( "refund_request", data, abi_serializer_max_time, shorten_abi_errors );
+//         }
+//      }
+//
+//      t_id = d.find<chain::table_id_object, chain::by_code_scope_table>(boost::make_tuple( config::system_account_name, config::system_account_name, N(voters) ));
+//      if (t_id != nullptr) {
+//         const auto &idx = d.get_index<key_value_index, by_scope_primary>();
+//         auto it = idx.find(boost::make_tuple( t_id->id, params.account_name ));
+//         if ( it != idx.end() ) {
+//            vector<char> data;
+//            copy_inline_row(*it, data);
+//            result.voter_info = abis.binary_to_variant( "voter_info", data, abi_serializer_max_time, shorten_abi_errors );
+//         }
+//      }
+//   }
+   return result;
 }
 
 get_info_results chain_plugin_impl::get_info(const get_info_params&) const {
@@ -907,6 +1027,7 @@ void chain_plugin::init_request_handler() {
     auto& http_plugin = app().get_plugin<eosio::http_plugin>();
 
     http_plugin.add_api({
+        CREATE_READ_HANDLER((*my), get_account, 200),
         CREATE_READ_HANDLER((*my), get_info, 200),
         CREATE_READ_HANDLER((*my), get_block, 200),
         CREATE_READ_HANDLER((*my), get_block_header_state, 200),
