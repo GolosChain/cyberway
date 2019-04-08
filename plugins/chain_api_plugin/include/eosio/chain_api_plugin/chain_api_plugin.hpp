@@ -4,7 +4,6 @@
  */
 #pragma once
 
-#include <eosio/chain_plugin/chain_plugin.hpp>
 #include <eosio/http_plugin/http_plugin.hpp>
 
 #include <memory>
@@ -15,7 +14,7 @@
 namespace eosio {
    class chain_api_plugin : public plugin<chain_api_plugin> {
       public:
-        APPBASE_PLUGIN_REQUIRES((chain_plugin)(http_plugin))
+        APPBASE_PLUGIN_REQUIRES((http_plugin))
 
         chain_api_plugin();
         virtual ~chain_api_plugin();

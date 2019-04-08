@@ -9,6 +9,8 @@
 #include <eosio/chain/authorization_manager.hpp>
 #include <eosio/chain/generated_transaction_object.hpp>
 
+#include <appbase/chain_provider.hpp>
+
 #include <eosio/plugins_common/http_request_handlers.hpp>
 #include <eosio/plugins_common/chain_utils.hpp>
 
@@ -595,9 +597,9 @@ void chain_api_plugin::plugin_startup() {
     ilog( "starting chain_api_plugin" );
 
     auto& http = app().get_plugin<http_plugin>();
-    auto& chain = app().get_plugin<chain_plugin>();
+    auto* provider = app().get_chain_provider();
 
-    my.reset(new chain_api_plugin_impl(chain.chain().chaindb(), chain.chain().get_authorization_manager(), chain.get_abi_serializer_max_time(), !http.verbose_errors()));
+    my.reset(new chain_api_plugin_impl(provider->get_chaindb(), provider->get_authorization_manager(), provider->get_abi_serializer_max_time(), !http.verbose_errors()));
 
     http.add_api({
       CREATE_READ_HANDLER((*my), get_code, 200),

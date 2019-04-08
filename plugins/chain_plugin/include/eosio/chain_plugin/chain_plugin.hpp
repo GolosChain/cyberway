@@ -21,6 +21,8 @@
 #include <eosio/chain_plugin/chain_plugin_params.hpp>
 #include <eosio/chain_plugin/chain_plugin_results.hpp>
 
+#include <appbase/chain_provider.hpp>
+
 #include <boost/container/flat_set.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 
@@ -32,7 +34,7 @@ namespace fc { class variant; }
 
 namespace eosio {
 
-class chain_plugin : public appbase::plugin<chain_plugin> {
+class chain_plugin : public appbase::plugin<chain_plugin>, public chain_provider {
 public:
    APPBASE_PLUGIN_REQUIRES((http_plugin))
 
@@ -73,11 +75,15 @@ public:
 
    chain::chain_id_type get_chain_id() const;
 
-   fc::microseconds get_abi_serializer_max_time() const;
-
    void handle_guard_exception(const chain::guard_exception& e) const;
 
    static void handle_db_exhaustion();
+
+   fc::microseconds get_abi_serializer_max_time() const override;
+
+   cyberway::chaindb::chaindb_controller& get_chaindb() override;
+
+   const eosio::chain::authorization_manager& get_authorization_manager() const override;
 
 private:
    void log_guard_exception(const chain::guard_exception& e) const;

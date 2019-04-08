@@ -1017,6 +1017,8 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
 
       my->chain->add_indices();
 
+      app().set_chain_provider(this);
+
       init_request_handler();
 
    } FC_LOG_AND_RETHROW()
@@ -1334,6 +1336,14 @@ void chain_plugin::handle_db_exhaustion() {
    elog("database memory exhausted: increase chain-state-db-size-mb and/or reversible-blocks-db-size-mb");
    //return 1 -- it's what programs/nodeos/main.cpp considers "BAD_ALLOC"
    std::_Exit(1);
+}
+
+cyberway::chaindb::chaindb_controller& chain_plugin::get_chaindb() {
+    return my->chain->chaindb();
+}
+
+const eosio::chain::authorization_manager& chain_plugin::get_authorization_manager() const {
+    return my->chain->get_authorization_manager();
 }
 
 } // namespace eosio
