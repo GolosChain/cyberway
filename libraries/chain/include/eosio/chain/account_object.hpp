@@ -41,6 +41,10 @@ namespace eosio { namespace chain {
          fc::raw::unpack( ds, a );
          return a;
       }
+
+      const static account_object& get_account(cyberway::chaindb::chaindb_controller& chaindb, account_name name) try {
+         return chaindb.get<account_object, by_name>(name);
+      } FC_CAPTURE_AND_RETHROW((name))
    };
    using account_id_type = account_object::id_type;
 

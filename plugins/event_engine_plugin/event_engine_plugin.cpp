@@ -86,7 +86,7 @@ public:
         auto itr = abi_map.find(account);
         if(itr == abi_map.end()) {
             try {
-                const auto& a = db.get_account(account);
+                const auto& a = account_object::get_account(db.chaindb(), account);
                 if(a.abi.size() > 0) {
                     abi_info info(account, a.get_abi(), abi_serializer_max_time);
                     itr = abi_map.emplace(account, std::move(info)).first;

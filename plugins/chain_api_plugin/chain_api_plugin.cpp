@@ -25,8 +25,14 @@ static appbase::abstract_plugin& _chain_api_plugin = app().register_plugin<chain
 
 class chain_api_plugin_impl {
 public:
-    chain_api_plugin_impl(chain::controller& chain_controller, const fc::microseconds& abi_serializer_max_time, bool shorten_abi_errors)
-      : chain_controller_(chain_controller), abi_serializer_max_time_(abi_serializer_max_time), shorten_abi_errors_(shorten_abi_errors) {}
+    chain_api_plugin_impl(cyberway::chaindb::chaindb_controller& chaindb,
+                          const eosio::chain::authorization_manager& authorization_manager,
+                          const fc::microseconds& abi_serializer_max_time,
+                          bool shorten_abi_errors)
+      : chaindb_(chaindb),
+        authorization_manager_(authorization_manager),
+        abi_serializer_max_time_(abi_serializer_max_time),
+        shorten_abi_errors_(shorten_abi_errors) {}
 
     chain::symbol extract_core_symbol() const;
     get_code_results get_code( const get_code_params& params )const;
@@ -64,7 +70,8 @@ private:
                                               cyberway::chaindb::find_info& itr, cyberway::chaindb::primary_key_t end_pk) const;
 
 
-    const chain::controller& chain_controller_;
+    cyberway::chaindb::chaindb_controller& chaindb_;
+    const eosio::chain::authorization_manager& authorization_manager_;
     const fc::microseconds abi_serializer_max_time_;
     bool  shorten_abi_errors_ = true;
 };
@@ -79,8 +86,8 @@ void chain_api_plugin::plugin_initialize(const variables_map&) {}
 get_abi_results chain_api_plugin_impl::get_abi( const get_abi_params& params )const {
    get_abi_results result;
    result.account_name = params.account_name;
-   auto& d = chain_controller_.chaindb();
-   const auto& accnt  = d.get<chain::account_object, chain::by_name>( params.account_name );
+
+   const auto& accnt  = chaindb_.get<chain::account_object, chain::by_name>( params.account_name );
 
    chain::abi_def abi;
    if( chain::abi_serializer::to_abi(accnt.abi, abi) ) {
@@ -93,8 +100,8 @@ get_abi_results chain_api_plugin_impl::get_abi( const get_abi_params& params )co
 get_code_results chain_api_plugin_impl::get_code( const get_code_params& params )const {
    get_code_results result;
    result.account_name = params.account_name;
-   auto& d = chain_controller_.chaindb();
-   const auto& accnt  = d.get<chain::account_object,chain::by_name>( params.account_name );
+
+   const auto& accnt  = chaindb_.get<chain::account_object,chain::by_name>( params.account_name );
 
    EOS_ASSERT( params.code_as_wasm, chain::unsupported_feature, "Returning WAST from get_code is no longer supported" );
 
@@ -114,8 +121,8 @@ get_code_results chain_api_plugin_impl::get_code( const get_code_params& params 
 get_code_hash_results chain_api_plugin_impl::get_code_hash( const get_code_hash_params& params )const {
    get_code_hash_results result;
    result.account_name = params.account_name;
-   auto& d = chain_controller_.chaindb();
-   const auto& accnt  = d.get<chain::account_object, chain::by_name>( params.account_name );
+
+   const auto& accnt  = chaindb_.get<chain::account_object, chain::by_name>( params.account_name );
 
    if( accnt.code.size() ) {
       result.code_hash = fc::sha256::hash( accnt.code.data(), accnt.code.size() );
@@ -128,8 +135,7 @@ get_raw_code_and_abi_results chain_api_plugin_impl::get_raw_code_and_abi( const 
    get_raw_code_and_abi_results result;
    result.account_name = params.account_name;
 
-   auto& d = chain_controller_.chaindb();
-   const auto& accnt = d.get<chain::account_object, chain::by_name>(params.account_name);
+   const auto& accnt = chaindb_.get<chain::account_object, chain::by_name>(params.account_name);
    result.wasm = fc::base64_encode({accnt.code.begin(), accnt.code.end()});
    result.abi = fc::base64_encode({accnt.abi.begin(), accnt.abi.end()});
 
@@ -140,8 +146,7 @@ get_raw_abi_results chain_api_plugin_impl::get_raw_abi( const get_raw_abi_params
    get_raw_abi_results result;
    result.account_name = params.account_name;
 
-   auto& d = chain_controller_.chaindb();
-   const auto& accnt = d.get<chain::account_object, chain::by_name>(params.account_name);
+   const auto& accnt = chaindb_.get<chain::account_object, chain::by_name>(params.account_name);
    result.abi_hash = fc::sha256::hash( accnt.abi.data(), accnt.abi.size() );
    result.code_hash = fc::sha256::hash( accnt.code.data(), accnt.code.size() );
    if( !params.abi_hash || *params.abi_hash != result.abi_hash )
@@ -155,7 +160,7 @@ resolve_names_results chain_api_plugin_impl::resolve_names(const resolve_names_p
 
     auto set_domain = [&](const auto& n, resolve_names_item& item) {
         chain::validate_domain_name(n);
-        item.resolved_domain = chain_controller_.get_domain(n).linked_to;
+        item.resolved_domain = eosio::chain::domain_object::get_domain(chaindb_, n).linked_to;
     };
 
     // don't limit names count, but prevent from running too long
@@ -187,7 +192,7 @@ resolve_names_results chain_api_plugin_impl::resolve_names(const resolve_names_p
             }
             if (have_username) {
                 auto scope = at_acc ? chain::name(tail) : *item.resolved_domain;
-                item.resolved_username = chain_controller_.get_username(scope, username).owner;
+                item.resolved_username = eosio::chain::username_object::get_username(chaindb_, scope, username).owner;
             }
         }
         r.push_back(item);
@@ -209,7 +214,7 @@ static fc::variant action_abi_to_variant( const chain::abi_def& abi, chain::type
 
 abi_json_to_bin_result chain_api_plugin_impl::abi_json_to_bin( const abi_json_to_bin_params& params )const try {
    abi_json_to_bin_result result;
-   const auto code_account = chain_controller_.chaindb().find<chain::account_object, chain::by_name>( params.code );
+   const auto code_account = chaindb_.find<chain::account_object, chain::by_name>( params.code );
    EOS_ASSERT(code_account != nullptr, chain::contract_query_exception, "Contract can't be found ${contract}", ("contract", params.code));
 
    chain::abi_def abi;
@@ -231,7 +236,7 @@ abi_json_to_bin_result chain_api_plugin_impl::abi_json_to_bin( const abi_json_to
 
 abi_bin_to_json_result chain_api_plugin_impl::abi_bin_to_json( const abi_bin_to_json_params& params )const {
    abi_bin_to_json_result result;
-   const auto& code_account = chain_controller_.chaindb().get<chain::account_object, chain::by_name>( params.code );
+   const auto& code_account = chaindb_.get<chain::account_object, chain::by_name>( params.code );
    chain::abi_def abi;
    if( chain::abi_serializer::to_abi(code_account.abi, abi) ) {
       chain::abi_serializer abis( abi, abi_serializer_max_time_);
@@ -244,12 +249,12 @@ abi_bin_to_json_result chain_api_plugin_impl::abi_bin_to_json( const abi_bin_to_
 
 get_required_keys_result chain_api_plugin_impl::get_required_keys( const get_required_keys_params& params )const {
    chain::transaction pretty_input;
-   auto resolver = make_resolver(chain_controller_.chaindb(), abi_serializer_max_time_);
+   auto resolver = make_resolver(chaindb_, abi_serializer_max_time_);
    try {
       chain::abi_serializer::from_variant(params.transaction, pretty_input, resolver, abi_serializer_max_time_);
    } EOS_RETHROW_EXCEPTIONS(chain::transaction_type_exception, "Invalid transaction")
 
-   auto required_keys_set = chain_controller_.get_authorization_manager().get_required_keys( pretty_input, params.available_keys, fc::seconds( pretty_input.delay_sec ));
+   auto required_keys_set = authorization_manager_.get_required_keys( pretty_input, params.available_keys, fc::seconds( pretty_input.delay_sec ));
    get_required_keys_result result;
    result.required_keys = required_keys_set;
    return result;
@@ -292,7 +297,6 @@ chain::symbol chain_api_plugin_impl::extract_core_symbol() const {
 }
 
 get_table_rows_result chain_api_plugin_impl::get_table_rows( const get_table_rows_params& p )const {
-   auto& chaindb = chain_controller_.chaindb();
 
    const cyberway::chaindb::index_request request{p.code, p.scope, p.table, p.index};
 
@@ -300,8 +304,8 @@ get_table_rows_result chain_api_plugin_impl::get_table_rows( const get_table_row
        // TODO: implement rbegin end rend methods in mongo driver https://github.com/GolosChain/cyberway/issues/446
        EOS_THROW(cyberway::chaindb::driver_unsupported_operation_exception, "Backward iteration through table not supported yet");
    } else {
-       auto begin = p.lower_bound.is_null() ? chaindb.begin(request) : chaindb.lower_bound(request, p.lower_bound);
-       const auto end_pk = p.upper_bound.is_null() ? cyberway::chaindb::end_primary_key : chaindb.upper_bound(request, p.upper_bound).pk;
+       auto begin = p.lower_bound.is_null() ? chaindb_.begin(request) : chaindb_.lower_bound(request, p.lower_bound);
+       const auto end_pk = p.upper_bound.is_null() ? cyberway::chaindb::end_primary_key : chaindb_.upper_bound(request, p.upper_bound).pk;
        return walk_table_row_range(p, begin, end_pk);
    }
 
@@ -313,18 +317,17 @@ get_table_rows_result chain_api_plugin_impl::walk_table_row_range(const get_tabl
     auto cur_time = fc::time_point::now();
     const auto end_time = cur_time + fc::microseconds(1000 * 10); /// 10ms max time
 
-    auto& chaindb = chain_controller_.chaindb();
     cyberway::chaindb::cursor_request cursor{p.code, itr.cursor};
 
     for(unsigned int count = 0;
         cur_time <= end_time && count < p.limit && itr.pk != end_pk;
-        itr.pk = chaindb.next(cursor), ++count, cur_time = fc::time_point::now()) {
+        itr.pk = chaindb_.next(cursor), ++count, cur_time = fc::time_point::now()) {
         if (p.show_payer && *p.show_payer) {
-            const auto object = chaindb.object_at_cursor(cursor);
+            const auto object = chaindb_.object_at_cursor(cursor);
             auto value = fc::mutable_variant_object()("data", object.value)("payer", object.service.payer);
             result.rows.push_back(std::move(value));
         } else {
-            result.rows.push_back(chaindb.value_at_cursor(cursor));
+            result.rows.push_back(chaindb_.value_at_cursor(cursor));
         }
     }
 
@@ -384,17 +387,16 @@ get_table_by_scope_result chain_api_plugin_impl::get_table_by_scope( const get_t
 
 std::vector<chain::asset> chain_api_plugin_impl::get_currency_balance( const get_currency_balance_params& p )const {
     vector<chain::asset> results;
-    auto& chaindb = chain_controller_.chaindb();
 
     const cyberway::chaindb::index_request request{p.code, p.account, N(accounts), cyberway::chaindb::names::primary_index};
 
-    auto accounts_it = chaindb.begin(request);
+    auto accounts_it = chaindb_.begin(request);
 
     const auto next_request = cyberway::chaindb::cursor_request{p.code, accounts_it.cursor};
 
-    for (; accounts_it.pk != cyberway::chaindb::end_primary_key; accounts_it.pk = chaindb.next(next_request)) {
+    for (; accounts_it.pk != cyberway::chaindb::end_primary_key; accounts_it.pk = chaindb_.next(next_request)) {
 
-        const auto value = chaindb.value_at_cursor({p.code, accounts_it.cursor});
+        const auto value = chaindb_.value_at_cursor({p.code, accounts_it.cursor});
 
         const auto balance_object = value["balance"];
         eosio::chain::asset asset_value;
@@ -416,14 +418,14 @@ std::vector<chain::asset> chain_api_plugin_impl::get_currency_balance( const get
 
 fc::variant chain_api_plugin_impl::get_currency_stats( const get_currency_stats_params& p ) const {
     const chain::name scope = eosio::chain::string_to_symbol(0, boost::algorithm::to_upper_copy(p.symbol).c_str()) >> 8;
-    auto& chaindb = chain_controller_.chaindb();
-    auto itr = chaindb.begin({p.code, scope, N(stat), cyberway::chaindb::names::primary_index});
+
+    auto itr = chaindb_.begin({p.code, scope, N(stat), cyberway::chaindb::names::primary_index});
 
     if (itr.pk == cyberway::chaindb::end_primary_key) {
         return {};
     }
 
-    const auto currency_stat_object = chaindb.value_at_cursor({p.code, itr.cursor});
+    const auto currency_stat_object = chaindb_.value_at_cursor({p.code, itr.cursor});
 
     chain::asset supply;
     fc::from_variant(currency_stat_object["supply"], supply);
@@ -545,14 +547,13 @@ auto find_scheduled_transacions_begin(cyberway::chaindb::chaindb_controller& cha
 }
 
 get_scheduled_transactions_result chain_api_plugin_impl::get_scheduled_transactions( const get_scheduled_transactions_params& p ) const {
-    auto& chaindb = chain_controller_.chaindb();
 
-    auto itr = find_scheduled_transacions_begin(chaindb, p);
-    const auto end = chaindb.get_index<chain::generated_transaction_object, chain::by_delay>().end();
+    auto itr = find_scheduled_transacions_begin(chaindb_, p);
+    const auto end = chaindb_.get_index<chain::generated_transaction_object, chain::by_delay>().end();
 
     get_scheduled_transactions_result result;
 
-    const auto resolver = make_resolver(chaindb, abi_serializer_max_time_);
+    const auto resolver = make_resolver(chaindb_, abi_serializer_max_time_);
 
     auto time_limit = fc::time_point::now() + fc::microseconds(1000 * 10); /// 10ms max time
     for (uint32_t count = 0; itr != end && time_limit > fc::time_point::now() && count < p.limit; ++itr, ++count) {
@@ -596,7 +597,7 @@ void chain_api_plugin::plugin_startup() {
     auto& http = app().get_plugin<http_plugin>();
     auto& chain = app().get_plugin<chain_plugin>();
 
-    my.reset(new chain_api_plugin_impl(chain.chain(), chain.get_abi_serializer_max_time(), !http.verbose_errors()));
+    my.reset(new chain_api_plugin_impl(chain.chain().chaindb(), chain.chain().get_authorization_manager(), chain.get_abi_serializer_max_time(), !http.verbose_errors()));
 
     http.add_api({
       CREATE_READ_HANDLER((*my), get_code, 200),

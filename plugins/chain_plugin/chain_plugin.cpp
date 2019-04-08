@@ -324,7 +324,7 @@ get_account_results chain_plugin_impl::get_account( const get_account_params& pa
    result.head_block_num  = chain->head_block_num();
    result.head_block_time = chain->head_block_time();
 
-   const auto& a = chain->get_account(result.account_name);
+   const auto& a = account_object::get_account(chain->chaindb(), result.account_name);
 
    result.privileged       = a.privileged;
    result.last_code_update = a.last_code_update;

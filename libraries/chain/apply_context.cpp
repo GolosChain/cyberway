@@ -49,7 +49,7 @@ void apply_context::exec_one( action_trace& trace )
    const auto& cfg = control.get_global_properties().configuration;
    try {
       try {
-         const auto& a = control.get_account( receiver );
+         const auto& a = account_object::get_account(control.chaindb(), receiver);
          privileged = a.privileged;
          auto native = control.find_apply_handler( receiver, act.account, act.name );
          if( native ) {
@@ -98,7 +98,7 @@ void apply_context::exec_one( action_trace& trace )
 void apply_context::lazy_init_chaindb_abi(account_name code) {
    if (chaindb.has_abi(code)) return;
 
-   const auto& a = control.get_account(code);
+   const auto& a = account_object::get_account(control.chaindb(), code);
    EOS_ASSERT(a.abi.size() > 0, cyberway::chaindb::no_abi_exception,
        "Account ${a} doesn't have ABI description", ("a", code));
 
@@ -154,15 +154,14 @@ bool apply_context::is_username(const account_name& scope, const username& name)
    return nullptr != chaindb.find<username_object,by_scope_name>(boost::make_tuple(scope,name));
 }
 account_name apply_context::get_domain_owner(const domain_name& domain) const {
-   return control.get_domain(domain).owner;
+   return domain_object::get_domain(control.chaindb(), domain).owner;
 }
 account_name apply_context::resolve_domain(const domain_name& domain) const {
-   return control.get_domain(domain).linked_to;
+   return domain_object::get_domain(control.chaindb(), domain).linked_to;
 }
 account_name apply_context::resolve_username(const account_name& scope, const username& name) const {
-   return control.get_username(scope, name).owner;
+   return username_object::get_username(control.chaindb(), scope, name).owner;
 }
-
 
 bool apply_context::is_account( const account_name& account )const {
    return nullptr != chaindb.find<account_object,by_name>( account );

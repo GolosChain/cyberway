@@ -18,6 +18,13 @@ class domain_object : public cyberway::chaindb::object<domain_object_type, domai
    account_name         linked_to;
    block_timestamp_type creation_date;
    domain_name          name;
+
+   static const domain_object& get_domain(cyberway::chaindb::chaindb_controller& chaindb, const domain_name& name) try {
+       const auto* d = chaindb.find<domain_object, by_name>(name);
+       EOS_ASSERT(d != nullptr, chain::domain_query_exception, "domain `${name}` not found", ("name", name));
+       return *d;
+   } FC_CAPTURE_AND_RETHROW((name))
+
 };
 using domain_id_type = domain_object::id_type;
 
@@ -45,6 +52,14 @@ class username_object : public cyberway::chaindb::object<username_object_type, u
    account_name         owner;
    account_name         scope;   // smart-contract (app), where name registered
    username             name;
+
+   static const username_object& get_username(cyberway::chaindb::chaindb_controller& chaindb, account_name scope, const username& name) try {
+       const auto* user = chaindb.find<username_object, by_scope_name>(boost::make_tuple(scope,name));
+       EOS_ASSERT(user != nullptr, username_query_exception,
+           "username `${name}` not found in scope `${scope}`", ("name",name)("scope",scope));
+       return *user;
+   } FC_CAPTURE_AND_RETHROW((scope)(name))
+
 };
 using username_id_type = username_object::id_type;
 

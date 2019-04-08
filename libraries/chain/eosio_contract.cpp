@@ -481,7 +481,7 @@ void apply_cyber_domain_passdomain(apply_context& context) {
    try {
       context.require_authorization(op.from);   // TODO: special case if nobody owns domain
       validate_domain_name(op.name);
-      const auto& domain = context.control.get_domain(op.name);
+      const auto& domain = domain_object::get_domain(context.control.chaindb(), op.name);
       EOS_ASSERT(op.from == domain.owner, action_validate_exception, "Only owner can pass domain name");
       context.chaindb.modify(domain, {context, op.to}, [&](auto& d) {
          d.owner = op.to;
@@ -493,7 +493,7 @@ void apply_cyber_domain_linkdomain(apply_context& context) {
    try {
       context.require_authorization(op.owner);
       validate_domain_name(op.name);
-      const auto& domain = context.control.get_domain(op.name);
+      const auto& domain = domain_object::get_domain(context.control.chaindb(), op.name);
       EOS_ASSERT(op.owner == domain.owner, action_validate_exception, "Only owner can change domain link");
       EOS_ASSERT(op.to != domain.linked_to, action_validate_exception, "Domain name already linked to the same account");
       context.chaindb.modify(domain, {context, domain.owner}, [&](auto& d) {
@@ -506,7 +506,7 @@ void apply_cyber_domain_unlinkdomain(apply_context& context) {
    try {
       context.require_authorization(op.owner);
       validate_domain_name(op.name);
-      const auto& domain = context.control.get_domain(op.name);
+      const auto& domain = domain_object::get_domain(context.control.chaindb(), op.name);
       EOS_ASSERT(op.owner == domain.owner, action_validate_exception, "Only owner can unlink domain");
       EOS_ASSERT(domain.linked_to != account_name(), action_validate_exception, "Domain name already unlinked");
       context.chaindb.modify(domain, {context, domain.owner}, [&](auto& d) {
