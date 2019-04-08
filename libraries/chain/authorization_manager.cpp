@@ -8,13 +8,12 @@
 #include <eosio/chain/permission_object.hpp>
 #include <eosio/chain/permission_link_object.hpp>
 #include <eosio/chain/authority_checker.hpp>
-#include <eosio/chain/controller.hpp>
 #include <eosio/chain/global_property_object.hpp>
 #include <eosio/chain/contract_types.hpp>
 #include <eosio/chain/generated_transaction_object.hpp>
-#include <boost/tuple/tuple_io.hpp>
 #include <eosio/chain/database_utils.hpp>
 
+#include <boost/tuple/tuple_io.hpp>
 
 namespace eosio { namespace chain {
 
@@ -24,8 +23,8 @@ namespace eosio { namespace chain {
       permission_link_table
    >;
 
-   authorization_manager::authorization_manager(controller& c, cyberway::chaindb::chaindb_controller& chaindb)
-   :_control(c),_chaindb(chaindb) {}
+   authorization_manager::authorization_manager(cyberway::chaindb::chaindb_controller& chaindb)
+   : _chaindb(chaindb) {}
 
    void authorization_manager::add_indices() {
        authorization_index_set::add_indices(_chaindb);
@@ -52,9 +51,6 @@ namespace eosio { namespace chain {
                                                                     )
    {
       auto creation_time = initial_creation_time;
-      if( creation_time == time_point() ) {
-         creation_time = _control.pending_block_time();
-      }
 
       const auto& perm_usage = _chaindb.emplace<permission_usage_object>(ram, [&](auto& p) {
          p.last_used = creation_time;
@@ -71,10 +67,10 @@ namespace eosio { namespace chain {
       return perm;
    }
 
-   void authorization_manager::modify_permission( const permission_object& permission, const ram_payer_info& ram, const authority& auth ) {
+   void authorization_manager::modify_permission( const permission_object& permission, const ram_payer_info& ram, const authority& auth, time_point update_time ) {
       _chaindb.modify( permission, ram, [&](permission_object& po) {
          po.auth = auth;
-         po.last_updated = _control.pending_block_time();
+         po.last_updated = update_time;
       });
    }
 
@@ -88,10 +84,10 @@ namespace eosio { namespace chain {
       parent_idx.erase( permission, ram );
    }
 
-   void authorization_manager::update_permission_usage( const permission_object& permission ) {
+   void authorization_manager::update_permission_usage( const permission_object& permission, time_point usage_time ) {
       const auto& puo = _chaindb.get( permission.usage_id );
        _chaindb.modify( puo, [&](permission_usage_object& p) {
-         p.last_used = _control.pending_block_time();
+         p.last_used = usage_time;
       });
    }
 
@@ -321,12 +317,12 @@ namespace eosio { namespace chain {
    {
       const auto& checktime = ( static_cast<bool>(_checktime) ? _checktime : _noop_checktime );
 
-      auto delay_max_limit = fc::seconds( _control.get_global_properties().configuration.max_transaction_delay );
+      auto delay_max_limit = fc::seconds( _chaindb.get<global_property_object>().configuration.max_transaction_delay );
 
       auto effective_provided_delay =  (provided_delay >= delay_max_limit) ? fc::microseconds::maximum() : provided_delay;
 
       auto checker = make_auth_checker( [&](const permission_level& p){ return get_permission(p).auth; },
-                                        _control.get_global_properties().configuration.max_authority_depth,
+                                        _chaindb.get<global_property_object>().configuration.max_authority_depth,
                                         provided_keys,
                                         provided_permissions,
                                         effective_provided_delay,
@@ -424,10 +420,10 @@ namespace eosio { namespace chain {
    {
       const auto& checktime = ( static_cast<bool>(_checktime) ? _checktime : _noop_checktime );
 
-      auto delay_max_limit = fc::seconds( _control.get_global_properties().configuration.max_transaction_delay );
+      auto delay_max_limit = fc::seconds( _chaindb.get<global_property_object>().configuration.max_transaction_delay );
 
       auto checker = make_auth_checker( [&](const permission_level& p){ return get_permission(p).auth; },
-                                        _control.get_global_properties().configuration.max_authority_depth,
+                                        _chaindb.get<global_property_object>().configuration.max_authority_depth,
                                         provided_keys,
                                         provided_permissions,
                                         ( provided_delay >= delay_max_limit ) ? fc::microseconds::maximum() : provided_delay,
@@ -458,7 +454,7 @@ namespace eosio { namespace chain {
                                                                      )const
    {
       auto checker = make_auth_checker( [&](const permission_level& p){ return get_permission(p).auth; },
-                                        _control.get_global_properties().configuration.max_authority_depth,
+                                        _chaindb.get<global_property_object>().configuration.max_authority_depth,
                                         candidate_keys,
                                         {},
                                         provided_delay,

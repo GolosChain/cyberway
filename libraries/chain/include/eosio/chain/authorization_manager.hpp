@@ -32,7 +32,7 @@ namespace eosio { namespace chain {
       public:
          using permission_id_type = permission_object::id_type;
 
-         explicit authorization_manager(controller& c, cyberway::chaindb::chaindb_controller&);
+         explicit authorization_manager(cyberway::chaindb::chaindb_controller&);
 
          void add_indices();
          void initialize_database();
@@ -44,14 +44,13 @@ namespace eosio { namespace chain {
                                                      permission_name name,
                                                      permission_id_type parent,
                                                      authority auth,
-                                                     time_point initial_creation_time = time_point()
-                                                   );
+                                                     time_point initial_creation_time);
 
-         void modify_permission( const permission_object& permission, const ram_payer_info&, const authority& auth );
+         void modify_permission(const permission_object& permission, const ram_payer_info&, const authority& auth , fc::time_point update_time);
 
          void remove_permission( const permission_object& permission, const ram_payer_info& );
 
-         void update_permission_usage( const permission_object& permission );
+         void update_permission_usage(const permission_object& permission , fc::time_point usage_time);
 
          fc::time_point get_permission_last_used( const permission_object& permission )const;
 
@@ -121,7 +120,6 @@ namespace eosio { namespace chain {
          static std::function<void()> _noop_checktime;
 
       private:
-         controller&    _control;
          cyberway::chaindb::chaindb_controller& _chaindb;
 
          void             check_updateauth_authorization( const updateauth& update, const vector<permission_level>& auths )const;

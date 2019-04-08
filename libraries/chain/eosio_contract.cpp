@@ -121,10 +121,10 @@ void apply_cyber_newaccount(apply_context& context) {
 
    const auto& owner_permission  = authorization.create_permission( {context, create.name},
                                                                     create.name, config::owner_name, 0,
-                                                                    std::move(create.owner) );
+                                                                    std::move(create.owner), context.control.pending_block_time() );
    const auto& active_permission = authorization.create_permission( {context, create.name},
                                                                     create.name, config::active_name, owner_permission.id,
-                                                                    std::move(create.active) );
+                                                                    std::move(create.active), context.control.pending_block_time() );
 
 // TODO: Removed by CyberWay
 //   int64_t ram_delta = config::overhead_per_account_ram_bytes;
@@ -315,7 +315,7 @@ void apply_cyber_updateauth(apply_context& context) {
 // TODO: Removed by CyberWay
 //      int64_t old_size = (int64_t)(config::billable_size_v<permission_object> + permission->auth.get_billable_size());
 
-      authorization.modify_permission( *permission, {context}, update.auth );
+      authorization.modify_permission( *permission, {context}, update.auth, context.control.pending_block_time() );
 
 // TODO: Removed by CyberWay
 //      int64_t new_size = (int64_t)(config::billable_size_v<permission_object> + permission->auth.get_billable_size());
@@ -324,7 +324,7 @@ void apply_cyber_updateauth(apply_context& context) {
 // TODO: Removed by CyberWay
 //      const auto& p =
 
-      authorization.create_permission( {context, update.account}, update.account, update.permission, parent_id, update.auth );
+      authorization.create_permission( {context, update.account}, update.account, update.permission, parent_id, update.auth, context.control.pending_block_time() );
 
 // TODO: Removed by CyberWay
 //      int64_t new_size = (int64_t)(config::billable_size_v<permission_object> + p.auth.get_billable_size());

@@ -399,7 +399,7 @@ namespace bacc = boost::accumulators;
           auto& am = control.get_mutable_authorization_manager();
           for( const auto& act : trx.actions ) {
              for( const auto& auth : act.authorization ) {
-                am.update_permission_usage( am.get_permission(auth) );
+                am.update_permission_usage( am.get_permission(auth), control.pending_block_time() );
              }
           }
        }

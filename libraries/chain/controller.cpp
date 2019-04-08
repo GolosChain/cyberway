@@ -221,7 +221,7 @@ struct controller_impl {
     fork_db( cfg.state_dir ),
     wasmif( cfg.wasm_runtime ),
     resource_limits( chaindb ),
-    authorization( s, chaindb ),
+    authorization(chaindb),
     conf( cfg ),
     chain_id( cfg.genesis.compute_chain_id() ),
     read_mode( cfg.read_mode ),
@@ -1988,7 +1988,6 @@ const apply_handler* controller::find_apply_handler( account_name receiver, acco
 wasm_interface& controller::get_wasm_interface() {
    return my->wasmif;
 }
-
 
 vector<transaction_metadata_ptr> controller::get_unapplied_transactions() const {
    vector<transaction_metadata_ptr> result;
