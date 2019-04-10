@@ -580,6 +580,7 @@ struct controller_impl {
    void create_native_account( account_name name, const authority& owner, const authority& active, bool is_privileged = false ) {
       chaindb.emplace<account_object>([&](auto& a) {
          a.name = name;
+         // a.recovery = creator;   // TODO: pass creator of account #470
          a.creation_date = conf.genesis.initial_timestamp;
          a.privileged = is_privileged;
 

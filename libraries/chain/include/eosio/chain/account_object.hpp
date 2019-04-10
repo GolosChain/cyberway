@@ -16,6 +16,7 @@ namespace eosio { namespace chain {
 
       id_type              id;
       account_name         name;
+      account_name         recovery;
       uint8_t              vm_type      = 0;
       uint8_t              vm_version   = 0;
       bool                 privileged   = false;
@@ -81,5 +82,6 @@ CHAINDB_TAG(eosio::chain::account_object, account)
 CHAINDB_SET_TABLE_TYPE(eosio::chain::account_sequence_object, eosio::chain::account_sequence_table)
 CHAINDB_TAG(eosio::chain::account_sequence_object, accountseq)
 
-FC_REFLECT(eosio::chain::account_object, (id)(name)(vm_type)(vm_version)(privileged)(last_code_update)(code_version)(creation_date)(code)(abi))
+FC_REFLECT(eosio::chain::account_object,
+   (id)(name)(recovery)(vm_type)(vm_version)(privileged)(last_code_update)(code_version)(creation_date)(code)(abi))
 FC_REFLECT(eosio::chain::account_sequence_object, (id)(name)(recv_sequence)(auth_sequence)(code_sequence)(abi_sequence))

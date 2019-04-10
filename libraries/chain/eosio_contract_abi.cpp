@@ -157,6 +157,7 @@ abi_def eosio_contract_abi(abi_def eos_abi)
       "account_object", "", {
          {"id", "uint64"},
          {"name", "name"},
+         {"recovery", "name"},
          {"vm_type", "uint8"},
          {"vm_version", "uint8"},
          {"privileged", "bool"},

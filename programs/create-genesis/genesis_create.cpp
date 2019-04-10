@@ -237,14 +237,16 @@ struct genesis_create::genesis_create_impl final {
     }
 
     template<typename T, typename Lambda>
-    void store_accounts_wo_perms(const T& accounts, Lambda&& get_name) {
+    void store_accounts_wo_perms(const T& accounts, Lambda&& get_names) {
         const auto l = accounts.size();
         const auto ts = _conf.initial_timestamp;
 
         db.start_section(config::system_account_name, N(account), "account_object", l);
         for (const auto& acc: accounts) {
             db.emplace<account_object>([&](auto& a) {
-                a.name = get_name(acc);
+                const auto names = get_names(acc);
+                a.name = names.first;
+                a.recovery = names.second;
                 a.creation_date = ts;
                 if (_contracts.count(a.name) > 0) {
                     const auto& abicode = _contracts[a.name];
@@ -265,20 +267,20 @@ struct genesis_create::genesis_create_impl final {
         db.start_section(config::system_account_name, N(accountseq), "account_sequence_object", l);
         for (const auto& acc: accounts) {
             db.emplace<account_sequence_object>([&](auto& a) {
-                a.name = get_name(acc);
+                a.name = get_names(acc).first;
             });
         }
 
         db.start_section(config::system_account_name, N(resusage), "resource_usage_object", l);
         for (const auto& acc: accounts) {
             db.emplace<resource_usage_object>([&](auto& u) {
-                u.owner = get_name(acc);
+                u.owner = get_names(acc).first;
             });
         }
     }
 
     void store_contracts() {
-        store_accounts_wo_perms(_contracts, [](auto& a){ return a.first; });
+        store_accounts_wo_perms(_contracts, [](auto& a) -> std::pair<name,name> { return {a.first, name()}; });
 
         // we can't store records from different tables simultaneously, so save current autoincrement id to use later
         uint64_t usage_id = db.get_autoincrement<permission_usage_object>();
@@ -402,9 +404,11 @@ struct genesis_create::genesis_create_impl final {
             _acc_names[a.account.id] = name;
         }
 
-        store_accounts_wo_perms(_visitor.auths, [&](auto& a) {
+        store_accounts_wo_perms(_visitor.auths, [&](auto& a) -> std::pair<name,name> {
+            const auto idx = a.account.id;
             const auto n = a.account.value(_accs_map);
-            return names[n];
+            const auto r = _visitor.accounts[idx].recovery_account.value(_accs_map);
+            return {names[n], names[r]};
         });
 
         // fill auths
