@@ -306,8 +306,8 @@ get_table_rows_result chain_api_plugin_impl::get_table_rows( const get_table_row
        // TODO: implement rbegin end rend methods in mongo driver https://github.com/GolosChain/cyberway/issues/446
        EOS_THROW(cyberway::chaindb::driver_unsupported_operation_exception, "Backward iteration through table not supported yet");
    } else {
-       auto begin = p.lower_bound.is_null() ? chaindb_.begin(request) : chaindb_.lower_bound(request, p.lower_bound);
-       const auto end_pk = p.upper_bound.is_null() ? cyberway::chaindb::end_primary_key : chaindb_.upper_bound(request, p.upper_bound).pk;
+       auto begin = p.lower_bound == fc::variant() ? chaindb_.begin(request) : chaindb_.lower_bound(request, p.lower_bound);
+       const auto end_pk = p.upper_bound == fc::variant() ? cyberway::chaindb::end_primary_key : chaindb_.upper_bound(request, p.upper_bound).pk;
        return walk_table_row_range(p, begin, end_pk);
    }
 
