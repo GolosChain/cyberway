@@ -19,7 +19,8 @@ public:
     genesis_ee_builder(const std::string& shared_file);
     ~genesis_ee_builder();
 
-    void build(const bfs::path& in_dump_dir, const bfs::path& out_file);
+    void read_operation_dump(const bfs::path& in_dump_dir);
+    void build(const bfs::path& out_file);
 private:
     golos_dump_header read_header(bfs::fstream& in, uint32_t expected_version);
 

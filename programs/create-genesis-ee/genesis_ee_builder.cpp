@@ -108,7 +108,7 @@ void genesis_ee_builder::process_rewards() {
 
         const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
         auto comment_itr = comment_index.find(hash);
-        if (is_newer(h, *comment_itr)) {
+        if (comment_itr != comment_index.end() && is_newer(h, *comment_itr)) {
             maps_.modify(*comment_itr, [&](auto& comment) {
                 comment.author_reward = tcrop.author_reward.get_amount();
                 comment.benefactor_reward = tcrop.benefactor_reward.get_amount();
@@ -161,7 +161,7 @@ void genesis_ee_builder::build_messages() {
     }
 }
 
-void genesis_ee_builder::build(const bfs::path& in_dump_dir, const bfs::path& out_file) {
+void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     in_dump_dir_ = in_dump_dir;
 
     std::cout << "Reading operation dump from " << in_dump_dir_ << "..." << std::endl;
@@ -169,7 +169,9 @@ void genesis_ee_builder::build(const bfs::path& in_dump_dir, const bfs::path& ou
     process_comments();
     process_delete_comments();
     process_rewards();
+}
 
+void genesis_ee_builder::build(const bfs::path& out_file) {
     std::cout << "Writing genesis to " << out_file << "..." << std::endl;
 
     out_.exceptions(std::ofstream::failbit | std::ofstream::badbit);

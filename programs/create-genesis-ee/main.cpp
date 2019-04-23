@@ -1,19 +1,10 @@
 #include "genesis_ee_builder.hpp"
 
-#include <eosio/chain/abi_def.hpp>
-
-#include <fc/io/raw.hpp>
-#include <fc/io/json.hpp>
-#include <fc/io/fstream.hpp>
-#include <fc/variant.hpp>
-#include <fc/filesystem.hpp>
-
 #include <boost/program_options.hpp>
 #include <boost/filesystem/path.hpp>
 
 namespace cyberway { namespace genesis {
 
-using namespace eosio::chain;
 namespace bfs = boost::filesystem;
 namespace bpo = boost::program_options;
 using bpo::options_description;
@@ -50,7 +41,8 @@ int main(int argc, char** argv) {
         bfs::remove_all("shared_memory");
 
         genesis_ee_builder builder("shared_memory");
-        builder.build(input_dir, output_file);
+        builder.read_operation_dump(input_dir);
+        builder.build(output_file);
 
         bfs::remove_all("shared_memory");
     } catch (const fc::exception& e) {

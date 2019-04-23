@@ -1,13 +1,11 @@
 #pragma once
 
 #include <eosio/chain/types.hpp>
-#include <cyberway/chaindb/controller.hpp>
 #include <fc/reflect/reflect.hpp>
 
 namespace cyberway { namespace genesis {
 
 using namespace eosio::chain;
-using namespace chaindb;
 
 struct genesis_ee_header {
     char magic[14] = "CyberwayEEGen";
