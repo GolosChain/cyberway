@@ -135,7 +135,7 @@ asset golos2sys(const asset& golos) {
 void genesis_ee_builder::build_messages() {
     std::cout << "-> Writing messages..." << std::endl;
 
-    fc::raw::pack(out_, table_ee_header(table_ee_type::messages));
+    fc::raw::pack(out_, section_ee_header(section_ee_type::messages));
 
     bfs::fstream dump_comments(in_dump_dir_ / "comments");
 

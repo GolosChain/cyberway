@@ -13,7 +13,7 @@ struct comment_operation {
 
     string title;
     string body;
-    std::vector<string> tags;
+    flat_set<string> tags;
 };
 
 struct custom_json_operation {

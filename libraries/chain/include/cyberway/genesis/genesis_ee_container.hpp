@@ -17,14 +17,14 @@ struct genesis_ee_header {
     }
 };
 
-enum class table_ee_type {
+enum class section_ee_type {
     messages
 };
 
-struct table_ee_header {
-    table_ee_type type;
+struct section_ee_header {
+    section_ee_type type;
 
-    table_ee_header(table_ee_type type_)
+    section_ee_header(section_ee_type type_)
             : type(type_) {
     }
 };
@@ -36,7 +36,7 @@ struct message_ee_object {
     string permlink;
     string title;
     string body;
-    vector<string> tags;
+    flat_set<string> tags;
     int64_t net_rshares;
     asset author_reward;
     asset benefactor_reward;
@@ -45,8 +45,8 @@ struct message_ee_object {
 
 }} // cyberway::genesis
 
-FC_REFLECT_ENUM(cyberway::genesis::table_ee_type, (messages))
-FC_REFLECT(cyberway::genesis::table_ee_header, (type))
+FC_REFLECT_ENUM(cyberway::genesis::section_ee_type, (messages))
+FC_REFLECT(cyberway::genesis::section_ee_header, (type))
 
 FC_REFLECT(cyberway::genesis::message_ee_object, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(tags)
     (net_rshares)(author_reward)(benefactor_reward)(curator_reward))
