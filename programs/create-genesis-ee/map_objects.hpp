@@ -1,5 +1,7 @@
 #pragma once
 
+#include "golos_dump_container.hpp"
+
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/composite_key.hpp>
@@ -25,8 +27,8 @@ struct comment_header : public chainbase::object<comment_header_object_type, com
     id_type id;
     uint64_t hash;
     uint64_t offset;
-    uint32_t block_num;
-    uint16_t op_in_block;
+    op_num create_op;
+    op_num last_delete_op;
     int64_t net_rshares;
     int64_t author_reward;
     int64_t benefactor_reward;

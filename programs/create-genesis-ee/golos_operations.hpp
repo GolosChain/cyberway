@@ -13,7 +13,7 @@ struct comment_operation {
 
     string title;
     string body;
-    string json_metadata;
+    std::vector<string> tags;
 };
 
 struct custom_json_operation {
@@ -82,11 +82,12 @@ struct total_comment_reward_operation {
     asset author_reward;
     asset benefactor_reward;
     asset curator_reward;
+    int64_t net_rshares;
 };
 
 } } // cyberway::golos
 
-FC_REFLECT(cyberway::golos::comment_operation, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(json_metadata))
+FC_REFLECT(cyberway::golos::comment_operation, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(tags))
 FC_REFLECT(cyberway::golos::custom_json_operation, (required_auths)(required_posting_auths)(id)(json))
 // FC_REFLECT(cyberway::golos::delete_comment_operation, (author)(permlink))
 FC_REFLECT(cyberway::golos::vote_operation, (voter)(author)(permlink)(weight))
@@ -96,4 +97,5 @@ FC_REFLECT(cyberway::golos::author_reward_operation, (author)(permlink)(sbd_payo
 FC_REFLECT(cyberway::golos::curation_reward_operation, (curator)(reward)(comment_author)(comment_permlink))
 FC_REFLECT(cyberway::golos::auction_window_reward_operation, (reward)(comment_author)(comment_permlink))
 FC_REFLECT(cyberway::golos::comment_benefactor_reward_operation, (benefactor)(author)(permlink)(reward))
-FC_REFLECT(cyberway::golos::total_comment_reward_operation, (author)(permlink)(author_reward)(benefactor_reward)(curator_reward))
+FC_REFLECT(cyberway::golos::total_comment_reward_operation, (author)(permlink)(author_reward)(benefactor_reward)(curator_reward)
+    (net_rshares))

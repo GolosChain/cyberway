@@ -24,8 +24,6 @@ public:
 private:
     golos_dump_header read_header(bfs::fstream& in, uint32_t expected_version);
 
-    bool is_newer(const golos_dump_header& h, const comment_header& comment);
-
     void process_comments();
     void process_delete_comments();
     void process_rewards();

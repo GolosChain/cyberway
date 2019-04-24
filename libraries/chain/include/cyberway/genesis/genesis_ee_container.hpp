@@ -36,7 +36,7 @@ struct message_ee_object {
     string permlink;
     string title;
     string body;
-    string json_metadata;
+    vector<string> tags;
     int64_t net_rshares;
     asset author_reward;
     asset benefactor_reward;
@@ -48,5 +48,5 @@ struct message_ee_object {
 FC_REFLECT_ENUM(cyberway::genesis::table_ee_type, (messages))
 FC_REFLECT(cyberway::genesis::table_ee_header, (type))
 
-FC_REFLECT(cyberway::genesis::message_ee_object, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(json_metadata)
+FC_REFLECT(cyberway::genesis::message_ee_object, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(tags)
     (net_rshares)(author_reward)(benefactor_reward)(curator_reward))

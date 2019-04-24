@@ -17,7 +17,7 @@ genesis_ee_builder::~genesis_ee_builder() {
 }
 
 golos_dump_header genesis_ee_builder::read_header(bfs::fstream& in, uint32_t expected_version) {
-    golos_dump_header h{"", 0, 0};
+    golos_dump_header h{"", 0, op_num(0, 0)};
     in.read((char*)&h, sizeof(h));
     if (in) {
         EOS_ASSERT(std::string(h.magic) == golos_dump_header::expected_magic && h.version == expected_version, genesis_exception,
@@ -26,17 +26,14 @@ golos_dump_header genesis_ee_builder::read_header(bfs::fstream& in, uint32_t exp
     return h;
 }
 
-bool genesis_ee_builder::is_newer(const golos_dump_header& h, const comment_header& comment) {
-    return h.block_num > comment.block_num || (h.block_num == comment.block_num && h.op_in_block > comment.op_in_block);
-}
-
 void genesis_ee_builder::process_comments() {
     std::cout << "-> Reading comments..." << std::endl;
+
+    const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
 
     bfs::fstream in(in_dump_dir_ / "comments");
     while (in) {
         auto h = read_header(in, 1);
-
         if (!in) {
             break;
         }
@@ -49,17 +46,19 @@ void genesis_ee_builder::process_comments() {
         cyberway::golos::comment_operation cop;
         fc::raw::unpack(in, cop);
 
-        const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
         auto comment_itr = comment_index.find(hash);
         if (comment_itr != comment_index.end()) {
-            maps_.remove(*comment_itr);
+            maps_.modify(*comment_itr, [&](auto& comment) {
+                comment.offset = comment_offset;
+                comment.create_op = h.op;
+            });
+            continue;
         }
 
         maps_.create<comment_header>([&](auto& comment) {
             comment.hash = hash;
             comment.offset = comment_offset;
-            comment.block_num = h.block_num;
-            comment.op_in_block = h.op_in_block;
+            comment.create_op = h.op;
         });
     }
 }
@@ -67,10 +66,11 @@ void genesis_ee_builder::process_comments() {
 void genesis_ee_builder::process_delete_comments() {
     std::cout << "-> Reading comment deletions..." << std::endl;
 
+    const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
+
     bfs::fstream in(in_dump_dir_ / "delete_comments");
     while (in) {
         auto h = read_header(in, 1);
-
         if (!in) {
             break;
         }
@@ -78,10 +78,13 @@ void genesis_ee_builder::process_delete_comments() {
         uint64_t hash = 0;
         fc::raw::unpack(in, hash);
 
-        const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
         auto comment_itr = comment_index.find(hash);
-        if (is_newer(h, *comment_itr)) {
+        if (h.op > comment_itr->create_op) {
             maps_.remove(*comment_itr);
+        } else {
+            maps_.modify(*comment_itr, [&](auto& comment) {
+                comment.last_delete_op = h.op;
+            });
         }
     }
 }
@@ -89,10 +92,11 @@ void genesis_ee_builder::process_delete_comments() {
 void genesis_ee_builder::process_rewards() {
     std::cout << "-> Reading rewards..." << std::endl;
 
+    const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
+
     bfs::fstream in(in_dump_dir_ / "total_comment_rewards");
     while (in) {
         auto h = read_header(in, 1);
-
         if (!in) {
             break;
         }
@@ -103,17 +107,13 @@ void genesis_ee_builder::process_rewards() {
         cyberway::golos::total_comment_reward_operation tcrop;
         fc::raw::unpack(in, tcrop);
 
-        int64_t net_rshares = 0;
-        fc::raw::unpack(in, net_rshares);
-
-        const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
         auto comment_itr = comment_index.find(hash);
-        if (comment_itr != comment_index.end() && is_newer(h, *comment_itr)) {
+        if (comment_itr != comment_index.end() && h.op > comment_itr->create_op) {
             maps_.modify(*comment_itr, [&](auto& comment) {
                 comment.author_reward = tcrop.author_reward.get_amount();
                 comment.benefactor_reward = tcrop.benefactor_reward.get_amount();
                 comment.curator_reward = tcrop.curator_reward.get_amount();
-                comment.net_rshares = net_rshares;
+                comment.net_rshares = tcrop.net_rshares;
             });
         }
     }
@@ -152,7 +152,7 @@ void genesis_ee_builder::build_messages() {
         msg.parent_permlink = cop.parent_permlink;
         msg.title = cop.title;
         msg.body = cop.body;
-        msg.json_metadata = cop.json_metadata;
+        msg.tags = cop.tags;
         msg.net_rshares = comment_itr->net_rshares;
         msg.author_reward = golos2sys(asset(comment_itr->author_reward));
         msg.benefactor_reward = golos2sys(asset(comment_itr->benefactor_reward));
