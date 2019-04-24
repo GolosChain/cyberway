@@ -16,14 +16,13 @@ genesis_ee_builder::genesis_ee_builder(const std::string& shared_file)
 genesis_ee_builder::~genesis_ee_builder() {
 }
 
-golos_dump_header genesis_ee_builder::read_header(bfs::fstream& in, uint32_t expected_version) {
-    golos_dump_header h{"", 0, op_num(0, 0)};
+bfs::fstream& genesis_ee_builder::read_header(golos_dump_header& h, bfs::fstream& in, uint32_t expected_version) {
     in.read((char*)&h, sizeof(h));
     if (in) {
         EOS_ASSERT(std::string(h.magic) == golos_dump_header::expected_magic && h.version == expected_version, genesis_exception,
             "Unknown format of the operation dump file.");
     }
-    return h;
+    return in;
 }
 
 void genesis_ee_builder::process_comments() {
@@ -32,12 +31,9 @@ void genesis_ee_builder::process_comments() {
     const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
 
     bfs::fstream in(in_dump_dir_ / "comments");
-    while (in) {
-        auto h = read_header(in, 1);
-        if (!in) {
-            break;
-        }
 
+    golos_dump_header h;
+    while (read_header(h, in, 1)) {
         uint64_t hash = 0;
         fc::raw::unpack(in, hash);
 
@@ -69,12 +65,9 @@ void genesis_ee_builder::process_delete_comments() {
     const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
 
     bfs::fstream in(in_dump_dir_ / "delete_comments");
-    while (in) {
-        auto h = read_header(in, 1);
-        if (!in) {
-            break;
-        }
 
+    golos_dump_header h;
+    while (read_header(h, in, 1)) {
         uint64_t hash = 0;
         fc::raw::unpack(in, hash);
 
@@ -95,12 +88,9 @@ void genesis_ee_builder::process_rewards() {
     const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
 
     bfs::fstream in(in_dump_dir_ / "total_comment_rewards");
-    while (in) {
-        auto h = read_header(in, 1);
-        if (!in) {
-            break;
-        }
 
+    golos_dump_header h;
+    while (read_header(h, in, 1)) {
         uint64_t hash = 0;
         fc::raw::unpack(in, hash);
 

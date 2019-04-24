@@ -22,7 +22,7 @@ public:
     void read_operation_dump(const bfs::path& in_dump_dir);
     void build(const bfs::path& out_file);
 private:
-    golos_dump_header read_header(bfs::fstream& in, uint32_t expected_version);
+    bfs::fstream& read_header(golos_dump_header& h, bfs::fstream& in, uint32_t expected_version);
 
     void process_comments();
     void process_delete_comments();
