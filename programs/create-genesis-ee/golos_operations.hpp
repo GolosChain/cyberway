@@ -16,11 +16,31 @@ struct comment_operation {
     flat_set<string> tags;
 };
 
-struct custom_json_operation {
-    flat_set<account_name_type> required_auths;
-    flat_set<account_name_type> required_posting_auths;
-    string id; ///< must be less than 32 characters long
-    string json; ///< must be proper utf8 / JSON string.
+enum follow_type {
+    undefined,
+    blog,
+    ignore
+};
+
+struct follow_operation {
+    account_name_type follower;
+    account_name_type following;
+    uint16_t what;
+};
+
+struct reblog_operation {
+    account_name_type account;
+    account_name_type author;
+    string permlink;
+    string title;
+    string body;
+};
+
+struct delete_reblog_operation {
+    account_name_type account;
+    // Currently not used, dump stores hash only
+    // account_name_type author;
+    // std::string permlink;
 };
 
 // Currently not used, dump stores hash only
@@ -46,6 +66,7 @@ struct vote_operation {
     account_name_type author;
     string permlink;
     int16_t weight = 0;
+    fc::time_point_sec timestamp;
 };
 
 struct author_reward_operation {
@@ -88,9 +109,11 @@ struct total_comment_reward_operation {
 } } // cyberway::golos
 
 FC_REFLECT(cyberway::golos::comment_operation, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(tags))
-FC_REFLECT(cyberway::golos::custom_json_operation, (required_auths)(required_posting_auths)(id)(json))
+FC_REFLECT(cyberway::golos::follow_operation, (follower)(following)(what))
+FC_REFLECT(cyberway::golos::reblog_operation, (account)(author)(permlink)(title)(body))
+FC_REFLECT(cyberway::golos::delete_reblog_operation, (account))
 // FC_REFLECT(cyberway::golos::delete_comment_operation, (author)(permlink))
-FC_REFLECT(cyberway::golos::vote_operation, (voter)(author)(permlink)(weight))
+FC_REFLECT(cyberway::golos::vote_operation, (voter)(author)(permlink)(weight)(timestamp))
 FC_REFLECT(cyberway::golos::transfer_operation, (from)(to)(amount)(memo))
 
 FC_REFLECT(cyberway::golos::author_reward_operation, (author)(permlink)(sbd_payout)(steem_payout)(vesting_payout))

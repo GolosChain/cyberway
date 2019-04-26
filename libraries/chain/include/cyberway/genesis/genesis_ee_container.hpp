@@ -6,6 +6,7 @@
 namespace cyberway { namespace genesis {
 
 using namespace eosio::chain;
+using base_t = int64_t;
 
 struct genesis_ee_header {
     char magic[14] = "CyberwayEEGen";
@@ -29,6 +30,11 @@ struct section_ee_header {
     }
 };
 
+struct vote_ee_object {
+    int16_t weight;
+    uint64_t time;
+};
+
 struct message_ee_object {
     account_name parent_author;
     string parent_permlink;
@@ -41,6 +47,7 @@ struct message_ee_object {
     asset author_reward;
     asset benefactor_reward;
     asset curator_reward;
+    flat_map<name, vote_ee_object> votes;
 };
 
 }} // cyberway::genesis
@@ -48,5 +55,7 @@ struct message_ee_object {
 FC_REFLECT_ENUM(cyberway::genesis::section_ee_type, (messages))
 FC_REFLECT(cyberway::genesis::section_ee_header, (type))
 
+FC_REFLECT(cyberway::genesis::vote_ee_object, (weight)(time))
+
 FC_REFLECT(cyberway::genesis::message_ee_object, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(tags)
-    (net_rshares)(author_reward)(benefactor_reward)(curator_reward))
+    (net_rshares)(author_reward)(benefactor_reward)(curator_reward)(votes))
