@@ -59,7 +59,7 @@ void config_reader::set_program_options(options_description& cli) {
             "the location of the genesis info file (absolute path or relative to the current directory).")
         ("output-file,o", bpo::value<bfs::path>(&out_file)->default_value("cyberway-genesis.dat"),
             "the file to write generic genesis data to (absolute or relative path).")
-        ("ee-output-file,o", bpo::value<bfs::path>(&ee_file)->default_value("events-genesis.dat"),
+        ("ee-output-file,e", bpo::value<bfs::path>(&ee_file)->default_value("events-genesis.dat"),
             "the file to write Event-Engine genesis data to (absolute or relative path).")
         ("help,h", "Print this help message and exit.")
         ;
