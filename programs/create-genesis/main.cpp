@@ -112,6 +112,7 @@ void config_reader::read_config(const variables_map& options) {
     ilog("Genesis: read config");
     make_absolute(info_file, "Info");
     make_absolute(out_file, "Output", false);
+    make_absolute(ee_file, "Events", false);
 
     info = fc::json::from_file(info_file).as<genesis_info>();
     make_absolute(info.state_file, "Golos state");
