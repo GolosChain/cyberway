@@ -517,7 +517,7 @@ bytes apply_context::get_packed_transaction() {
 }
 
 cyberway::chaindb::ram_payer_info apply_context::get_ram_payer( const account_name& ram_owner, const account_name& ram_payer ) {
-   return {*this, trx_context.get_ram_provider(ram_payer), ram_owner};
+   return {*this, trx_context.get_ram_provider(ram_owner), ram_owner};
 }
 
 void apply_context::add_ram_usage( const account_name& payer, const int64_t delta ) {

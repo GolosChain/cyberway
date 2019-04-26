@@ -312,7 +312,6 @@ namespace cyberway { namespace chaindb {
             auto table = get_table(request);
             auto value = table.abi->to_object(table, data, size);
             auto obj = object_value{{table, pk}, std::move(value)};
-
             return insert(table, ram, obj);
         }
 
@@ -583,9 +582,9 @@ namespace cyberway { namespace chaindb {
 
             // charge the payer
             auto delta = static_cast<int64_t>(obj.service.size);
-            ram.add_usage(ram.payer, delta);
-
             undo_.insert(table, obj);
+
+            ram.add_usage(ram.payer, delta);
             return delta;
         }
 
