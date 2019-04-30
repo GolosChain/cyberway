@@ -256,7 +256,7 @@ variants genesis_ee_builder::build_votes(uint64_t msg_hash, operation_number msg
         auto vote = mvo
             ("voter", generate_name(std::string(vote_itr->voter)))
             ("weight", vote_itr->weight)
-            ("time", uint64_t(vote_itr->timestamp.sec_since_epoch()) * 1000000);
+            ("time", vote_itr->timestamp.sec_since_epoch());
 
         votes.push_back(vote);
     }
@@ -283,7 +283,7 @@ variants genesis_ee_builder::build_reblogs(uint64_t msg_hash, operation_number m
             ("account", generate_name(std::string(reblog_itr->account)))
             ("title", rop.title)
             ("body", rop.body)
-            ("time", uint64_t(rop.timestamp.sec_since_epoch()) * 1000000);
+            ("time", rop.timestamp.sec_since_epoch());
 
         reblogs.push_back(reblog);
     }
