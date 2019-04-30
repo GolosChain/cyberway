@@ -936,6 +936,7 @@ struct genesis_create::genesis_create_impl final {
     void store_witnesses() {
         std::cout << "Creating witnesses..." << std::endl;
         fc::flat_map<acc_idx,int64_t> weights;  // accumulate weights per witness to compare with witness.total_weight
+        fc::flat_map<acc_idx,uint64_t> vote_counts;  // accumulate votes counts per witness
         ram_payer_info ram_payer{}; // TODO: fix
 
         // Golos dApp have no proxy for witnesses, so create direct votes instead
@@ -972,6 +973,7 @@ struct genesis_create::genesis_create_impl final {
             for (const auto& w: votes) {
                 witnesses.emplace_back(generate_name(_accs_map[w]));
                 weights[w] += vests;
+                vote_counts[w]++;
             }
             const auto& n = generate_name(_accs_map[acc]);
             auto o = mvo
@@ -989,7 +991,8 @@ struct genesis_create::genesis_create_impl final {
                 ("name", n)
                 ("url", w.url)
                 ("active", true)
-                ("total_weight", w.votes);
+                ("total_weight", w.votes)
+                ("counter_votes", vote_counts[w.owner.id]);
             db.insert({gls_ctrl_account_name, gls_ctrl_account_name, N(witness)}, pk, obj, ram_payer);
             if (weights[w.owner.id] != w.votes) {
                 wlog("Witness `${a}` .votes value ${w} ≠ ${c}",
