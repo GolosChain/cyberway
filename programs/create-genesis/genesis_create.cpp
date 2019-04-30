@@ -516,7 +516,7 @@ struct genesis_create::genesis_create_impl final {
         // add usernames
         db.start_section(config::system_account_name, N(domain), "domain_object", 1);
         ee_genesis.usernames.start_section(config::system_account_name, N(domain), "domain_info", 1);
-        const auto app = golos_domain_name;
+        const auto app = gls_issuer_account_name;
         db.emplace<domain_object>([&](auto& a) {
             a.owner = app;
             a.linked_to = app;
