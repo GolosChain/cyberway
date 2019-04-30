@@ -12,7 +12,7 @@ static abi_def create_messages_abi() {
         "vote_info", "", {
             {"voter", "name"},
             {"weight", "int16"},
-            {"time", "uint32"}
+            {"time", "time_point_sec"}
         }
     });
 
@@ -21,7 +21,7 @@ static abi_def create_messages_abi() {
             {"account", "name"},
             {"title", "string"},
             {"body", "string"},
-            {"time", "uint32"}
+            {"time", "time_point_sec"}
         }
     });
 
