@@ -523,6 +523,7 @@ struct genesis_create::genesis_create_impl final {
             s.enabled = false;      // ?
         });
         db.start_section(config::system_account_name, N(stake.param), "param_struct", 1);
+        db.set_autoincrement<stake_param_object>(sys_sym.to_symbol_code());
         db.emplace<stake_param_object>([&](auto& p) {
             const auto inf = _info.params.stake;
             p.token_symbol = sys_sym;
