@@ -15,6 +15,8 @@ namespace cyberway { namespace genesis {
 
 static constexpr uint64_t gls_post_account_name  = N(gls.publish);
 
+constexpr auto GLS = SY(3, GOLOS);
+
 genesis_ee_builder::genesis_ee_builder(const std::string& shared_file)
         : maps_(shared_file, chainbase::database::read_write, MAP_FILE_SIZE) {
     maps_.add_index<comment_header_index>();
@@ -238,10 +240,6 @@ account_name generate_name(string n) {
     return account_name(h & 0xFFFFFFFFFFFFFFF0);
 }
 
-asset golos2sys(const asset& golos) {
-    return asset(golos.get_amount() * (10000/1000));
-}
-
 variants genesis_ee_builder::build_votes(uint64_t msg_hash, operation_number msg_created) {
     variants votes;
 
@@ -319,9 +317,9 @@ void genesis_ee_builder::build_messages() {
             ("body", cop.body)
             ("tags", cop.tags)
             ("net_rshares", comment_itr->net_rshares)
-            ("author_reward", golos2sys(asset(comment_itr->author_reward)))
-            ("benefactor_reward", golos2sys(asset(comment_itr->benefactor_reward)))
-            ("curator_reward", golos2sys(asset(comment_itr->curator_reward)))
+            ("author_reward", asset(comment_itr->author_reward, symbol(GLS)))
+            ("benefactor_reward", asset(comment_itr->benefactor_reward, symbol(GLS)))
+            ("curator_reward", asset(comment_itr->curator_reward, symbol(GLS)))
             ("votes", votes)
             ("reblogs", reblogs);
 
