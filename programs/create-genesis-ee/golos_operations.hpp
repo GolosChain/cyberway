@@ -108,5 +108,5 @@ FC_REFLECT(cyberway::golos::author_reward_operation, (author)(permlink)(sbd_payo
 FC_REFLECT(cyberway::golos::curation_reward_operation, (curator)(reward)(comment_author)(comment_permlink))
 FC_REFLECT(cyberway::golos::auction_window_reward_operation, (reward)(comment_author)(comment_permlink))
 FC_REFLECT(cyberway::golos::comment_benefactor_reward_operation, (benefactor)(author)(permlink)(reward))
-FC_REFLECT(cyberway::golos::total_comment_reward_operation, (author)(permlink)(author_reward)(benefactor_reward)(curator_reward)
+FC_REFLECT(cyberway::golos::total_comment_reward_operation, (hash)(author)(permlink)(author_reward)(benefactor_reward)(curator_reward)
     (net_rshares))
