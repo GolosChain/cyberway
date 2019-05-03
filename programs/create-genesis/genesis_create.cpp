@@ -1211,7 +1211,7 @@ struct genesis_create::genesis_create_impl final {
 
         // store charge balances
         const auto& accs = _visitor.accounts;
-        db.start_section(gls_charge_account_name, N(balances), "balance", accs.size()*4);
+        db.start_section(gls_charge_account_name, N(balances), "balance", accs.size()*2);
         const auto sym = symbol(GLS).to_symbol_code();
         const auto sname = symbol(GLS).name();
         for (const auto& ac : accs) {
@@ -1227,9 +1227,7 @@ struct genesis_create::genesis_create_impl final {
                 );
             };
             insert_bw(charge_id_t::vote, a.last_vote_time, config::percent_100 - a.voting_power);
-            insert_bw(charge_id_t::comm, a.last_post, 0);   // fully restored while transit
             const auto& bw = _visitor.post_bws[a.name.id];
-            insert_bw(charge_id_t::post, bw.second, 0);     // fully restored while transit
             insert_bw(charge_id_t::postbw, bw.second, bw.first);    // max_elapsed = 24h; maxbw=400%, maxw = maxbw^2
         }
         std::cout << "Done." << std::endl;
