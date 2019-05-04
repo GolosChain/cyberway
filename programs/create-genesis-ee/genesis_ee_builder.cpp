@@ -413,7 +413,7 @@ void genesis_ee_builder::build_pinblocks() {
     for (; follow_itr != follow_index.end() && follow_itr->ignores == false; ++follow_itr) {
         auto pin = mvo
             ("pinner", generate_name(follow_itr->follower))
-            ("pinning", generate_name(follow_itr->follower));
+            ("pinning", generate_name(follow_itr->following));
         pin_count++;
         out_.pinblocks.insert(pin);
     }
@@ -427,7 +427,7 @@ void genesis_ee_builder::build_pinblocks() {
     for (; follow_itr != follow_index.end() && follow_itr->ignores == true; ++follow_itr) {
         auto block = mvo
             ("blocker", generate_name(follow_itr->follower))
-            ("blocking", generate_name(follow_itr->follower));
+            ("blocking", generate_name(follow_itr->following));
         block_count++;
         out_.pinblocks.insert(block);
     }
