@@ -409,16 +409,18 @@ void genesis_ee_builder::build_transfers() {
 void genesis_ee_builder::build_pinblocks() {
     std::cout << "-> Writing pinblocks..." << std::endl;
 
-    const auto& follow_index = maps_.get_index<follow_header_index, by_state_pair>();
+    const auto& follow_index = maps_.get_index<follow_header_index, by_id>();
 
     out_.pinblocks.start_section(gls_social_account_name, N(pin), "pin", 0);
 
     uint32_t pin_count = 0;
-    auto follow_itr = follow_index.lower_bound(false);
-    for (; follow_itr != follow_index.end() && follow_itr->ignores == false; ++follow_itr) {
+    for (const auto& follow : follow_index) {
+        if (follow.ignores) {
+            continue;
+        }
         auto pin = mvo
-            ("pinner", generate_name(follow_itr->follower))
-            ("pinning", generate_name(follow_itr->following));
+            ("pinner", generate_name(follow.follower))
+            ("pinning", generate_name(follow.following));
         pin_count++;
         out_.pinblocks.insert(pin);
     }
@@ -428,11 +430,13 @@ void genesis_ee_builder::build_pinblocks() {
     out_.pinblocks.start_section(gls_social_account_name, N(block), "block", 0);
 
     uint32_t block_count = 0;
-    follow_itr = follow_index.lower_bound(true);
-    for (; follow_itr != follow_index.end() && follow_itr->ignores == true; ++follow_itr) {
+    for (const auto& follow : follow_index) {
+        if (!follow.ignores) {
+            continue;
+        }
         auto block = mvo
-            ("blocker", generate_name(follow_itr->follower))
-            ("blocking", generate_name(follow_itr->following));
+            ("blocker", generate_name(follow.follower))
+            ("blocking", generate_name(follow.following));
         block_count++;
         out_.pinblocks.insert(block);
     }

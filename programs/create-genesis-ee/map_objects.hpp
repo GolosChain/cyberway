@@ -133,7 +133,6 @@ using reblog_header_index = chainbase::shared_multi_index_container<
 >;
 
 struct by_pair;
-struct by_state_pair;
 
 using follow_header_index = chainbase::shared_multi_index_container<
     follow_header,
@@ -148,17 +147,6 @@ using follow_header_index = chainbase::shared_multi_index_container<
                 member<follow_header, account_name_type, &follow_header::follower>,
                 member<follow_header, account_name_type, &follow_header::following>>,
             composite_key_compare<
-                std::less<account_name_type>,
-                std::less<account_name_type>>>,
-        ordered_unique<
-            tag<by_state_pair>,
-            composite_key<
-                follow_header,
-                member<follow_header, bool, &follow_header::ignores>,
-                member<follow_header, account_name_type, &follow_header::follower>,
-                member<follow_header, account_name_type, &follow_header::following>>,
-            composite_key_compare<
-                std::less<bool>,
                 std::less<account_name_type>,
                 std::less<account_name_type>>>>
 >;
