@@ -351,14 +351,14 @@ void genesis_ee_builder::build_messages() {
 
     const auto& comment_index = maps_.get_index<comment_header_index, by_id>();
 
-    for (auto comment_itr = comment_index.begin(); comment_itr != comment_index.end(); ++comment_itr) {
-        dump_comments.seekg(comment_itr->offset);
+    for (const auto& comment : comment_index) {
+        dump_comments.seekg(comment.offset);
         cyberway::golos::comment_operation cop;
         fc::raw::unpack(dump_comments, cop);
 
-        auto votes = build_votes(comment_itr->hash, comment_itr->last_delete_op);
+        auto votes = build_votes(comment.hash, comment.last_delete_op);
 
-        auto reblogs = build_reblogs(comment_itr->hash, comment_itr->last_delete_op, dump_reblogs);
+        auto reblogs = build_reblogs(comment.hash, comment.last_delete_op, dump_reblogs);
 
         out_.messages.insert(mvo
             ("parent_author", generate_name(cop.parent_author))
@@ -368,10 +368,10 @@ void genesis_ee_builder::build_messages() {
             ("title", cop.title)
             ("body", cop.body)
             ("tags", cop.tags)
-            ("net_rshares", comment_itr->net_rshares)
-            ("author_reward", asset(comment_itr->author_reward, symbol(GLS)))
-            ("benefactor_reward", asset(comment_itr->benefactor_reward, symbol(GLS)))
-            ("curator_reward", asset(comment_itr->curator_reward, symbol(GLS)))
+            ("net_rshares", comment.net_rshares)
+            ("author_reward", asset(comment.author_reward, symbol(GLS)))
+            ("benefactor_reward", asset(comment.benefactor_reward, symbol(GLS)))
+            ("curator_reward", asset(comment.curator_reward, symbol(GLS)))
             ("votes", votes)
             ("reblogs", reblogs)
         );
