@@ -237,10 +237,6 @@ void genesis_ee_builder::process_follows() {
         cyberway::golos::follow_operation fop;
         fc::raw::unpack(in, fop);
 
-        if (fop.what == 0) {
-            continue;
-        }
-
         bool ignores = false;
         if (fop.what & (1 << ignore)) {
             ignores = true;
@@ -248,9 +244,18 @@ void genesis_ee_builder::process_follows() {
 
         auto follow_itr = follow_index.find(std::make_tuple(fop.follower, fop.following));
         if (follow_itr != follow_index.end()) {
+            if (fop.what == 0) {
+                maps_.remove(*follow_itr);
+                continue;
+            }
+
             maps_.modify(*follow_itr, [&](auto& follow) {
                 follow.ignores = ignores;
             });
+            continue;
+        }
+
+        if (fop.what == 0) {
             continue;
         }
 
