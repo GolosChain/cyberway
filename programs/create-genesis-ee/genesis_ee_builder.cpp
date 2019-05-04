@@ -13,7 +13,8 @@
 
 namespace cyberway { namespace genesis {
 
-static constexpr uint64_t gls_post_account_name  = N(gls.publish);
+static constexpr uint64_t gls_post_account_name = N(gls.publish);
+static constexpr uint64_t gls_social_account_name = N(gls.social);
 
 constexpr auto GLS = SY(3, GOLOS);
 
@@ -22,6 +23,7 @@ genesis_ee_builder::genesis_ee_builder(const std::string& shared_file, uint32_t 
     maps_.add_index<comment_header_index>();
     maps_.add_index<vote_header_index>();
     maps_.add_index<reblog_header_index>();
+    maps_.add_index<follow_header_index>();
 }
 
 genesis_ee_builder::~genesis_ee_builder() {
@@ -220,6 +222,44 @@ void genesis_ee_builder::process_delete_reblogs() {
     }
 }
 
+void genesis_ee_builder::process_follows() {
+    std::cout << "-> Reading follows..." << std::endl;
+
+    const auto& follow_index = maps_.get_index<follow_header_index, by_pair>();
+
+    bfs::fstream in(in_dump_dir_ / "follows");
+    read_header(in);
+
+    operation_header op;
+    while (read_op_header(in, op)) {
+        cyberway::golos::follow_operation fop;
+        fc::raw::unpack(in, fop);
+
+        if (fop.what == 0) {
+            continue;
+        }
+
+        bool ignores = false;
+        if (fop.what & (1 << ignore)) {
+            ignores = true;
+        }
+
+        auto follow_itr = follow_index.find(std::make_tuple(fop.follower, fop.following));
+        if (follow_itr != follow_index.end()) {
+            maps_.modify(*follow_itr, [&](auto& follow) {
+                follow.ignores = ignores;
+            });
+            continue;
+        }
+
+        maps_.create<follow_header>([&](auto& follow) {
+            follow.follower = fop.follower;
+            follow.following = fop.following;
+            follow.ignores = ignores;
+        });
+    }
+}
+
 void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     in_dump_dir_ = in_dump_dir;
 
@@ -233,6 +273,7 @@ void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     process_votes();
     process_reblogs();
     process_delete_reblogs();
+    process_follows();
 }
 
 // TODO: Move to common library
@@ -256,7 +297,7 @@ variants genesis_ee_builder::build_votes(uint64_t msg_hash, operation_number msg
         }
 
         auto vote = mvo
-            ("voter", generate_name(std::string(vote_itr->voter)))
+            ("voter", generate_name(vote_itr->voter))
             ("weight", vote_itr->weight)
             ("time", vote_itr->timestamp);
 
@@ -282,7 +323,7 @@ variants genesis_ee_builder::build_reblogs(uint64_t msg_hash, operation_number m
         fc::raw::unpack(dump_reblogs, rop);
 
         auto reblog = mvo
-            ("account", generate_name(std::string(reblog_itr->account)))
+            ("account", generate_name(reblog_itr->account))
             ("title", rop.title)
             ("body", rop.body)
             ("time", rop.timestamp);
@@ -313,9 +354,9 @@ void genesis_ee_builder::build_messages() {
         auto reblogs = build_reblogs(comment_itr->hash, comment_itr->last_delete_op, dump_reblogs);
 
         out_.messages.insert(mvo
-            ("parent_author", generate_name(std::string(cop.parent_author)))
+            ("parent_author", generate_name(cop.parent_author))
             ("parent_permlink", cop.parent_permlink)
-            ("author", generate_name(std::string(cop.author)))
+            ("author", generate_name(cop.author))
             ("permlink", cop.permlink)
             ("title", cop.title)
             ("body", cop.body)
@@ -348,14 +389,48 @@ void genesis_ee_builder::build_transfers() {
         transfer_count++;
 
         out_.transfers.insert(mvo
-            ("from", generate_name(std::string(top.from)))
-            ("to", generate_name(std::string(top.to)))
+            ("from", generate_name(top.from))
+            ("to", generate_name(top.to))
             ("quantity", top.amount)
             ("memo", top.memo)
         );
     }
 
     out_.transfers.finish_section(transfer_count);
+}
+
+void genesis_ee_builder::build_pinblocks() {
+    std::cout << "-> Writing pinblocks..." << std::endl;
+
+    const auto& follow_index = maps_.get_index<follow_header_index, by_state_pair>();
+
+    out_.pinblocks.start_section(gls_social_account_name, N(pin), "pin", 0);
+
+    uint32_t pin_count = 0;
+    auto follow_itr = follow_index.lower_bound(false);
+    for (; follow_itr != follow_index.end() && follow_itr->ignores == false; ++follow_itr) {
+        auto pin = mvo
+            ("pinner", generate_name(follow_itr->follower))
+            ("pinning", generate_name(follow_itr->follower));
+        pin_count++;
+        out_.pinblocks.insert(pin);
+    }
+
+    out_.pinblocks.finish_section(pin_count);
+
+    out_.pinblocks.start_section(gls_social_account_name, N(block), "block", 0);
+
+    uint32_t block_count = 0;
+    follow_itr = follow_index.lower_bound(true);
+    for (; follow_itr != follow_index.end() && follow_itr->ignores == true; ++follow_itr) {
+        auto block = mvo
+            ("blocker", generate_name(follow_itr->follower))
+            ("blocking", generate_name(follow_itr->follower));
+        block_count++;
+        out_.pinblocks.insert(block);
+    }
+
+    out_.pinblocks.finish_section(block_count);
 }
 
 void genesis_ee_builder::build(const bfs::path& out_dir) {
@@ -365,6 +440,7 @@ void genesis_ee_builder::build(const bfs::path& out_dir) {
 
     build_messages();
     build_transfers();
+    build_pinblocks();
 
     out_.finalize();
 }
