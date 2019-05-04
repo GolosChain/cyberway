@@ -4,12 +4,14 @@
 #define MEGABYTE 1024*1024
 
 // Comments:
-// 8000000 * 68 = 0.5 GB
+// 8000000 * 144 = 1.2 GB
 // +
-// 8000000 * 44 * 10 (votes on comment) = 4.0 GB
+// 8000000 * 144 * 5 (votes on comment) = 6.0 GB
 // +
-// 1000000 * 46 = (reblogs on comment) = 0.1 GB
-#define MAP_FILE_SIZE uint64_t(10*1024)*MEGABYTE
+// 1000000 * 128 (reblogs on comment) = 0.2 GB
+// Follows:
+// 2300000 * 160 = 0.4 GB
+#define MAP_FILE_SIZE uint64_t(20*1024)*MEGABYTE
 
 namespace cyberway { namespace genesis {
 
