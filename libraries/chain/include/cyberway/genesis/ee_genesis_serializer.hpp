@@ -66,7 +66,7 @@ public:
         fc::raw::pack(out, _section);
 
         out.seekp(pos);
-        wlog("Finished with count: ${count}", ("count", _section.count));
+        wlog("Finished section: ${s}", ("s", _section));
 
         _section_offset = 0;
     }
