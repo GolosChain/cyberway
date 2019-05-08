@@ -219,7 +219,7 @@ void event_engine_plugin_impl::send_genesis_file(const bfs::path& genesis_file) 
     mfile.open(genesis_file, boost::iostreams::mapped_file::readonly);
     EOS_ASSERT(mfile.is_open(), ee_extract_genesis_exception, "File not opened");
 
-    ee_genesis_header &h = *(ee_genesis_header*)mfile.const_data();
+    const ee_genesis_header &h = *(ee_genesis_header*)mfile.const_data();
     std::cout << "Header magic: " << h.magic << "; ver: " << h.version << std::endl;
     EOS_ASSERT(h.is_valid(), ee_extract_genesis_exception, "Unknown format of the Genesis state file.");
 

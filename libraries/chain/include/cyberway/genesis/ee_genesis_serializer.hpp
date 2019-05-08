@@ -17,7 +17,6 @@ struct ee_genesis_serializer {
 
 private:
     bfs::ofstream out;
-    uint32_t _count = 0;
     ee_table_header _section;
     uint64_t _section_offset = 0;
     abi_serializer serializer;
@@ -48,36 +47,41 @@ public:
         _section_offset = out.tellp();
         fc::raw::pack(out, h);
         _section = h;
-        _count = 0;
     }
 
-    void finish_section() {
+    void finish_section(fc::optional<uint32_t> count = fc::optional<uint32_t>()) {
         if (_section_offset == 0) {
             // No section yet
             return;
         }
 
+        if (count.valid()) {
+            EOS_ASSERT(*count == _section.count, ee_genesis_exception, "Section contains wrong number of rows",
+                ("section",_section)("expected",*count)("diff", _section.count - *count));
+        }
+
         auto pos = out.tellp();
         out.seekp(_section_offset);
 
-        _section.count += _count;
         fc::raw::pack(out, _section);
 
         out.seekp(pos);
         wlog("Finished with count: ${count}", ("count", _section.count));
+
+        _section_offset = 0;
     }
 
     void insert(const variant& v, const fc::microseconds abi_serializer_max_time = fc::seconds(10)) {
         bytes data = serializer.variant_to_binary(_section.abi_type, v, abi_serializer_max_time);
         out.write(data.data(), data.size());
-        _count++;
+        _section.count++;
     }
 
     template<typename T, typename Lambda>
     void emplace(Lambda&& constructor) {
         T obj(constructor, 0);
         fc::raw::pack(out, obj);
-        _count++;
+        _section.count++;
     }
 };
 

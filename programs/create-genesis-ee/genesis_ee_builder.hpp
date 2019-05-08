@@ -37,7 +37,7 @@ private:
     void process_follows();
 
     void build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created);
-    void build_reblogs(std::vector<reblog_info>& reblogsi, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs);
+    void build_reblogs(std::vector<reblog_info>& reblogs, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs);
     void build_messages();
     void build_transfers();
     void build_pinblocks();
