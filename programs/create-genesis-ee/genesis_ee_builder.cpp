@@ -171,6 +171,29 @@ void genesis_ee_builder::process_votes() {
     }
 }
 
+void genesis_ee_builder::process_vote_rshares() {
+    std::cout << "-> Reading vote rshares..." << std::endl;
+
+    const auto& vote_index = maps_.get_index<vote_header_index, by_hash_voter>();
+
+    bfs::ifstream in(in_dump_dir_ / "vote_rshares");
+    read_header(in);
+
+    operation_header op;
+    while (read_op_header(in, op)) {
+        cyberway::golos::vote_rshares_operation vrop;
+        fc::raw::unpack(in, vrop);
+
+        auto vote_itr = vote_index.find(std::make_tuple(op.hash, vrop.voter));
+        if (vote_itr != vote_index.end()) {
+            maps_.modify(*vote_itr, [&](auto& vote) {
+                vote.rshares = vrop.rshares;
+            });
+            continue;
+        }
+    }
+}
+
 void genesis_ee_builder::process_reblogs() {
     std::cout << "-> Reading reblogs..." << std::endl;
 
@@ -278,6 +301,7 @@ void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     process_delete_comments();
     process_rewards();
     process_votes();
+    process_vote_rshares();
     process_reblogs();
     process_delete_reblogs();
     process_follows();
@@ -305,7 +329,12 @@ void genesis_ee_builder::build_votes(std::vector<vote_info>& votes, uint64_t msg
             v.voter = generate_name(vote_itr->voter);
             v.weight = vote_itr->weight;
             v.time = vote_itr->timestamp;
+            v.rshares = vote_itr->rshares;
         }, 0);
+
+        std::sort(votes.begin(), votes.end(), [&](const auto& a, const auto& b) {
+            return a.rshares > b.rshares;
+        });
     }
 }
 

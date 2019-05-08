@@ -32,6 +32,7 @@ private:
     void process_delete_comments();
     void process_rewards();
     void process_votes();
+    void process_vote_rshares();
     void process_reblogs();
     void process_delete_reblogs();
     void process_follows();
