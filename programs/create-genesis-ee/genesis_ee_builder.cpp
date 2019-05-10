@@ -156,6 +156,7 @@ void genesis_ee_builder::process_votes() {
             maps_.modify(*vote_itr, [&](auto& vote) {
                 vote.op_num = op.num;
                 vote.weight = vop.weight;
+                vote.rshares = vop.rshares;
                 vote.timestamp = vop.timestamp;
             });
             continue;
@@ -166,31 +167,9 @@ void genesis_ee_builder::process_votes() {
             vote.voter = vop.voter;
             vote.op_num = op.num;
             vote.weight = vop.weight;
+            vote.rshares = vop.rshares;
             vote.timestamp = vop.timestamp;
         });
-    }
-}
-
-void genesis_ee_builder::process_vote_rshares() {
-    std::cout << "-> Reading vote rshares..." << std::endl;
-
-    const auto& vote_index = maps_.get_index<vote_header_index, by_hash_voter>();
-
-    bfs::ifstream in(in_dump_dir_ / "vote_rshares");
-    read_header(in);
-
-    operation_header op;
-    while (read_op_header(in, op)) {
-        cyberway::golos::vote_rshares_operation vrop;
-        fc::raw::unpack(in, vrop);
-
-        auto vote_itr = vote_index.find(std::make_tuple(op.hash, vrop.voter));
-        if (vote_itr != vote_index.end()) {
-            maps_.modify(*vote_itr, [&](auto& vote) {
-                vote.rshares = vrop.rshares;
-            });
-            continue;
-        }
     }
 }
 
@@ -301,7 +280,6 @@ void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     process_delete_comments();
     process_rewards();
     process_votes();
-    process_vote_rshares();
     process_reblogs();
     process_delete_reblogs();
     process_follows();
