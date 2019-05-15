@@ -25,7 +25,6 @@ static abi_def create_usernames_abi() {
     });
 
     return abi;
-
 }
 
 static abi_def create_balances_abi() {
@@ -51,12 +50,27 @@ static abi_def create_balances_abi() {
     return abi;
 }
 
+static abi_def create_reputations_abi() {
+    abi_def abi;
+    abi.version = ABI_VERSION;
+
+    abi.structs.emplace_back( struct_def {
+        "changereput_event", "", {
+            {"author", "name"},
+            {"reputation", "int64"},
+        }
+    });
+
+    return abi;
+}
+
 event_engine_genesis::event_engine_genesis() {}
 event_engine_genesis::~event_engine_genesis() {}
 
 void event_engine_genesis::start(const bfp::path& ee_directory, const fc::sha256& hash) {
     usernames.start(ee_directory / "usernames.dat", hash, create_usernames_abi());
     balances.start(ee_directory / "balances.dat", hash, create_balances_abi());
+    reputations.start(ee_directory / "reputations.dat", hash, create_reputations_abi());
 }
 
 void event_engine_genesis::finalize() {

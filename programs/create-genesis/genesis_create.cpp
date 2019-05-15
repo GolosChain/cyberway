@@ -49,6 +49,8 @@ using mvo = mutable_variant_object;
 constexpr uint64_t accounts_tbl_start_id = 7;           // some accounts created natively by node, this value is starting autoincrement for tables
 constexpr uint64_t permissions_tbl_start_id = 17;       // Note: usage_id is id-1
 
+static constexpr uint64_t gls_social_account_name = N(gls.social);
+
 
 using eosio::chain::uint128_t;
 uint64_t to_fbase(uint64_t value)   { return value << fixp_fract_digits; }
@@ -347,6 +349,18 @@ struct genesis_create::genesis_create_impl final {
                 ("creator", app)
                 ("owner", n)
                 ("name", s)
+            );
+        }
+
+        ee_genesis.reputations.start_section(gls_social_account_name, N(changereput), "changereput_event");
+        for (auto& acc_pair : _visitor.accounts) {
+            auto& acc = acc_pair.second;
+            if (!acc.reputation || *acc.reputation == 0) {
+                continue;
+            }
+            ee_genesis.reputations.insert(mvo
+                ("author", name_by_acc(acc.name))
+                ("reputation", *acc.reputation)
             );
         }
 

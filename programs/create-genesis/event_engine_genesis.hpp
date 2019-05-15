@@ -22,6 +22,7 @@ public:
 public:
     ee_genesis_serializer usernames;
     ee_genesis_serializer balances;
+    ee_genesis_serializer reputations;
 };
 
 

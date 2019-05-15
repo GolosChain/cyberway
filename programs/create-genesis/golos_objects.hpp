@@ -92,6 +92,7 @@ struct account_object {
     uint16_t referrer_interest_rate;
     time_point_sec referral_end_date;
     asset referral_break_fee;
+    fc::optional<share_type> reputation;
 };
 struct account_authority_object {
     id_type id;
@@ -420,7 +421,7 @@ FC_REFLECT(cyberway::golos::account_object,
     (benefaction_rewards)(curation_rewards)(delegation_rewards)(posting_rewards)
     (proxied_vsf_votes)(witnesses_voted_for)
     (last_post)
-    (referrer_account)(referrer_interest_rate)(referral_end_date)(referral_break_fee)
+    (referrer_account)(referrer_interest_rate)(referral_end_date)(referral_break_fee)(reputation)
 )
 FC_REFLECT(cyberway::golos::account_authority_object, (id)(account)(owner)(active)(posting)(last_owner_update))
 FC_REFLECT(cyberway::golos::account_bandwidth_object,
