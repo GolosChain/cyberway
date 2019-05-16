@@ -319,9 +319,9 @@ struct genesis_create::genesis_create_impl final {
             insert_link(n, _info.golos.names.social);
         }
 
-        // add usernames
+        // add domain
         db.start_section(config::system_account_name, N(domain), "domain_object", 1);
-        ee_genesis.usernames.start_section(config::system_account_name, N(domain), "domain_info");
+        ee_genesis.accounts.start_section(config::system_account_name, N(domain), "domain_info");
         const auto app = _info.golos.names.issuer;
         db.emplace<domain_object>([&](auto& a) {
             a.owner = app;
@@ -329,14 +329,16 @@ struct genesis_create::genesis_create_impl final {
             a.creation_date = _conf.initial_timestamp;
             a.name = _info.golos.domain;
         });
-        ee_genesis.usernames.insert(mvo
+        ee_genesis.accounts.insert(mvo
             ("owner", app)
             ("linked_to", app)
             ("name", _info.golos.domain)
+            ("reputation", int64_t(0))
         );
 
+        // add accounts
         db.start_section(config::system_account_name, N(username), "username_object", _visitor.auths.size());
-        ee_genesis.usernames.start_section(config::system_account_name, N(username), "username_info");
+        ee_genesis.accounts.start_section(config::system_account_name, N(account), "account_info");
         for (const auto& auth : _visitor.auths) {                // loop through auths to preserve names order
             const auto& s = auth.account.str(_accs_map);
             const auto& n = name_by_acc(auth.account);
@@ -345,22 +347,17 @@ struct genesis_create::genesis_create_impl final {
                 u.scope = app;
                 u.name = s;
             });
-            ee_genesis.usernames.insert(mvo
+
+            auto& acc = _visitor.accounts[auth.account.id];
+            int64_t reputation = 0;
+            if (!!acc.reputation) {
+                reputation = *acc.reputation;
+            }
+            ee_genesis.accounts.insert(mvo
                 ("creator", app)
                 ("owner", n)
                 ("name", s)
-            );
-        }
-
-        ee_genesis.reputations.start_section(gls_social_account_name, N(changereput), "changereput_event");
-        for (auto& acc_pair : _visitor.accounts) {
-            auto& acc = acc_pair.second;
-            if (!acc.reputation || *acc.reputation == 0) {
-                continue;
-            }
-            ee_genesis.reputations.insert(mvo
-                ("author", name_by_acc(acc.name))
-                ("reputation", *acc.reputation)
+                ("reputation", reputation)
             );
         }
 

@@ -4,7 +4,7 @@ namespace cyberway { namespace genesis {
 
 #define ABI_VERSION "cyberway::abi/1.0"
 
-static abi_def create_usernames_abi() {
+static abi_def create_accounts_abi() {
     abi_def abi;
     abi.version = ABI_VERSION;
 
@@ -17,10 +17,11 @@ static abi_def create_usernames_abi() {
     });
 
     abi.structs.emplace_back( struct_def {
-        "username_info", "", {
+        "account_info", "", {
             {"creator", "name"},
             {"owner", "name"},
-            {"name", "string"}
+            {"name", "string"},
+            {"reputation", "int64"},
         }
     });
 
@@ -50,31 +51,16 @@ static abi_def create_balances_abi() {
     return abi;
 }
 
-static abi_def create_reputations_abi() {
-    abi_def abi;
-    abi.version = ABI_VERSION;
-
-    abi.structs.emplace_back( struct_def {
-        "changereput_event", "", {
-            {"author", "name"},
-            {"reputation", "int64"},
-        }
-    });
-
-    return abi;
-}
-
 event_engine_genesis::event_engine_genesis() {}
 event_engine_genesis::~event_engine_genesis() {}
 
 void event_engine_genesis::start(const bfp::path& ee_directory, const fc::sha256& hash) {
-    usernames.start(ee_directory / "usernames.dat", hash, create_usernames_abi());
+    accounts.start(ee_directory / "accounts.dat", hash, create_accounts_abi());
     balances.start(ee_directory / "balances.dat", hash, create_balances_abi());
-    reputations.start(ee_directory / "reputations.dat", hash, create_reputations_abi());
 }
 
 void event_engine_genesis::finalize() {
-    usernames.finalize();
+    accounts.finalize();
     balances.finalize();
 }
 
