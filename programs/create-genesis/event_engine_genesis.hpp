@@ -20,7 +20,7 @@ public:
     ~event_engine_genesis();
 
 public:
-    ee_genesis_serializer usernames;
+    ee_genesis_serializer accounts;
     ee_genesis_serializer balances;
 };
 

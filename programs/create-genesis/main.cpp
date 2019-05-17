@@ -131,6 +131,7 @@ void config_reader::read_config(const variables_map& options) {
 
     info = fc::json::from_file(info_file).as<genesis_info>();
     make_absolute(info.state_file, "Golos state");
+    make_dir_absolute(info.operation_dump_dir, "Golos operation dump");
     make_absolute(info.genesis_json, "Genesis json");
     genesis = fc::json::from_file(info.genesis_json).as<genesis_state>();
 
@@ -175,9 +176,14 @@ int main(int argc, char** argv) {
         cr.read_config(vmap);
         cr.read_contracts();
 
-        genesis_create builder{};
+        bfs::remove_all("shared_memory");
+
+        genesis_create builder{"shared_memory"};
+        builder.read_operation_dump(cr.info.operation_dump_dir);
         builder.read_state(cr.info.state_file);
         builder.write_genesis(cr.out_file, cr.ee_directory, cr.info, cr.genesis, cr.contracts);
+
+        bfs::remove_all("shared_memory");
 
     } catch (const fc::exception& e) {
         elog("${e}", ("e", e.to_detail_string()));

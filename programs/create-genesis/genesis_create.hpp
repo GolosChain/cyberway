@@ -3,7 +3,7 @@
 #include <eosio/chain/genesis_state.hpp>
 #include <fc/crypto/sha256.hpp>
 #include <boost/filesystem.hpp>
-
+#include <chainbase/chainbase.hpp>
 
 namespace cyberway { namespace genesis {
 
@@ -23,9 +23,10 @@ using contracts_map = std::map<name, contract_abicode>;
 class genesis_create final {
 public:
     genesis_create(const genesis_create&) = delete;
-    genesis_create();
+    genesis_create(const std::string& shared_file);
     ~genesis_create();
 
+    void read_operation_dump(const bfs::path& operation_dump_dir);
     void read_state(const bfs::path& state_file);
     void write_genesis(const bfs::path& out_file, const bfs::path& ee_directory, const genesis_info&, const genesis_state&, const contracts_map&);
 

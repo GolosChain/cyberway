@@ -1,11 +1,14 @@
 #include "custom_unpack.hpp"
 #include "genesis_create.hpp"
+#include "golos_map_objects.hpp"
 #include "state_reader.hpp"
 #include "golos_objects.hpp"
 #include "supply_distributor.hpp"
 #include "serializer.hpp"
 #include "event_engine_genesis.hpp"
+#include "golos_operations.hpp"
 #include <cyberway/genesis/genesis_generate_name.hpp>
+#include <cyberway/genesis/golos_dump_container.hpp>
 #include <eosio/chain/config.hpp>
 #include <eosio/chain/authorization_manager.hpp>
 #include <eosio/chain/resource_limits.hpp>
@@ -15,12 +18,17 @@
 #include <fc/variant.hpp>
 #include <boost/filesystem/path.hpp>
 
+#define MEGABYTE 1024*1024
+
+// Account metas:
+// 192 * 140000 = 0.1 GB
+#define MAP_FILE_SIZE uint64_t(0.1*1024)*MEGABYTE
+
 // can be useful for testnet to avoid reset of witnesses, who updated node after HF (have old vote_hardfork values)
 // #define ONLY_CHECK_WITNESS_RUNNING_HF_VERSION
 
 // suppose name generation is slower than flat_map access by idx
 #define CACHE_GENERATED_NAMES
-
 
 namespace fc { namespace raw {
 
@@ -63,6 +71,9 @@ struct genesis_create::genesis_create_impl final {
     genesis_state _conf;
     contracts_map _contracts;
 
+    bfs::path _operation_dump_dir;
+    chainbase::database maps;
+
     genesis_serializer db;
     event_engine_genesis ee_genesis;
 
@@ -93,7 +104,8 @@ struct genesis_create::genesis_create_impl final {
     }
 
 
-    genesis_create_impl() {
+    genesis_create_impl(const std::string& shared_file)
+            : maps(shared_file, chainbase::database::read_write, MAP_FILE_SIZE) {
         db.set_autoincrement<permission_object>(permissions_tbl_start_id);
         db.set_autoincrement<permission_usage_object>(permissions_tbl_start_id-1);
 
@@ -322,7 +334,7 @@ struct genesis_create::genesis_create_impl final {
 
         // add usernames
         db.start_section(config::system_account_name, N(domain), "domain_object", 1);
-        ee_genesis.usernames.start_section(config::system_account_name, N(domain), "domain_info");
+        ee_genesis.accounts.start_section(config::system_account_name, N(domain), "domain_info");
         const auto app = _info.golos.names.issuer;
         db.emplace<domain_object>(app, [&](auto& a) {
             a.owner = app;
@@ -330,26 +342,42 @@ struct genesis_create::genesis_create_impl final {
             a.creation_date = _conf.initial_timestamp;
             a.name = _info.golos.domain;
         });
-        ee_genesis.usernames.insert(mvo
+        ee_genesis.accounts.insert(mvo
             ("owner", app)
             ("linked_to", app)
             ("name", _info.golos.domain)
         );
 
+
+        bfs::ifstream metas(_operation_dump_dir / "account_metas");
+
         db.start_section(config::system_account_name, N(username), "username_object", _visitor.auths.size());
-        ee_genesis.usernames.start_section(config::system_account_name, N(username), "username_info");
+        ee_genesis.accounts.start_section(config::system_account_name, N(account), "account_info");
         for (const auto& auth : _visitor.auths) {                // loop through auths to preserve names order
             const auto& s = auth.account.str(_accs_map);
             const auto& n = name_by_acc(auth.account);
+
             db.emplace<username_object>(app, [&](auto& u) {
                 u.owner = n;
                 u.scope = app;
                 u.name = s;
             });
-            ee_genesis.usernames.insert(mvo
+
+            std::string meta;
+            const auto& meta_index = maps.get_index<account_metadata_index, by_account>();
+            auto meta_itr = meta_index.find(s);
+            if (meta_itr != meta_index.end()) {
+                metas.seekg(meta_itr->offset);
+                cyberway::golos::account_metadata_operation amop;
+                fc::raw::unpack(metas, amop);
+                meta = amop.json_metadata;
+            }
+
+            ee_genesis.accounts.insert(mvo
                 ("creator", app)
                 ("owner", n)
                 ("name", s)
+                ("meta", meta)
             );
         }
 
@@ -1041,9 +1069,44 @@ struct genesis_create::genesis_create_impl final {
     };
 };
 
-genesis_create::genesis_create(): _impl(new genesis_create_impl()) {
+genesis_create::genesis_create(const std::string& shared_file)
+        : _impl(new genesis_create_impl(shared_file)) {
+    _impl->maps.add_index<account_metadata_index>();
 }
+
 genesis_create::~genesis_create() {
+}
+
+void genesis_create::read_operation_dump(const bfs::path& operation_dump_dir) {
+    std::cout << "Reading operation dump..." << std::endl;
+
+    const auto& meta_index = _impl->maps.get_index<account_metadata_index, by_account>();
+
+    _impl->_operation_dump_dir = operation_dump_dir;
+
+    bfs::ifstream in(operation_dump_dir / "account_metas");
+    read_dump_header(in);
+
+    operation_header op;
+    while (read_op_header(in, op, UINT32_MAX)) {
+        auto meta_offset = uint64_t(in.tellg());
+
+        cyberway::golos::account_metadata_operation amop;
+        fc::raw::unpack(in, amop);
+
+        auto meta_itr = meta_index.find(amop.account);
+        if (meta_itr != meta_index.end()) {
+            _impl->maps.modify(*meta_itr, [&](auto& meta) {
+                meta.offset = meta_offset;
+            });
+            continue;
+        }
+
+        _impl->maps.create<account_metadata>([&](auto& meta) {
+            meta.account = amop.account;
+            meta.offset = meta_offset;
+        });
+    }
 }
 
 void genesis_create::read_state(const bfs::path& state_file) {

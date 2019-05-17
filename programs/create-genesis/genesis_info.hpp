@@ -71,6 +71,7 @@ struct genesis_info {
     };
 
     bfs::path state_file;   // ? file_hash
+    bfs::path operation_dump_dir;
     bfs::path genesis_json;
     std::vector<account> accounts;
 
@@ -166,4 +167,4 @@ FC_REFLECT(cyberway::genesis::genesis_info::stake_params,
     (max_proxies)(payout_step_length)(payout_steps_num)(min_own_staked_for_election))
 FC_REFLECT(cyberway::genesis::genesis_info::hardfork_info, (version)(time))
 FC_REFLECT(cyberway::genesis::genesis_info::parameters, (stake)(posting_rules)(require_hardfork))
-FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(genesis_json)(accounts)(auth_links)(tables)(golos)(params))
+FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(operation_dump_dir)(genesis_json)(accounts)(auth_links)(tables)(golos)(params))

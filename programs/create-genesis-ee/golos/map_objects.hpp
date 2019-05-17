@@ -1,6 +1,6 @@
 #pragma once
 
-#include "golos_dump_container.hpp"
+#include <cyberway/genesis/golos_dump_container.hpp>
 #include "golos_types.hpp"
 
 #include <boost/multi_index_container.hpp>

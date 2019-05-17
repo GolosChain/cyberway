@@ -57,6 +57,7 @@ add_library( eosio_chain
              cyberway/domain_name.cpp
              cyberway/cyberway_contract.cpp
              genesis/genesis_import.cpp
+             genesis/golos_dump_container.cpp
              ${CHAINDB_SRCS}
 
 #             get_config.cpp

@@ -14,6 +14,7 @@ target_include_directories(create-genesis PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 target_link_libraries(create-genesis
   PRIVATE appbase
+  PRIVATE chainbase
   PRIVATE eosio_chain fc ${CMAKE_DL_LIBS} ${PLATFORM_SPECIFIC_LIBS}
 )
 

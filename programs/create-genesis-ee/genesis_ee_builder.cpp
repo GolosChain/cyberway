@@ -1,6 +1,7 @@
 #include "genesis_ee_builder.hpp"
-#include "golos_operations.hpp"
+#include "golos/golos_operations.hpp"
 #include <cyberway/genesis/genesis_generate_name.hpp>
+#include <cyberway/genesis/golos_dump_container.hpp>
 
 #define MEGABYTE 1024*1024
 
@@ -32,41 +33,16 @@ genesis_ee_builder::genesis_ee_builder(const std::string& shared_file, uint32_t 
 genesis_ee_builder::~genesis_ee_builder() {
 }
 
-golos_dump_header genesis_ee_builder::read_header(bfs::ifstream& in) {
-    golos_dump_header h;
-    in.read((char*)&h, sizeof(h));
-    if (in) {
-        EOS_ASSERT(std::string(h.magic) == golos_dump_header::expected_magic, genesis_exception,
-            "Unknown format of the operation dump file.");
-        EOS_ASSERT(h.version == golos_dump_header::expected_version, genesis_exception,
-            "Wrong version of the operation dump file.");
-    }
-    return h;
-}
-
-bool genesis_ee_builder::read_op_header(bfs::ifstream& in, operation_header& op) {
-    fc::raw::unpack(in, op);
-
-    if (!in) {
-        return false;
-    }
-
-    if (op.num.first > last_block_) {
-        return false;
-    }
-    return true;
-}
-
 void genesis_ee_builder::process_delete_comments() {
     std::cout << "-> Reading comment deletions..." << std::endl;
 
     const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
 
     bfs::ifstream in(in_dump_dir_ / "delete_comments");
-    read_header(in);
+    read_dump_header(in);
 
     operation_header op;
-    while (read_op_header(in, op)) {
+    while (read_op_header(in, op, last_block_)) {
         auto comment_itr = comment_index.find(op.hash);
         if (comment_itr != comment_index.end()) {
             maps_.modify(*comment_itr, [&](auto& comment) {
@@ -88,10 +64,10 @@ void genesis_ee_builder::process_comments() {
     const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
 
     bfs::ifstream in(in_dump_dir_ / "comments");
-    read_header(in);
+    read_dump_header(in);
 
     operation_header op;
-    while (read_op_header(in, op)) {
+    while (read_op_header(in, op, last_block_)) {
         auto comment_offset = uint64_t(in.tellg());
 
         cyberway::golos::comment_operation cop;
@@ -128,10 +104,10 @@ void genesis_ee_builder::process_rewards() {
     const auto& comment_index = maps_.get_index<comment_header_index, by_hash>();
 
     bfs::ifstream in(in_dump_dir_ / "total_comment_rewards");
-    read_header(in);
+    read_dump_header(in);
 
     operation_header op;
-    while (read_op_header(in, op)) {
+    while (read_op_header(in, op, last_block_)) {
         cyberway::golos::total_comment_reward_operation tcrop;
         fc::raw::unpack(in, tcrop);
 
@@ -153,10 +129,10 @@ void genesis_ee_builder::process_votes() {
     const auto& vote_index = maps_.get_index<vote_header_index, by_hash_voter>();
 
     bfs::ifstream in(in_dump_dir_ / "votes");
-    read_header(in);
+    read_dump_header(in);
 
     operation_header op;
-    while (read_op_header(in, op)) {
+    while (read_op_header(in, op, last_block_)) {
         cyberway::golos::vote_operation vop;
         fc::raw::unpack(in, vop);
 
@@ -188,10 +164,10 @@ void genesis_ee_builder::process_reblogs() {
     const auto& reblog_index = maps_.get_index<reblog_header_index, by_hash_account>();
 
     bfs::ifstream in(in_dump_dir_ / "reblogs");
-    read_header(in);
+    read_dump_header(in);
 
     operation_header op;
-    while (read_op_header(in, op)) {
+    while (read_op_header(in, op, last_block_)) {
         auto reblog_offset = uint64_t(in.tellg());
 
         cyberway::golos::reblog_operation rop;
@@ -221,10 +197,10 @@ void genesis_ee_builder::process_delete_reblogs() {
     const auto& reblog_index = maps_.get_index<reblog_header_index, by_hash_account>();
 
     bfs::ifstream in(in_dump_dir_ / "delete_reblogs");
-    read_header(in);
+    read_dump_header(in);
 
     operation_header op;
-    while (read_op_header(in, op)) {
+    while (read_op_header(in, op, last_block_)) {
         cyberway::golos::delete_reblog_operation drop;
         fc::raw::unpack(in, drop);
 
@@ -241,10 +217,10 @@ void genesis_ee_builder::process_follows() {
     const auto& follow_index = maps_.get_index<follow_header_index, by_pair>();
 
     bfs::ifstream in(in_dump_dir_ / "follows");
-    read_header(in);
+    read_dump_header(in);
 
     operation_header op;
-    while (read_op_header(in, op)) {
+    while (read_op_header(in, op, last_block_)) {
         cyberway::golos::follow_operation fop;
         fc::raw::unpack(in, fop);
 
@@ -380,10 +356,10 @@ void genesis_ee_builder::build_transfers() {
     out_.transfers.start_section(config::token_account_name, N(transfer), "transfer");
 
     bfs::ifstream in(in_dump_dir_ / "transfers");
-    read_header(in);
+    read_dump_header(in);
 
     operation_header op;
-    while (read_op_header(in, op)) {
+    while (read_op_header(in, op, last_block_)) {
         cyberway::golos::transfer_operation top;
         fc::raw::unpack(in, top);
 
