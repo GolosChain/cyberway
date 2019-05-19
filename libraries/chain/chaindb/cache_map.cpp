@@ -317,7 +317,7 @@ namespace cyberway { namespace chaindb {
             }
 
             if (object_ptr->has_cell()) {
-                object_ptr->mark_deleted();
+                object_ptr->release();
             }
             object_ptr.reset();
         }
@@ -648,7 +648,9 @@ namespace cyberway { namespace chaindb {
                     service_tree_.erase(service_itr);
                 }
 
-                add_ram_usage(obj.cell(), -obj.service().size);
+                if (obj.has_cell()) {
+                    add_ram_usage(obj.cell(), -obj.service().size);
+                }
             }
         }
 
@@ -664,7 +666,7 @@ namespace cyberway { namespace chaindb {
             return false;
         }
 
-        void change_cache_object(cache_object& obj, const int delta, cache_indicies& indicies) {
+        void change_cache_object(cache_object& obj, const int delta) {
             add_ram_usage(obj.cell(), delta);
 
             if (is_system_code(obj.service().code)) {
@@ -675,13 +677,13 @@ namespace cyberway { namespace chaindb {
                 }
 
                 // don't rebuild indicies for interchain objects
-                if (indicies.capacity()) {
+                if (obj.indicies_.capacity()) {
                     return;
                 }
             }
 
-            delete_cache_indicies(indicies);
-            build_cache_indicies(obj, indicies);
+            delete_cache_indicies(obj.indicies_);
+            build_cache_indicies(obj);
         }
 
     private:
@@ -816,7 +818,7 @@ namespace cyberway { namespace chaindb {
             return nullptr;
         }
 
-        void build_cache_indicies(cache_object& obj, cache_indicies& indicies) {
+        void build_cache_indicies(cache_object& obj) {
             auto& object  = obj.object();
             if (object.is_null()) return;
 
@@ -828,6 +830,7 @@ namespace cyberway { namespace chaindb {
             auto  ttr = abi.find_table(service.table);
             if (!ttr) return;
 
+            auto& indicies = obj.indicies_;
             indicies.reserve(ttr->indexes.size() - 1 /* skip primary */);
             auto info = index_info(service.code, service.scope);
             info.table = ttr;
@@ -913,6 +916,10 @@ namespace cyberway { namespace chaindb {
             if (is_new_ptr || is_del_ptr) {
                 cache_object_tree_.insert(*obj_ptr.get());
                 service.cache_object_cnt++;
+            }
+
+            if (is_new_ptr) {
+                build_cache_indicies(*obj_ptr.get());
             }
 
             return obj_ptr;
@@ -1024,7 +1031,7 @@ namespace cyberway { namespace chaindb {
         blob_.clear();
 
         if (has_cell()) {
-            map().change_cache_object(*this, delta, indicies_);
+            map().change_cache_object(*this, delta);
         }
     }
 
@@ -1049,9 +1056,16 @@ namespace cyberway { namespace chaindb {
     }
 
     void cache_object::release() {
-        auto& pending_state = pending_cache_object_state::cast(*state_);
-        pending_state.cell->map->release_cache_object(*this, indicies_, pending_state.is_deleted);
+        auto state = state_;
         state_ = nullptr;
+
+        auto lru_state_ptr = lru_cache_object_state::cast(state);
+        if (lru_state_ptr) {
+            lru_state_ptr->cell->map->release_cache_object(*this, indicies_, false);
+        } else {
+            auto& pending_state = pending_cache_object_state::cast(*state);
+            pending_state.cell->map->release_cache_object(*this, indicies_, pending_state.is_deleted);
+        }
     }
 
     bool cache_object::is_deleted() const {
