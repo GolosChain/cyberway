@@ -1,3 +1,4 @@
+#include "state_reader.hpp" // Include 1st for custom_unpack
 #include "genesis_info.hpp"
 #include "genesis_create.hpp"
 #include <eosio/chain/abi_def.hpp>
@@ -11,7 +12,6 @@
 // #include <boost/exception/diagnostic_information.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem/path.hpp>
-
 
 namespace bfs = boost::filesystem;
 
@@ -176,9 +176,12 @@ int main(int argc, char** argv) {
         cr.read_config(vmap);
         cr.read_contracts();
 
-        genesis_create builder{};
-        builder.read_state(cr.info.state_file);
-        builder.write_genesis(cr.out_file, cr.ee_directory, cr.info, cr.genesis, cr.contracts);
+        state_object_visitor visitor;
+        state_reader reader{cr.info.state_file};
+        reader.read_state(visitor);
+
+        genesis_create builder{visitor, cr.info, cr.genesis, cr.contracts};
+        builder.write_genesis(cr.out_file, cr.ee_directory);
 
     } catch (const fc::exception& e) {
         elog("${e}", ("e", e.to_detail_string()));

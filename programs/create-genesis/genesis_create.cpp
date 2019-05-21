@@ -1,6 +1,4 @@
-#include "custom_unpack.hpp"
 #include "genesis_create.hpp"
-#include "state_reader.hpp"
 #include "golos_objects.hpp"
 #include "supply_distributor.hpp"
 #include "serializer.hpp"
@@ -20,23 +18,6 @@
 
 // suppose name generation is slower than flat_map access by idx
 #define CACHE_GENERATED_NAMES
-
-
-namespace fc { namespace raw {
-
-template<typename T> void unpack(T& s, cyberway::golos::comment_object& c) {
-    fc::raw::unpack(s, c.id);
-    fc::raw::unpack(s, c.parent_author);
-    fc::raw::unpack(s, c.parent_permlink);
-    fc::raw::unpack(s, c.author);
-    fc::raw::unpack(s, c.permlink);
-    fc::raw::unpack(s, c.mode);
-    if (c.mode != cyberway::golos::comment_mode::archived) {
-        fc::raw::unpack(s, c.active);
-    }
-}
-
-}} // fc::raw
 
 
 namespace cyberway { namespace genesis {
@@ -60,6 +41,8 @@ asset golos2sys(const asset& golos);
 
 
 struct genesis_create::genesis_create_impl final {
+    state_object_visitor _visitor;
+
     genesis_info _info;
     genesis_state _conf;
     contracts_map _contracts;
@@ -67,10 +50,9 @@ struct genesis_create::genesis_create_impl final {
     genesis_serializer db;
     event_engine_genesis ee_genesis;
 
-    vector<string> _accs_map;
-    vector<string> _plnk_map;
+    vector<string>& _accs_map;
+    vector<string>& _plnk_map;
 
-    state_object_visitor _visitor;
     asset _total_staked;
 
 #ifdef CACHE_GENERATED_NAMES
@@ -93,8 +75,8 @@ struct genesis_create::genesis_create_impl final {
         return name_by_idx(_visitor.acc_id2idx[id]);
     }
 
-
-    genesis_create_impl() {
+    genesis_create_impl(state_object_visitor& visitor, const genesis_info& info, const genesis_state& conf, const contracts_map& contracts)
+            : _visitor(visitor), _info(info), _conf(conf), _contracts(contracts), _accs_map(_visitor.accs_map), _plnk_map(_visitor.perms_map) {
         db.set_autoincrement<permission_object>(permissions_tbl_start_id);
         db.set_autoincrement<permission_usage_object>(permissions_tbl_start_id-1);
 
@@ -1055,23 +1037,14 @@ struct genesis_create::genesis_create_impl final {
     };
 };
 
-genesis_create::genesis_create(): _impl(new genesis_create_impl()) {
+genesis_create::genesis_create(state_object_visitor& visitor, const genesis_info& info, const genesis_state& conf, const contracts_map& contracts)
+    : _impl(new genesis_create_impl(visitor, info, conf, contracts)) {
 }
+
 genesis_create::~genesis_create() {
 }
 
-void genesis_create::read_state(const bfs::path& state_file) {
-    state_reader reader{state_file, _impl->_accs_map, _impl->_plnk_map};
-    reader.read_state(_impl->_visitor);
-}
-
-void genesis_create::write_genesis(
-    const bfs::path& out_file, const bfs::path& ee_directory, const genesis_info& info, const genesis_state& conf, const contracts_map& accs
-) {
-    _impl->_info = info;
-    _impl->_conf = conf;
-    _impl->_contracts = accs;
-
+void genesis_create::write_genesis(const bfs::path& out_file, const bfs::path& ee_directory) {
     _impl->prepare_writer(out_file, ee_directory);
     _impl->store_contracts();
     _impl->store_auth_links();

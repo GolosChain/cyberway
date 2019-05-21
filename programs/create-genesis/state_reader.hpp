@@ -1,15 +1,37 @@
 #pragma once
-#include "genesis_create.hpp"
+
+#include "custom_unpack.hpp" // Include 1st
 #include "golos_objects.hpp"
 #include "golos_state_container.hpp"
 #include "config.hpp"
 
+#include <boost/filesystem.hpp>
+#include <eosio/chain/config.hpp>
+
+namespace fc { namespace raw {
+
+template<typename T> void unpack(T& s, cyberway::golos::comment_object& c) {
+    fc::raw::unpack(s, c.id);
+    fc::raw::unpack(s, c.parent_author);
+    fc::raw::unpack(s, c.parent_permlink);
+    fc::raw::unpack(s, c.author);
+    fc::raw::unpack(s, c.permlink);
+    fc::raw::unpack(s, c.mode);
+    if (c.mode != cyberway::golos::comment_mode::archived) {
+        fc::raw::unpack(s, c.active);
+    }
+}
+
+}} // fc::raw
 
 namespace cyberway { namespace genesis {
 
+FC_DECLARE_EXCEPTION(invalid_state_exception, 11000000, "Invalid Golos state");
+
+namespace bfs = boost::filesystem;
 using namespace eosio::chain;
-using acc_idx = uint32_t;       // lookup index in _accs_map
-using plk_idx = uint32_t;       // lookup index in _plnk_map
+using acc_idx = uint32_t;       // lookup index in _visitor.accs_map
+using plk_idx = uint32_t;       // lookup index in _visitor.plnk_map
 
 
 struct state_object_visitor {
@@ -35,7 +57,7 @@ struct state_object_visitor {
             case savings_withdraw: return "savings withdraws";
             case _size:         return "Total";
         }
-        EOS_ASSERT(false, genesis_exception, "Invalid balance type ${t}", ("t", int(t)));
+        EOS_ASSERT(false, invalid_state_exception, "Invalid balance type ${t}", ("t", int(t)));
     }
 
     state_object_visitor() {
@@ -47,6 +69,10 @@ struct state_object_visitor {
     }
 
     bool early_exit = false;
+
+    vector<string> accs_map;
+    vector<string> perms_map;
+
     golos::dynamic_global_property_object   gpo;
     fc::flat_map<acc_idx,golos::account_object> accounts;
     vector<golos::account_authority_object>     auths;
@@ -110,7 +136,7 @@ struct state_object_visitor {
         case GBG: {auto a = asset(o.for_sale, symbol(GBG)); gbg[o.seller.id] += a; gbg_by_type[order] += a;} break;
         case GLS: {auto a = asset(o.for_sale, symbol(GLS)); gls[o.seller.id] += a; gls_by_type[order] += a;} break;
         default:
-            EOS_ASSERT(false, genesis_exception, "Unknown asset ${a} in limit order", ("a", o.sell_price.base));
+            EOS_ASSERT(false, invalid_state_exception, "Unknown asset ${a} in limit order", ("a", o.sell_price.base));
         }
     }
 
@@ -138,7 +164,7 @@ struct state_object_visitor {
         case GBG: gbg[acc] += val; gbg_by_type[type] += val; break;
         case GLS: gls[acc] += val; gls_by_type[type] += val; break;
         default:
-            EOS_ASSERT(false, genesis_exception, string("Unknown asset ${a} in ") + balance_name(type), ("a", val));
+            EOS_ASSERT(false, invalid_state_exception, string("Unknown asset ${a} in ") + balance_name(type), ("a", val));
         }
     };
 
@@ -200,18 +226,16 @@ struct state_object_visitor {
 
 class state_reader {
     const bfs::path& _state_file;
-    vector<string>& _accs_map;
-    vector<string>& _plnk_map;
 
 public:
-    state_reader(const bfs::path& state_file, vector<string>& accs, vector<string>& permlinks)
-    : _state_file(state_file), _accs_map(accs), _plnk_map(permlinks) {
+    state_reader(const bfs::path& state_file)
+    : _state_file(state_file) {
     }
 
-    void read_maps() {
+    void read_maps(vector<string>& accs_map, vector<string>& perms_map) {
         auto map_file = _state_file;
         map_file += ".map";
-        EOS_ASSERT(fc::is_regular_file(map_file), genesis_exception,
+        EOS_ASSERT(fc::is_regular_file(map_file), invalid_state_exception,
             "Genesis state map file '${f}' does not exist.", ("f", map_file.generic_string()));
         bfs::ifstream im(map_file);
 
@@ -221,8 +245,8 @@ public:
             uint32_t len;
             im >> t;
             im.read((char*)&len, sizeof(len));
-            EOS_ASSERT(im, genesis_exception, "Unknown format of Genesis state map file.");
-            EOS_ASSERT(t == type, genesis_exception, "Unexpected map type in Genesis state map file.");
+            EOS_ASSERT(im, invalid_state_exception, "Unknown format of Genesis state map file.");
+            EOS_ASSERT(t == type, invalid_state_exception, "Unexpected map type in Genesis state map file.");
             std::cout << "count=" << len << "... " << std::flush;
             while (im && len) {
                 string a;
@@ -230,26 +254,26 @@ public:
                 map.emplace_back(a);
                 len--;
             }
-            EOS_ASSERT(im, genesis_exception, "Failed to read map from Genesis state map file.");
+            EOS_ASSERT(im, invalid_state_exception, "Failed to read map from Genesis state map file.");
             std::cout << "done, " << map.size() << " item(s) read" << std::endl;
         };
-        read_map('A', _accs_map);
-        read_map('P', _plnk_map);
+        read_map('A', accs_map);
+        read_map('P', perms_map);
         // TODO: checksum
         im.close();
     }
 
     void read_state(state_object_visitor& visitor) {
         // TODO: checksum
-        EOS_ASSERT(fc::is_regular_file(_state_file), genesis_exception,
+        EOS_ASSERT(fc::is_regular_file(_state_file), invalid_state_exception,
             "Genesis state file '${f}' does not exist.", ("f", _state_file.generic_string()));
         ilog("Reading state from ${f}...", ("f", _state_file.generic_string()));
-        read_maps();
+        read_maps(visitor.accs_map, visitor.perms_map);
 
         bfs::ifstream in(_state_file);
         golos_state_header h{"", 0};
         in.read((char*)&h, sizeof(h));
-        EOS_ASSERT(string(h.magic) == golos_state_header::expected_magic && h.version == 1, genesis_exception,
+        EOS_ASSERT(string(h.magic) == golos_state_header::expected_magic && h.version == 1, invalid_state_exception,
             "Unknown format of the Genesis state file.");
 
         while (in && !visitor.early_exit) {
