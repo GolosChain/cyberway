@@ -1,7 +1,7 @@
 #pragma once
 
 #include "golos_dump_container.hpp"
-#include "golos_types.hpp"
+#include "golos_operations.hpp"
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/member.hpp>
