@@ -9,7 +9,7 @@ struct dynamic_global_property_object {
     uint32_t head_block_number;
     block_id_type head_block_id;
     time_point_sec time;
-    account_name_type current_witness;
+    shared_name current_witness;
     uint64_t total_pow;
     uint32_t num_pow_witnesses;
     asset virtual_supply;
@@ -40,9 +40,9 @@ struct dynamic_global_property_object {
 // account
 struct account_object {
     id_type id;
-    account_name_type name;
+    shared_name name;
     public_key_type memo_key;
-    account_name_type proxy;
+    shared_name proxy;
     time_point_sec last_account_update;
     time_point_sec created;
     bool mined;
@@ -50,8 +50,8 @@ struct account_object {
     bool active_challenged;
     time_point_sec last_owner_proved;
     time_point_sec last_active_proved;
-    account_name_type recovery_account;
-    account_name_type reset_account;
+    shared_name recovery_account;
+    shared_name reset_account;
     time_point_sec last_account_recovery;
     uint32_t comment_count;
     uint32_t lifetime_vote_count;
@@ -88,14 +88,14 @@ struct account_object {
     fc::array<share_type, 4> proxied_vsf_votes;
     uint16_t witnesses_voted_for;
     time_point_sec last_post;
-    account_name_type referrer_account;
+    shared_name referrer_account;
     uint16_t referrer_interest_rate;
     time_point_sec referral_end_date;
     asset referral_break_fee;
 };
 struct account_authority_object {
     id_type id;
-    account_name_type account;
+    shared_name account;
     shared_authority owner;
     shared_authority active;
     shared_authority posting;
@@ -103,7 +103,7 @@ struct account_authority_object {
 };
 struct account_bandwidth_object {
     id_type id;
-    account_name_type account;
+    shared_name account;
     bandwidth_type type;
     share_type average_bandwidth;
     share_type lifetime_bandwidth;
@@ -111,14 +111,14 @@ struct account_bandwidth_object {
 };
 struct account_metadata_object {
     id_type id;
-    account_name_type account;
+    shared_name account;
     shared_string json_metadata;
 };
 
 struct vesting_delegation_object {
     id_type id;
-    account_name_type delegator;
-    account_name_type delegatee;
+    shared_name delegator;
+    shared_name delegatee;
     asset vesting_shares;
     uint16_t interest_rate;
     delegator_payout_strategy payout_strategy;
@@ -126,28 +126,28 @@ struct vesting_delegation_object {
 };
 struct vesting_delegation_expiration_object {
     id_type id;
-    account_name_type delegator;
+    shared_name delegator;
     asset vesting_shares;
     time_point_sec expiration;
 };
 
 struct owner_authority_history_object {
     id_type id;
-    account_name_type account;
+    shared_name account;
     shared_authority previous_owner_authority;
     time_point_sec last_valid_time;
 };
 
 struct account_recovery_request_object {
     id_type id;
-    account_name_type account_to_recover;
+    shared_name account_to_recover;
     shared_authority new_owner_authority;
     time_point_sec expires;
 };
 struct change_recovery_account_request_object {
     id_type id;
-    account_name_type account_to_recover;
-    account_name_type recovery_account;
+    shared_name account_to_recover;
+    shared_name recovery_account;
     time_point_sec effective_on;
 };
 
@@ -155,7 +155,7 @@ struct change_recovery_account_request_object {
 // witness
 struct witness_object {
     id_type id;
-    account_name_type owner;
+    shared_name owner;
     time_point_sec created;
     shared_string url;
     uint32_t total_missed;
@@ -185,7 +185,7 @@ struct witness_schedule_object {
     id_type id;
     uint128_t current_virtual_time;
     uint32_t next_shuffle_block_num;
-    // fc::array<account_name_type, 21/*STEEMIT_MAX_WITNESSES*/> current_shuffled_witnesses;
+    // fc::array<shared_name, 21/*STEEMIT_MAX_WITNESSES*/> current_shuffled_witnesses;
     fc::array<uint128_t, 21/*STEEMIT_MAX_WITNESSES*/> current_shuffled_witnesses;
     uint8_t num_scheduled_witnesses;
     uint8_t top19_weight;
@@ -235,9 +235,9 @@ struct active_comment_data {
 };
 struct comment_object {
     id_type id;
-    account_name_type parent_author;
+    shared_name parent_author;
     shared_permlink parent_permlink;
-    account_name_type author;
+    shared_name author;
     shared_permlink permlink;
     comment_mode mode;
     active_comment_data active;
@@ -261,14 +261,14 @@ struct limit_order_object {
     id_type id;
     time_point_sec created;
     time_point_sec expiration;
-    account_name_type seller;
+    shared_name seller;
     uint32_t orderid;
     share_type for_sale;
     price sell_price;
 };
 struct convert_request_object {
     id_type id;
-    account_name_type owner;
+    shared_name owner;
     uint32_t requestid;
     asset amount;
     time_point_sec conversion_date;
@@ -291,9 +291,9 @@ struct withdraw_vesting_route_object {
 struct escrow_object {
     id_type id;
     uint32_t escrow_id;
-    account_name_type from;
-    account_name_type to;
-    account_name_type agent;
+    shared_name from;
+    shared_name to;
+    shared_name agent;
     time_point_sec ratification_deadline;
     time_point_sec escrow_expiration;
     asset sbd_balance;
@@ -305,8 +305,8 @@ struct escrow_object {
 };
 struct savings_withdraw_object {
     id_type id;
-    account_name_type from;
-    account_name_type to;
+    shared_name from;
+    shared_name to;
     shared_string memo;
     uint32_t request_id;
     asset amount;

@@ -1,5 +1,8 @@
 #include "genesis_ee_builder.hpp"
 #include "golos_operations.hpp"
+#include "config.hpp"
+#include "asset_converter.hpp"
+
 #include <cyberway/genesis/genesis_generate_name.hpp>
 
 #define MEGABYTE 1024*1024
@@ -16,13 +19,10 @@
 
 namespace cyberway { namespace genesis {
 
-static constexpr uint64_t gls_post_account_name = N(gls.publish);
-static constexpr uint64_t gls_social_account_name = N(gls.social);
+using mvo = fc::mutable_variant_object;
 
-constexpr auto GLS = SY(3, GOLOS);
-
-genesis_ee_builder::genesis_ee_builder(const std::string& shared_file, uint32_t last_block)
-        : last_block_(last_block), maps_(shared_file, chainbase::database::read_write, MAP_FILE_SIZE) {
+genesis_ee_builder::genesis_ee_builder(const std::string& shared_file, state_object_visitor& state, const genesis_info& info, uint32_t last_block)
+        : _state(state), _info(info), last_block_(last_block), maps_(shared_file, chainbase::database::read_write, MAP_FILE_SIZE) {
     maps_.add_index<comment_header_index>();
     maps_.add_index<vote_header_index>();
     maps_.add_index<reblog_header_index>();
@@ -36,9 +36,9 @@ golos_dump_header genesis_ee_builder::read_header(bfs::ifstream& in) {
     golos_dump_header h;
     in.read((char*)&h, sizeof(h));
     if (in) {
-        EOS_ASSERT(std::string(h.magic) == golos_dump_header::expected_magic, genesis_exception,
+        EOS_ASSERT(std::string(h.magic) == golos_dump_header::expected_magic, golos_dump_exception,
             "Unknown format of the operation dump file.");
-        EOS_ASSERT(h.version == golos_dump_header::expected_version, genesis_exception,
+        EOS_ASSERT(h.version == golos_dump_header::expected_version, golos_dump_exception,
             "Wrong version of the operation dump file.");
     }
     return h;
@@ -324,7 +324,7 @@ void genesis_ee_builder::build_reblogs(std::vector<reblog_info>& reblogs, uint64
 void genesis_ee_builder::build_messages() {
     std::cout << "-> Writing messages..." << std::endl;
 
-    out_.messages.start_section(gls_post_account_name, N(message), "message_info");
+    out_.messages.start_section(_info.golos.names.posting, N(message), "message_info");
 
     bfs::ifstream dump_comments(in_dump_dir_ / "comments");
     bfs::ifstream dump_reblogs(in_dump_dir_ / "reblogs");
@@ -384,7 +384,7 @@ void genesis_ee_builder::build_pinblocks() {
 
     const auto& follow_index = maps_.get_index<follow_header_index, by_id>();
 
-    out_.pinblocks.start_section(gls_social_account_name, N(pin), "pin");
+    out_.pinblocks.start_section(_info.golos.names.social, N(pin), "pin");
 
     for (const auto& follow : follow_index) {
         if (follow.ignores) {
@@ -396,7 +396,7 @@ void genesis_ee_builder::build_pinblocks() {
         });
     }
 
-    out_.pinblocks.start_section(gls_social_account_name, N(block), "block");
+    out_.pinblocks.start_section(_info.golos.names.social, N(block), "block");
 
     for (const auto& follow : follow_index) {
         if (!follow.ignores) {
@@ -406,6 +406,77 @@ void genesis_ee_builder::build_pinblocks() {
             b.blocker = generate_name(follow.follower);
             b.blocking = generate_name(follow.following);
         });
+    }
+}
+
+void genesis_ee_builder::build_usernames() {
+    const auto& app = _info.golos.names.issuer;
+
+    out_.usernames.start_section(config::system_account_name, N(domain), "domain_info");
+
+    out_.usernames.insert(mvo
+        ("owner", app)
+        ("linked_to", app)
+        ("name", _info.golos.domain)
+    );
+
+    out_.usernames.start_section(config::system_account_name, N(username), "username_info");
+
+    for (const auto& auth : _state.auths) {
+        const auto& name = auth.account.str(_state.accs_map);
+        const auto& hash = generate_name(name);
+        out_.usernames.insert(mvo
+            ("creator", app)
+            ("owner", hash)
+            ("name", name)
+        );
+    }
+}
+
+void genesis_ee_builder::build_balances() {
+    out_.balances.start_section(config::token_account_name, N(currency), "currency_stats");
+
+    EOS_ASSERT(_state.gpo.is_forced_min_price, ee_genesis_exception, "Not implemented");
+
+    asset_converter to_gls(_state.gpo.current_supply, asset(9 * _state.gpo.current_sbd_supply.get_amount(), symbol(GBG)));
+
+    auto supply = _state.gpo.current_supply + to_gls.convert(_state.gpo.current_sbd_supply);
+    auto insert_stat = [&](const asset& supply, int64_t max_supply, name issuer) {
+        const symbol& sym = supply.get_symbol();
+        out_.balances.insert(mvo
+            ("supply", supply)
+            ("max_supply", asset(max_supply * sym.precision(), sym))
+            ("issuer", issuer)
+        );
+    };
+
+    auto sys_supply = golos2sys(supply -_state.gpo.total_reward_fund_steem);
+    insert_stat(sys_supply, _info.golos.sys_max_supply, config::system_account_name);
+    insert_stat(supply, _info.golos.max_supply, _info.golos.names.issuer);
+
+    out_.balances.start_section(config::token_account_name, N(balance), "balance_event");
+
+    auto insert_balance = [&](name account, const asset& balance) {
+        out_.balances.insert(mvo
+            ("balance", balance)
+            ("payments", asset(0, balance.get_symbol()))
+            ("account", account)
+        );
+    };
+
+    // funds
+    insert_balance(config::stake_account_name, golos2sys(_state.gpo.total_vesting_fund_steem));
+    insert_balance(_info.golos.names.vesting, _state.gpo.total_vesting_fund_steem);
+    insert_balance(_info.golos.names.posting, _state.gpo.total_reward_fund_steem);
+
+    // accounts
+    for (const auto& balance : _state.gbg) {
+        auto acc = balance.first;
+        auto gbg = balance.second;
+        auto gls = _state.gls[acc] + to_gls.convert(gbg);
+        auto n = generate_name(_state.accs_map[acc]);
+        insert_balance(n, gls);
+        insert_balance(n, golos2sys(gls));
     }
 }
 

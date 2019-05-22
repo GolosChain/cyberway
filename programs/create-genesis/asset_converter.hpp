@@ -7,7 +7,7 @@ namespace cyberway { namespace genesis {
 using namespace eosio::chain;
 
 
-class supply_distributor {
+class asset_converter {
     const int fract_bits = 18;                      // 18 bits is enough to cover rounding of all balances
     const uint64_t mask = (1 << fract_bits) - 1;
 
@@ -16,7 +16,7 @@ class supply_distributor {
     asset price_quote;
 
 public:
-    supply_distributor(const asset& base, const asset& quote)
+    asset_converter(const asset& base, const asset& quote)
     : price_base(asset(base.get_amount() << fract_bits, base.get_symbol()))
     , price_quote(quote) {
         reset();
@@ -32,6 +32,12 @@ public:
     }
 
 };
+
+inline asset golos2sys(const asset& golos) {
+    static const int64_t sys_precision = asset().get_symbol().precision();
+    return asset(int_arithmetic::safe_prop(
+        golos.get_amount(), sys_precision, static_cast<int64_t>(golos.get_symbol().precision())));
+}
 
 
 }} // cyberway::genesis

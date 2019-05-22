@@ -29,7 +29,7 @@ public:
     genesis_create(state_object_visitor& visitor, const genesis_info& info, const genesis_state& conf, const contracts_map& contracts);
     ~genesis_create();
 
-    void write_genesis(const bfs::path& out_file, const bfs::path& ee_directory);
+    void write_genesis(const bfs::path& out_file);
 
 private:
     struct genesis_create_impl;

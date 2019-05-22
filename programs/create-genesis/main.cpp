@@ -1,8 +1,9 @@
 #include "state_reader.hpp" // Include 1st for custom_unpack
 #include "genesis_info.hpp"
 #include "genesis_create.hpp"
-#include <eosio/chain/abi_def.hpp>
+#include "genesis_ee_builder.hpp"
 
+#include <eosio/chain/abi_def.hpp>
 #include <fc/io/raw.hpp>
 #include <fc/io/json.hpp>
 #include <fc/io/fstream.hpp>
@@ -40,12 +41,18 @@ using std::string;
 
 struct config_reader {
     void set_program_options(options_description& cli);
+    void read_options(const variables_map& options);
     void read_config(const variables_map& options);
     void read_contracts();
 
     bfs::path info_file;
-    bfs::path out_file;
-    bfs::path ee_directory;
+    bfs::path out_genesis_file;
+    bfs::path out_ee_genesis_dir;
+    bfs::path dump_dir;
+    uint32_t last_block;
+
+    bool create_genesis = false;
+    bool create_ee_genesis = false;
 
     genesis_info info;
     genesis_state genesis;
@@ -54,15 +61,25 @@ struct config_reader {
 
 
 void config_reader::set_program_options(options_description& cli) {
-    cli.add_options()
-        ("genesis-info,g", bpo::value<bfs::path>(&info_file)->default_value("genesis-info.json"),
-            "the location of the genesis info file (absolute path or relative to the current directory).")
-        ("output-file,o", bpo::value<bfs::path>(&out_file)->default_value("cyberway-genesis.dat"),
-            "the file to write generic genesis data to (absolute or relative path).")
-        ("ee-output-directory,e", bpo::value<bfs::path>(&ee_directory)->default_value("events-genesis"),
-            "the directory to write Event-Engine genesis data files to (absolute or relative path).")
-        ("help,h", "Print this help message and exit.")
-        ;
+    cli.add_options() (
+        "genesis-info,g", bpo::value<bfs::path>(&info_file)->default_value("genesis-info.json"),
+        "Genesis info file (absolute or relative path)."
+    ) (
+        "state", bpo::value<bfs::path>(&out_genesis_file)->implicit_value("cyberway-genesis.dat")->default_value(""),
+        "If set, create state genesis. If path set, it is output state genesis file (absolute or relative path)."
+    ) (
+        "ee", bpo::value<bfs::path>(&out_ee_genesis_dir)->implicit_value("event-genesis")->default_value(""),
+        "If set, create EE genesis. If path set, it is output EE genesis dir (absolute or relative path)."
+    ) (
+        "dump,d", bpo::value<bfs::path>(&dump_dir)->default_value("/var/lib/golosd/witness_node_data_dir/operation_dump"),
+        "EE genesis: operation dump dir from Golos (absolute or relative path)."
+    ) (
+        "last-block,l", bpo::value<uint32_t>(&last_block)->default_value(UINT32_MAX),
+        "EE genesis: last block num to read operations from dump."
+    ) (
+        "help,h",
+        "Print this help message and exit."
+    );
 }
 
 void make_absolute(bfs::path& path, const string& title, bool file_exists = true) {
@@ -124,11 +141,25 @@ void read_contract(const genesis_info::account& acc, contract_abicode& abicode) 
     };
 }
 
+void config_reader::read_options(const variables_map& options) {
+    if (!options["state"].as<bfs::path>().empty()) {
+        create_genesis = true;
+        make_absolute(out_genesis_file, "Output genesis file", false);
+    }
+
+    if (!options["ee"].as<bfs::path>().empty()) {
+        create_ee_genesis = true;
+        make_dir_absolute(dump_dir, "Operation dump", true);
+        make_dir_absolute(out_ee_genesis_dir, "Output EE genesis dir", false);
+    }
+
+    EOS_ASSERT(create_genesis || create_ee_genesis, genesis_exception, "At least one type of output genesis should be selected");
+}
+
 void config_reader::read_config(const variables_map& options) {
     ilog("Genesis: read config");
-    make_absolute(info_file, "Info");
-    make_absolute(out_file, "Output", false);
-    make_dir_absolute(ee_directory, "Events", false);
+
+    make_absolute(info_file, "Genesis info");
 
     info = fc::json::from_file(info_file).as<genesis_info>();
     make_absolute(info.state_file, "Golos state");
@@ -173,16 +204,29 @@ int main(int argc, char** argv) {
             return 0;
         }
 
+        cr.read_options(vmap);
         cr.read_config(vmap);
-        cr.read_contracts();
 
         state_object_visitor visitor;
         state_reader reader{cr.info.state_file};
         reader.read_state(visitor);
 
-        genesis_create builder{visitor, cr.info, cr.genesis, cr.contracts};
-        builder.write_genesis(cr.out_file, cr.ee_directory);
+        if (cr.create_genesis) {
+            cr.read_contracts();
 
+            genesis_create builder{visitor, cr.info, cr.genesis, cr.contracts};
+            builder.write_genesis(cr.out_genesis_file);
+        }
+
+        if (cr.create_ee_genesis) {
+            bfs::remove_all("shared_memory");
+
+            genesis_ee_builder ee_builder("shared_memory", visitor, cr.info, cr.last_block);
+            ee_builder.read_operation_dump(cr.dump_dir);
+            ee_builder.build(cr.out_ee_genesis_dir);
+
+            bfs::remove_all("shared_memory");
+        }
     } catch (const fc::exception& e) {
         elog("${e}", ("e", e.to_detail_string()));
         return -1;

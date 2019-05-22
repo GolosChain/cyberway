@@ -1,8 +1,7 @@
 #include "genesis_create.hpp"
 #include "golos_objects.hpp"
-#include "supply_distributor.hpp"
+#include "asset_converter.hpp"
 #include "serializer.hpp"
-#include "event_engine_genesis.hpp"
 #include <cyberway/genesis/genesis_generate_name.hpp>
 #include <eosio/chain/config.hpp>
 #include <eosio/chain/authorization_manager.hpp>
@@ -37,7 +36,6 @@ uint64_t to_fbase(uint64_t value)   { return value << fixp_fract_digits; }
 uint128_t to_fwide(uint128_t value) { return value << fixp_fract_digits; }
 
 string pubkey_string(const golos::public_key_type& k, bool prefix = true);
-asset golos2sys(const asset& golos);
 
 
 struct genesis_create::genesis_create_impl final {
@@ -48,10 +46,9 @@ struct genesis_create::genesis_create_impl final {
     contracts_map _contracts;
 
     genesis_serializer db;
-    event_engine_genesis ee_genesis;
 
-    vector<string>& _accs_map;
-    vector<string>& _plnk_map;
+    const vector<string>& _accs_map;
+    const vector<string>& _plnk_map;
 
     asset _total_staked;
 
@@ -68,7 +65,7 @@ struct genesis_create::genesis_create_impl final {
         return generate_name(_accs_map[idx]);
     }
 #endif
-    name name_by_acc(const golos::account_name_type& acc) {
+    name name_by_acc(const golos::shared_name& acc) {
         return name_by_idx(acc.id.value);
     }
     name name_by_id(golos::id_type id) {
@@ -318,7 +315,6 @@ struct genesis_create::genesis_create_impl final {
 
         // add usernames
         db.start_section(config::system_account_name, N(domain), "domain_object", 1);
-        ee_genesis.usernames.start_section(config::system_account_name, N(domain), "domain_info");
         const auto app = _info.golos.names.issuer;
         db.emplace<domain_object>(app, [&](auto& a) {
             a.owner = app;
@@ -326,14 +322,8 @@ struct genesis_create::genesis_create_impl final {
             a.creation_date = _conf.initial_timestamp;
             a.name = _info.golos.domain;
         });
-        ee_genesis.usernames.insert(mvo
-            ("owner", app)
-            ("linked_to", app)
-            ("name", _info.golos.domain)
-        );
 
         db.start_section(config::system_account_name, N(username), "username_object", _visitor.auths.size());
-        ee_genesis.usernames.start_section(config::system_account_name, N(username), "username_info");
         for (const auto& auth : _visitor.auths) {                // loop through auths to preserve names order
             const auto& s = auth.account.str(_accs_map);
             const auto& n = name_by_acc(auth.account);
@@ -342,11 +332,6 @@ struct genesis_create::genesis_create_impl final {
                 u.scope = app;
                 u.name = s;
             });
-            ee_genesis.usernames.insert(mvo
-                ("creator", app)
-                ("owner", n)
-                ("name", s)
-            );
         }
 
         _visitor.auths.clear();
@@ -439,7 +424,7 @@ struct genesis_create::genesis_create_impl final {
         };
 
         std::cout << "  SYSTEM staked = " << _total_staked << std::endl;
-        supply_distributor to_sys(_total_staked, _visitor.gpo.total_vesting_shares);
+        asset_converter to_sys(_total_staked, _visitor.gpo.total_vesting_shares);
         asset staked(0);
         for (const auto& v: _visitor.vests) {
             auto acc = v.first;
@@ -603,7 +588,7 @@ struct genesis_create::genesis_create_impl final {
         } else {
             EOS_ASSERT(false, genesis_exception, "Not implemented");
         }
-        supply_distributor to_gls(price.quote, price.base);     // flip price to convert GBG to GOLOS
+        asset_converter to_gls(price.quote, price.base);     // flip price to convert GBG to GOLOS
         auto golos_from_gbg = to_gls.convert(gp.current_sbd_supply);
         std::cout << "GBG 2 GOLOS = " << golos_from_gbg << std::endl;
         to_gls.reset();
@@ -611,7 +596,6 @@ struct genesis_create::genesis_create_impl final {
         // token stats
         const auto n_stats = 2;
         db.start_section(config::token_account_name, N(stat), "currency_stats", n_stats);
-        ee_genesis.balances.start_section(config::token_account_name, N(currency), "currency_stats");
 
         auto supply = gp.current_supply + golos_from_gbg;
         auto insert_stat_record = [&](const asset& supply, int64_t max_supply, name issuer) {
@@ -622,7 +606,6 @@ struct genesis_create::genesis_create_impl final {
                 ("max_supply", asset(max_supply * sym.precision(), sym))
                 ("issuer", issuer);
             db.insert(pk, pk, issuer, stat);
-            ee_genesis.balances.insert(stat);
             return pk;
         };
 
@@ -641,13 +624,11 @@ struct genesis_create::genesis_create_impl final {
         // funds
         const auto n_balances = 3 + 2*data.gbg.size();
         db.start_section(config::token_account_name, N(accounts), "account", n_balances);
-        ee_genesis.balances.start_section(config::token_account_name, N(balance), "balance_event");
         auto insert_balance_record = [&](name account, const asset& balance, primary_key_t pk) {
             auto record = mvo
                 ("balance", balance)
                 ("payments", asset(0, balance.get_symbol()));
             db.insert(pk, account, record);
-            ee_genesis.balances.insert(record("account", account));
         };
         insert_balance_record(config::stake_account_name, _total_staked, sys_pk);
         insert_balance_record(_info.golos.names.vesting, gp.total_vesting_fund_steem, gls_pk);
@@ -1028,12 +1009,10 @@ struct genesis_create::genesis_create_impl final {
         ilog("Done.");
     }
 
-    void prepare_writer(const bfs::path& out_file, const bfs::path& ee_directory) {
+    void prepare_writer(const bfs::path& out_file) {
         const int n_sections = 5*2 + static_cast<int>(stored_contract_tables::_max) + _info.tables.size();  // there are 5 duplicating account tables (system+golos)
         db.start(out_file, n_sections);
         db.prepare_serializers(_contracts);
-
-        ee_genesis.start(ee_directory, fc::sha256());
     };
 };
 
@@ -1044,8 +1023,8 @@ genesis_create::genesis_create(state_object_visitor& visitor, const genesis_info
 genesis_create::~genesis_create() {
 }
 
-void genesis_create::write_genesis(const bfs::path& out_file, const bfs::path& ee_directory) {
-    _impl->prepare_writer(out_file, ee_directory);
+void genesis_create::write_genesis(const bfs::path& out_file) {
+    _impl->prepare_writer(out_file);
     _impl->store_contracts();
     _impl->store_auth_links();
     _impl->store_custom_tables();
@@ -1059,7 +1038,6 @@ void genesis_create::write_genesis(const bfs::path& out_file, const bfs::path& e
     _impl->store_withdrawals();
     _impl->store_witnesses();
 
-    _impl->ee_genesis.finalize();
     _impl->db.finalize();
 }
 
@@ -1072,12 +1050,6 @@ string pubkey_string(const golos::public_key_type& k, bool prefix/* = true*/) {
     auto packed = raw::pack(wrapper);
     auto tail = fc::to_base58(packed.data(), packed.size());
     return prefix ? string(fc::crypto::config::public_key_legacy_prefix) + tail : tail;
-}
-
-asset golos2sys(const asset& golos) {
-    static const int64_t sys_precision = asset().get_symbol().precision();
-    return asset(int_arithmetic::safe_prop(
-        golos.get_amount(), sys_precision, static_cast<int64_t>(golos.get_symbol().precision())));
 }
 
 

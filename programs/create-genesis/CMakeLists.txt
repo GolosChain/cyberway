@@ -1,4 +1,4 @@
-add_executable(create-genesis main.cpp genesis_create.cpp event_engine_genesis.cpp)
+add_executable(create-genesis main.cpp genesis_create.cpp genesis_ee_builder.cpp event_engine_genesis.cpp)
 
 if(UNIX AND NOT APPLE)
   set(rt_library rt)
@@ -14,6 +14,7 @@ target_include_directories(create-genesis PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 target_link_libraries(create-genesis
   PRIVATE appbase
+  PRIVATE chainbase
   PRIVATE eosio_chain fc ${CMAKE_DL_LIBS} ${PLATFORM_SPECIFIC_LIBS}
 )
 

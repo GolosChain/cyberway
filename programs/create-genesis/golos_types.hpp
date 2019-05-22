@@ -20,7 +20,7 @@ using eosio::chain::uint128_t;
 using eosio::chain::asset;
 using eosio::chain::share_type;
 
-using account_name_type = gls_mapped_str;//gls_acc_name;
+using shared_name = gls_mapped_str;//gls_acc_name;
 using shared_permlink   = gls_mapped_str;
 using shared_string     = std::string;
 using id_type       = int64_t;
@@ -36,7 +36,7 @@ using comment_id_type = id_type;
 
 struct shared_authority {
     uint32_t weight_threshold;
-    std::vector<std::pair<account_name_type, weight_type>> account_auths;   // was map, but it requires to have operator< for accs
+    std::vector<std::pair<shared_name, weight_type>> account_auths;   // was map, but it requires to have operator< for accs
     std::map<public_key_type, weight_type> key_auths;
 };
 
@@ -84,7 +84,7 @@ using version = uint32_t;
 using hardfork_version = version;
 
 struct beneficiary_route_type {
-    account_name_type account;
+    shared_name account;
     uint16_t weight;
 };
 
@@ -95,7 +95,7 @@ enum comment_mode {not_set, first_payout, second_payout, archived};
 enum auction_window_reward_destination_type {to_reward_fund, to_curators, to_author};
 
 struct delegator_vote_interest_rate {
-    account_name_type account;
+    shared_name account;
     uint16_t interest_rate;
     delegator_payout_strategy payout_strategy;
 };
