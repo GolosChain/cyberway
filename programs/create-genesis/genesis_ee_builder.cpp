@@ -2,8 +2,7 @@
 #include "golos_operations.hpp"
 #include "config.hpp"
 #include "asset_converter.hpp"
-
-#include <cyberway/genesis/genesis_generate_name.hpp>
+#include "generate_name.hpp"
 
 #define MEGABYTE 1024*1024
 

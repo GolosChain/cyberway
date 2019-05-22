@@ -10,7 +10,6 @@
 #include <eosio/chain/genesis_state.hpp>
 #include <fc/exception/exception.hpp>
 #include <chainbase/chainbase.hpp>
-#include <cyberway/genesis/ee_genesis_container.hpp>
 
 namespace cyberway { namespace genesis {
 

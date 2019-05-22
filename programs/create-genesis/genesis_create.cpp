@@ -2,7 +2,7 @@
 #include "golos_objects.hpp"
 #include "asset_converter.hpp"
 #include "serializer.hpp"
-#include <cyberway/genesis/genesis_generate_name.hpp>
+#include "generate_name.hpp"
 #include <eosio/chain/config.hpp>
 #include <eosio/chain/authorization_manager.hpp>
 #include <eosio/chain/resource_limits.hpp>

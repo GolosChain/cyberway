@@ -1,8 +1,8 @@
 #pragma once
 
+#include "ee_genesis_serializer.hpp"
 #include <boost/filesystem.hpp>
 #include <fc/crypto/sha256.hpp>
-#include <cyberway/genesis/ee_genesis_serializer.hpp>
 
 namespace cyberway { namespace genesis {
 
