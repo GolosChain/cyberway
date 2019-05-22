@@ -1,7 +1,7 @@
-#include "state_reader.hpp" // Include 1st for custom_unpack
-#include "genesis_info.hpp"
+#include "golos_state/golos_state_reader.hpp" // Include 1st for custom_unpack
+#include "common/genesis_info.hpp"
 #include "genesis_create.hpp"
-#include "genesis_ee_builder.hpp"
+#include "ee_genesis/ee_genesis_builder.hpp"
 
 #include <eosio/chain/abi_def.hpp>
 #include <fc/io/raw.hpp>
@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
         if (cr.create_ee_genesis) {
             bfs::remove_all("shared_memory");
 
-            genesis_ee_builder ee_builder("shared_memory", visitor, cr.info, cr.last_block);
+            ee_genesis_builder ee_builder("shared_memory", visitor, cr.info, cr.last_block);
             ee_builder.read_operation_dump(cr.dump_dir);
             ee_builder.build(cr.out_ee_genesis_dir);
 

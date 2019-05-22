@@ -1,5 +1,5 @@
 #pragma once
-#include "posting_rules.hpp"
+#include "genesis_info_posting_rules.hpp"
 #include <eosio/chain/types.hpp>
 #include <eosio/chain/authority.hpp>
 #include <fc/reflect/reflect.hpp>

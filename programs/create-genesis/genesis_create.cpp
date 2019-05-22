@@ -1,8 +1,8 @@
 #include "genesis_create.hpp"
-#include "golos_objects.hpp"
-#include "asset_converter.hpp"
+#include "golos_state/golos_objects.hpp"
 #include "serializer.hpp"
-#include "generate_name.hpp"
+#include "common/asset_converter.hpp"
+#include "common/generate_name.hpp"
 #include <eosio/chain/config.hpp>
 #include <eosio/chain/authorization_manager.hpp>
 #include <eosio/chain/resource_limits.hpp>

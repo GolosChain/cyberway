@@ -1,6 +1,6 @@
 #pragma once
 
-#include "golos_dump_container.hpp"
+#include "golos_dump_header.hpp"
 #include "golos_operations.hpp"
 
 #include <boost/multi_index_container.hpp>

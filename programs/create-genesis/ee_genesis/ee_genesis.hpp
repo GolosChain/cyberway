@@ -9,10 +9,10 @@ namespace cyberway { namespace genesis {
 using namespace eosio::chain;
 namespace bfs = boost::filesystem;
 
-class event_engine_genesis final {
+class ee_genesis final {
 public:
-    event_engine_genesis(const event_engine_genesis&) = delete;
-    event_engine_genesis() = default;
+    ee_genesis(const ee_genesis&) = delete;
+    ee_genesis() = default;
 
     void start(const bfs::path& ee_directory, const fc::sha256& hash);
     void finalize();

@@ -1,8 +1,8 @@
-#include "genesis_ee_builder.hpp"
+#include "ee_genesis_builder.hpp"
 #include "golos_operations.hpp"
-#include "config.hpp"
-#include "asset_converter.hpp"
-#include "generate_name.hpp"
+#include "../common/config.hpp"
+#include "../common/asset_converter.hpp"
+#include "../common/generate_name.hpp"
 
 #define MEGABYTE 1024*1024
 
@@ -20,7 +20,7 @@ namespace cyberway { namespace genesis {
 
 using mvo = fc::mutable_variant_object;
 
-genesis_ee_builder::genesis_ee_builder(const std::string& shared_file, state_object_visitor& state, const genesis_info& info, uint32_t last_block)
+ee_genesis_builder::ee_genesis_builder(const std::string& shared_file, state_object_visitor& state, const genesis_info& info, uint32_t last_block)
         : _state(state), _info(info), last_block_(last_block), maps_(shared_file, chainbase::database::read_write, MAP_FILE_SIZE) {
     maps_.add_index<comment_header_index>();
     maps_.add_index<vote_header_index>();
@@ -28,10 +28,10 @@ genesis_ee_builder::genesis_ee_builder(const std::string& shared_file, state_obj
     maps_.add_index<follow_header_index>();
 }
 
-genesis_ee_builder::~genesis_ee_builder() {
+ee_genesis_builder::~ee_genesis_builder() {
 }
 
-golos_dump_header genesis_ee_builder::read_header(bfs::ifstream& in) {
+golos_dump_header ee_genesis_builder::read_header(bfs::ifstream& in) {
     golos_dump_header h;
     in.read((char*)&h, sizeof(h));
     if (in) {
@@ -44,7 +44,7 @@ golos_dump_header genesis_ee_builder::read_header(bfs::ifstream& in) {
 }
 
 template<typename Operation>
-bool genesis_ee_builder::read_operation(bfs::ifstream& in, Operation& op) {
+bool ee_genesis_builder::read_operation(bfs::ifstream& in, Operation& op) {
     auto op_offset = in.tellg();
     fc::raw::unpack(in, op);
     op.offset = op_offset;
@@ -59,7 +59,7 @@ bool genesis_ee_builder::read_operation(bfs::ifstream& in, Operation& op) {
     return true;
 }
 
-void genesis_ee_builder::process_delete_comments() {
+void ee_genesis_builder::process_delete_comments() {
     std::cout << "-> Reading comment deletions..." << std::endl;
 
     const auto& comments = maps_.get_index<comment_header_index, by_hash>();
@@ -84,7 +84,7 @@ void genesis_ee_builder::process_delete_comments() {
     }
 }
 
-void genesis_ee_builder::process_comments() {
+void ee_genesis_builder::process_comments() {
     std::cout << "-> Reading comments..." << std::endl;
 
     const auto& comments = maps_.get_index<comment_header_index, by_hash>();
@@ -119,7 +119,7 @@ void genesis_ee_builder::process_comments() {
     }
 }
 
-void genesis_ee_builder::process_rewards() {
+void ee_genesis_builder::process_rewards() {
     std::cout << "-> Reading rewards..." << std::endl;
 
     const auto& comments = maps_.get_index<comment_header_index, by_hash>();
@@ -141,7 +141,7 @@ void genesis_ee_builder::process_rewards() {
     }
 }
 
-void genesis_ee_builder::process_votes() {
+void ee_genesis_builder::process_votes() {
     std::cout << "-> Reading votes..." << std::endl;
 
     const auto& votes = maps_.get_index<vote_header_index, by_hash_voter>();
@@ -173,7 +173,7 @@ void genesis_ee_builder::process_votes() {
     }
 }
 
-void genesis_ee_builder::process_reblogs() {
+void ee_genesis_builder::process_reblogs() {
     std::cout << "-> Reading reblogs..." << std::endl;
 
     const auto& reblogs = maps_.get_index<reblog_header_index, by_hash_account>();
@@ -201,7 +201,7 @@ void genesis_ee_builder::process_reblogs() {
     }
 }
 
-void genesis_ee_builder::process_delete_reblogs() {
+void ee_genesis_builder::process_delete_reblogs() {
     std::cout << "-> Reading delete reblogs..." << std::endl;
 
     const auto& reblogs = maps_.get_index<reblog_header_index, by_hash_account>();
@@ -218,7 +218,7 @@ void genesis_ee_builder::process_delete_reblogs() {
     }
 }
 
-void genesis_ee_builder::process_follows() {
+void ee_genesis_builder::process_follows() {
     std::cout << "-> Reading follows..." << std::endl;
 
     const auto& follows = maps_.get_index<follow_header_index, by_pair>();
@@ -258,7 +258,7 @@ void genesis_ee_builder::process_follows() {
     }
 }
 
-void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
+void ee_genesis_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     in_dump_dir_ = in_dump_dir;
 
     std::cout << "Reading operation dump from " << in_dump_dir_ << "..." << std::endl;
@@ -272,7 +272,7 @@ void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     process_follows();
 }
 
-void genesis_ee_builder::build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created) {
+void ee_genesis_builder::build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created) {
     const auto& vote_idx = maps_.get_index<vote_header_index, by_hash_voter>();
 
     auto vote_itr = vote_idx.lower_bound(msg_hash);
@@ -296,7 +296,7 @@ void genesis_ee_builder::build_votes(std::vector<vote_info>& votes, uint64_t msg
     }
 }
 
-void genesis_ee_builder::build_reblogs(std::vector<reblog_info>& reblogs, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs) {
+void ee_genesis_builder::build_reblogs(std::vector<reblog_info>& reblogs, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs) {
     const auto& reblog_idx = maps_.get_index<reblog_header_index, by_hash_account>();
 
     auto reblog_itr = reblog_idx.lower_bound(msg_hash);
@@ -320,7 +320,7 @@ void genesis_ee_builder::build_reblogs(std::vector<reblog_info>& reblogs, uint64
     }
 }
 
-void genesis_ee_builder::build_messages() {
+void ee_genesis_builder::build_messages() {
     std::cout << "-> Writing messages..." << std::endl;
 
     out_.messages.start_section(_info.golos.names.posting, N(message), "message_info");
@@ -358,7 +358,7 @@ void genesis_ee_builder::build_messages() {
     }
 }
 
-void genesis_ee_builder::build_transfers() {
+void ee_genesis_builder::build_transfers() {
     std::cout << "-> Writing transfers..." << std::endl;
 
     out_.transfers.start_section(config::token_account_name, N(transfer), "transfer");
@@ -378,7 +378,7 @@ void genesis_ee_builder::build_transfers() {
     }
 }
 
-void genesis_ee_builder::build_pinblocks() {
+void ee_genesis_builder::build_pinblocks() {
     std::cout << "-> Writing pinblocks..." << std::endl;
 
     const auto& follow_index = maps_.get_index<follow_header_index, by_id>();
@@ -408,7 +408,7 @@ void genesis_ee_builder::build_pinblocks() {
     }
 }
 
-void genesis_ee_builder::build_usernames() {
+void ee_genesis_builder::build_usernames() {
     const auto& app = _info.golos.names.issuer;
 
     out_.usernames.start_section(config::system_account_name, N(domain), "domain_info");
@@ -432,7 +432,7 @@ void genesis_ee_builder::build_usernames() {
     }
 }
 
-void genesis_ee_builder::build_balances() {
+void ee_genesis_builder::build_balances() {
     out_.balances.start_section(config::token_account_name, N(currency), "currency_stats");
 
     EOS_ASSERT(_state.gpo.is_forced_min_price, ee_genesis_exception, "Not implemented");
@@ -479,7 +479,7 @@ void genesis_ee_builder::build_balances() {
     }
 }
 
-void genesis_ee_builder::build(const bfs::path& out_dir) {
+void ee_genesis_builder::build(const bfs::path& out_dir) {
     std::cout << "Writing genesis to " << out_dir << "..." << std::endl;
 
     out_.start(out_dir, fc::sha256());

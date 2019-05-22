@@ -1,9 +1,9 @@
 #pragma once
 
-#include "state_reader.hpp" // Include 1st for custom_unpack
-#include "genesis_info.hpp"
-#include "golos_dump_container.hpp"
-#include "event_engine_genesis.hpp"
+#include "../golos_state/golos_state_reader.hpp" // Include 1st for custom_unpack
+#include "../common/genesis_info.hpp"
+#include "golos_dump_header.hpp"
+#include "ee_genesis.hpp"
 #include "map_objects.hpp"
 
 #include <boost/filesystem.hpp>
@@ -18,11 +18,11 @@ namespace bfs = boost::filesystem;
 
 FC_DECLARE_EXCEPTION(golos_dump_exception, 12000000, "Golos operation dump exception");
 
-class genesis_ee_builder final {
+class ee_genesis_builder final {
 public:
-    genesis_ee_builder(const genesis_ee_builder&) = delete;
-    genesis_ee_builder(const std::string& shared_file, state_object_visitor& state, const genesis_info& info, uint32_t last_block);
-    ~genesis_ee_builder();
+    ee_genesis_builder(const ee_genesis_builder&) = delete;
+    ee_genesis_builder(const std::string& shared_file, state_object_visitor& state, const genesis_info& info, uint32_t last_block);
+    ~ee_genesis_builder();
 
     void read_operation_dump(const bfs::path& in_dump_dir);
     void build(const bfs::path& out_dir);
@@ -52,7 +52,7 @@ private:
     genesis_info _info;
     uint32_t last_block_;
     chainbase::database maps_;
-    event_engine_genesis out_;
+    ee_genesis out_;
 };
 
 } } // cyberway::genesis

@@ -1,4 +1,4 @@
-#include "event_engine_genesis.hpp"
+#include "ee_genesis.hpp"
 
 namespace cyberway { namespace genesis {
 
@@ -134,7 +134,7 @@ static abi_def create_balances_abi() {
     return abi;
 }
 
-void event_engine_genesis::start(const bfs::path& ee_directory, const fc::sha256& hash) {
+void ee_genesis::start(const bfs::path& ee_directory, const fc::sha256& hash) {
     messages.start(ee_directory / "messages.dat", hash, create_messages_abi());
     transfers.start(ee_directory / "transfers.dat", hash, create_transfers_abi());
     pinblocks.start(ee_directory / "pinblocks.dat", hash, create_pinblocks_abi());
@@ -142,7 +142,7 @@ void event_engine_genesis::start(const bfs::path& ee_directory, const fc::sha256
     balances.start(ee_directory / "balances.dat", hash, create_balances_abi());
 }
 
-void event_engine_genesis::finalize() {
+void ee_genesis::finalize() {
     messages.finalize();
     transfers.finalize();
     pinblocks.finalize();

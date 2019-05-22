@@ -1,7 +1,7 @@
 #pragma once
 
-#include "state_reader.hpp" // Include 1st for custom_unpack
-#include "genesis_info.hpp"
+#include "golos_state/golos_state_reader.hpp" // Include 1st for custom_unpack
+#include "common/genesis_info.hpp"
 #include <eosio/chain/genesis_state.hpp>
 #include <fc/crypto/sha256.hpp>
 #include <boost/filesystem.hpp>

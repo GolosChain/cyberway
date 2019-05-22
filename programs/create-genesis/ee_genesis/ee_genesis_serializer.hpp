@@ -1,7 +1,7 @@
 #pragma once
 #include <boost/filesystem/fstream.hpp>
 #include <cyberway/chaindb/common.hpp>
-#include <eosio/event_engine_plugin/ee_genesis_container.hpp>
+#include <eosio/event_engine_plugin/ee_genesis_header.hpp>
 #include <eosio/chain/abi_serializer.hpp>
 
 namespace cyberway { namespace genesis {

@@ -2,8 +2,8 @@
 
 #include "custom_unpack.hpp" // Include 1st
 #include "golos_objects.hpp"
-#include "golos_state_container.hpp"
-#include "config.hpp"
+#include "golos_state_header.hpp"
+#include "../common/config.hpp"
 
 #include <boost/filesystem.hpp>
 #include <eosio/chain/config.hpp>

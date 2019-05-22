@@ -7,7 +7,7 @@
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <eosio/event_engine_plugin/event_engine_plugin.hpp>
 #include <eosio/event_engine_plugin/messages.hpp>
-#include <eosio/event_engine_plugin/ee_genesis_container.hpp>
+#include <eosio/event_engine_plugin/ee_genesis_header.hpp>
 #include <eosio/chain_plugin/chain_plugin.hpp>
 #include <fc/exception/exception.hpp>
 #include <fc/variant_object.hpp>
