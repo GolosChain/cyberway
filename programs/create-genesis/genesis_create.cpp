@@ -1002,7 +1002,6 @@ struct genesis_create::genesis_create_impl final {
                 ("rsharesfn", total_rshares)
             )
         );
-        }
 
         _visitor.comments.clear();
         _visitor.votes.clear();
