@@ -373,17 +373,8 @@ struct genesis_create::genesis_create_impl final {
         ilog("Creating staking agents and grants...");
         _total_staked = golos2sys(_visitor.gpo.total_vesting_fund_steem);
         const auto sys_sym = asset().get_symbol();
-
-        db.start_section(config::system_account_name, N(stake.stat), "stake_stat_object", 1);
         const auto inf = _info.params.stake;
-        db.emplace<stake_stat_object>(config::system_account_name, [&](auto& s) {
-            s.id = sys_sym.to_symbol_code().value;
-            s.token_code = sys_sym.to_symbol_code();
-            s.total_staked = _total_staked.get_amount();
-            s.total_votes = 0;                              // TODO: fix #789
-            s.last_reward = time_point_sec();
-            s.enabled = inf.enabled;
-        });
+
         db.start_section(config::system_account_name, N(stake.param), "stake_param_object", 1);
         db.emplace<stake_param_object>(config::system_account_name, [&](auto& p) {
             p.id = sys_sym.to_symbol_code().value;
@@ -588,6 +579,16 @@ struct genesis_create::genesis_create_impl final {
                 a.set_votes(x.balance, total_votes);
             });
         }
+
+        db.start_section(config::system_account_name, N(stake.stat), "stake_stat_object", 1);
+        db.emplace<stake_stat_object>(config::system_account_name, [&](auto& s) {
+            s.id = sys_sym.to_symbol_code().value;
+            s.token_code = sys_sym.to_symbol_code();
+            s.total_staked = _total_staked.get_amount();
+            s.total_votes = total_votes;
+            s.last_reward = time_point_sec();
+            s.enabled = inf.enabled;
+        });
 
         ilog("Done.");
     }
