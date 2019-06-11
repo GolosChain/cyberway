@@ -88,6 +88,8 @@ struct state_object_visitor {
     fc::flat_map<uint64_t,post_permlink> permlinks;         // id:permlink
     std::vector<golos::comment_vote_object> votes;
 
+    fc::flat_map<acc_idx, share_type> reputations;
+
     template<typename T>
     void operator()(const T& x) {}
 
@@ -227,6 +229,9 @@ struct state_object_visitor {
         }
     }
 
+    void operator()(const golos::reputation_object& rep) {
+        reputations[rep.account.id] = rep.reputation;
+    }
 };
 
 class state_reader {
