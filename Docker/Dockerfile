@@ -6,6 +6,7 @@ ARG compiletype=RelWithDebInfo
 
 ADD https://api.github.com/repos/GolosChain/cyberway/git/refs/heads/$branch /etc/version.json
 
+RUN apt-get update
 RUN apt-get install libpthread-stubs0-dev
 
 RUN git clone -b $branch https://github.com/GolosChain/cyberway.git --recursive
