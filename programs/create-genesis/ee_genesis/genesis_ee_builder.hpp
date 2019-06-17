@@ -1,14 +1,12 @@
 #pragma once
-
 #include "golos_dump_container.hpp"
 #include "event_engine_genesis.hpp"
 #include "map_objects.hpp"
-#include "../genesis_info.hpp"
-#include "../export_info.hpp"
+#include "../genesis_create.hpp"
 
-#include <boost/filesystem.hpp>
-#include <fc/exception/exception.hpp>
 #include <chainbase/chainbase.hpp>
+#include <fc/exception/exception.hpp>
+#include <boost/filesystem.hpp>
 
 namespace cyberway { namespace genesis { namespace ee {
 
@@ -20,7 +18,7 @@ using namespace cyberway::golos::ee;
 class genesis_ee_builder final {
 public:
     genesis_ee_builder(const genesis_ee_builder&) = delete;
-    genesis_ee_builder(const genesis_info& info, const export_info& exp_info, const std::string& shared_file, uint32_t last_block);
+    genesis_ee_builder(const genesis_create&, const std::string& shared_file, uint32_t last_block);
     ~genesis_ee_builder();
 
     void read_operation_dump(const bfs::path& in_dump_dir);
@@ -47,6 +45,7 @@ private:
     void build_pinblocks();
     void build_accounts();
     void build_funds();
+    void write_genesis_converts();
 
     bfs::ifstream dump_delete_comments;
     bfs::ifstream dump_comments;
@@ -59,8 +58,11 @@ private:
     bfs::ifstream dump_metas;
 
     bfs::path in_dump_dir_;
+
+    const genesis_create& genesis_;
     const genesis_info& info_;
     const export_info& exp_info_;
+
     event_engine_genesis out_;
     uint32_t last_block_;
     chainbase::database maps_;
