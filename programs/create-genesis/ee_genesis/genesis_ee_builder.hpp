@@ -45,7 +45,7 @@ private:
     void write_pinblocks();
     void write_accounts();
     void write_funds();
-    void write_genesis_converts();
+    void write_balance_converts();
 
     bfs::ifstream dump_delete_comments;
     bfs::ifstream dump_comments;
