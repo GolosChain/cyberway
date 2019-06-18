@@ -40,11 +40,11 @@ private:
 
     void build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created);
     void build_reblogs(std::vector<reblog_info>& reblogs, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs);
-    void build_messages();
-    void build_transfers();
-    void build_pinblocks();
-    void build_accounts();
-    void build_funds();
+    void write_messages();
+    void write_transfers();
+    void write_pinblocks();
+    void write_accounts();
+    void write_funds();
     void write_genesis_converts();
 
     bfs::ifstream dump_delete_comments;

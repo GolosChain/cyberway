@@ -409,7 +409,7 @@ void genesis_ee_builder::build_reblogs(std::vector<reblog_info>& reblogs, uint64
     }
 }
 
-void genesis_ee_builder::build_messages() {
+void genesis_ee_builder::write_messages() {
     if (!dump_comments.is_open()) {
         return;
     }
@@ -454,7 +454,7 @@ void genesis_ee_builder::build_messages() {
     build_children(0);
 }
 
-void genesis_ee_builder::build_transfers() {
+void genesis_ee_builder::write_transfers() {
     if (!dump_transfers.is_open()) {
         return;
     }
@@ -474,7 +474,7 @@ void genesis_ee_builder::build_transfers() {
     }
 }
 
-void genesis_ee_builder::build_pinblocks() {
+void genesis_ee_builder::write_pinblocks() {
     if (!dump_follows.is_open()) {
         return;
     }
@@ -507,7 +507,7 @@ void genesis_ee_builder::build_pinblocks() {
     }
 }
 
-void genesis_ee_builder::build_accounts() {
+void genesis_ee_builder::write_accounts() {
     std::cout << "-> Writing accounts..." << std::endl;
     auto& out = out_.get_serializer(event_engine_genesis::accounts);
     out.start_section(config::system_account_name, N(domain), "domain_info");
@@ -542,7 +542,7 @@ void genesis_ee_builder::build_accounts() {
     }
 }
 
-void genesis_ee_builder::build_funds() {
+void genesis_ee_builder::write_funds() {
     std::cout << "-> Writing funds..." << std::endl;
 
     auto& out = out_.get_serializer(event_engine_genesis::funds);
@@ -559,7 +559,7 @@ void genesis_ee_builder::build_funds() {
     }
 }
 
-void genesis_ee_builder::write_genesis_converts() {
+void genesis_ee_builder::write_balance_converts() {
     std::cout << "-> Writing genesis balance conversions..." << std::endl;
     auto& out = out_.get_serializer(event_engine_genesis::balance_conversions);
     out.start_section(config::token_account_name, N(genesis.conv), "balance_convert");
@@ -584,12 +584,12 @@ void genesis_ee_builder::build(const bfs::path& out_dir) {
 
     out_.start(out_dir, fc::sha256());
 
-    build_messages();
-    build_transfers();
-    build_pinblocks();
-    build_accounts();
-    build_funds();
-    write_genesis_converts();
+    write_messages();
+    write_transfers();
+    write_pinblocks();
+    write_accounts();
+    write_funds();
+    write_balance_converts();
 
     out_.finalize();
 }
