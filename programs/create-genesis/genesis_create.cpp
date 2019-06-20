@@ -539,7 +539,7 @@ struct genesis_create::genesis_create_impl final {
         }
 
         int64_t total_votes = 0;
-        auto n_acc_agents = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& acc){return acc.sys_staked.valid();});
+        auto n_acc_agents = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& acc){return acc.sys_staked;});
         db.start_section(config::system_account_name, N(stake.agent), "stake_agent_object", _visitor.vests.size() + n_acc_agents);
         for (const auto& abl: agents_by_level) {
             for (auto& ag: abl) {
@@ -563,12 +563,12 @@ struct genesis_create::genesis_create_impl final {
             }
         }
         for (const auto& acc: _info.accounts) {
-            if (acc.sys_staked.valid()) {
+            if (acc.sys_staked) {
                 total_votes += acc.sys_staked->get_amount();
                 db.emplace<stake_agent_object>(acc.name, [&](auto& a) {
                     a.token_code = sys_sym.to_symbol_code();
                     a.account = acc.name;
-                    a.proxy_level = acc.prod_key.valid() ? 0 : 1;
+                    a.proxy_level = acc.prod_key ? 0 : 1;
                     a.last_proxied_update = _conf.initial_timestamp;
                     a.balance = acc.sys_staked->get_amount();
                     a.proxied = 0;
@@ -580,7 +580,7 @@ struct genesis_create::genesis_create_impl final {
             }
         }
 
-        auto n_acc_cand = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& acc){return acc.prod_key.valid();});
+        auto n_acc_cand = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& acc){return acc.prod_key;});
         db.start_section(config::system_account_name, N(stake.cand), "stake_candidate_object", agents_by_level[0].size() + n_acc_cand);
         const auto sys_supply = _sys_supply.get_amount();
         for (auto& ag: agents_by_level[0]) {
@@ -599,8 +599,8 @@ struct genesis_create::genesis_create_impl final {
         }
         public_key_type system_key(_conf.initial_key);
         for (const auto& acc: _info.accounts) {
-            if (acc.prod_key.valid()) {
-                auto balance = acc.sys_staked.valid() ? acc.sys_staked->get_amount() : 0;
+            if (acc.prod_key) {
+                auto balance = acc.sys_staked ? acc.sys_staked->get_amount() : 0;
                 db.emplace<stake_candidate_object>(acc.name, [&](auto& a) {
                     a.token_code = sys_sym.to_symbol_code();
                     a.account = acc.name;
@@ -693,10 +693,10 @@ struct genesis_create::genesis_create_impl final {
         auto total_acc_balances = asset();
         auto total_acc_staked = asset();
         for(const auto& acc: _info.accounts) {
-            if(acc.sys_balance.valid()) {
+            if(acc.sys_balance) {
                 total_acc_balances += *acc.sys_balance;
             }
-            if(acc.sys_staked.valid()) {
+            if(acc.sys_staked) {
                 total_acc_staked += *acc.sys_staked;
             }
         }
@@ -716,7 +716,7 @@ struct genesis_create::genesis_create_impl final {
         );
 
         // funds
-        const auto n_acc_balances = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& a){return a.sys_balance.valid();});
+        const auto n_acc_balances = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& a) {return a.sys_balance;}); //
         const auto n_balances = 3 + 2*data.gbg.size() + n_acc_balances;
         db.start_section(config::token_account_name, N(accounts), "account", n_balances);
         auto insert_balance_record = [&](name account, const asset& balance, primary_key_t pk,
@@ -738,7 +738,7 @@ struct genesis_create::genesis_create_impl final {
         insert_balance_record(_info.golos.names.posting, gp.total_reward_fund_steem, gls_pk);
 
         for(const auto& acc: _info.accounts) {
-            if(acc.sys_balance.valid()) {
+            if(acc.sys_balance) {
                 insert_balance_record(acc.name, *acc.sys_balance, sys_pk);
             }
         }
