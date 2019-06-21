@@ -72,7 +72,7 @@ public:
 
 private:
    get_table_rows_result walk_table_row_range(const get_table_rows_params& p,
-                                              cyberway::chaindb::find_info& itr, cyberway::chaindb::primary_key_t end_pk) const;
+                                              cyberway::chaindb::sync_find_info& itr, cyberway::chaindb::primary_key_t end_pk) const;
 
     fc::optional<eosio::chain::asset> get_account_core_liquid_balance(const get_account_params& params) const;
 
@@ -328,7 +328,9 @@ get_account_results chain_api_plugin_impl::get_account(const get_account_params&
 
     auto table = db_controller.get_table<chain::permission_object>();
     auto permissions = table.get_index<chain::by_owner>();
+
     auto perm = permissions.lower_bound( boost::make_tuple( params.account_name ) );
+
     while( perm != permissions.end() && perm->owner == params.account_name ) {
       /// TODO: lookup perm->parent name
       eosio::chain::name parent;
@@ -417,10 +419,9 @@ fc::optional<eosio::chain::asset> chain_api_plugin_impl::get_account_core_liquid
 
     auto& db_controller = chain_controller_.chaindb();
 
-    auto accounts_it = db_controller.begin(request);
-    const auto end_it = db_controller.end(request);
+    auto accounts_it = db_controller.sbegin(request);
 
-    for (; accounts_it.pk != end_it.pk; accounts_it.pk = db_controller.next({token_code, accounts_it.cursor})) {
+    for (; accounts_it.pk != cyberway::chaindb::end_cursor; accounts_it.pk = db_controller.next({token_code, accounts_it.cursor})) {
         const auto value = db_controller.object_at_cursor({token_code, accounts_it.cursor}).value;
         const auto balance_object = value["balance"];
         eosio::chain::asset asset_value;
@@ -561,14 +562,14 @@ get_table_rows_result chain_api_plugin_impl::get_table_rows( const get_table_row
        // TODO: implement rbegin end rend methods in mongo driver https://github.com/GolosChain/cyberway/issues/446
        EOS_THROW(cyberway::chaindb::driver_unsupported_operation_exception, "Backward iteration through table not supported yet");
    } else {
-       auto begin = p.lower_bound.is_null() ? chaindb.begin(request) : chaindb.lower_bound(request, p.lower_bound);
+       auto begin = p.lower_bound.is_null() ? chaindb.sbegin(request) : chaindb.lower_bound(request, p.lower_bound);
        const auto end_pk = p.upper_bound.is_null() ? cyberway::chaindb::primary_key::End : chaindb.upper_bound(request, p.upper_bound).pk;
        return walk_table_row_range(p, begin, end_pk);
    }
 
 }
 
-get_table_rows_result chain_api_plugin_impl::walk_table_row_range(const get_table_rows_params& p, cyberway::chaindb::find_info& itr, cyberway::chaindb::primary_key_t end_pk) const {
+get_table_rows_result chain_api_plugin_impl::walk_table_row_range(const get_table_rows_params& p, cyberway::chaindb::sync_find_info& itr, cyberway::chaindb::primary_key_t end_pk) const {
     get_table_rows_result result;
 
     auto cur_time = fc::time_point::now();
@@ -657,7 +658,7 @@ std::vector<chain::asset> chain_api_plugin_impl::get_currency_balance( const get
 
     const cyberway::chaindb::index_request request{p.code, p.account, N(accounts), cyberway::chaindb::names::primary_index};
 
-    auto accounts_it = chaindb.begin(request);
+    cyberway::chaindb::sync_find_info accounts_it = chaindb.sbegin(request);
 
     const auto next_request = cyberway::chaindb::cursor_request{p.code, accounts_it.cursor};
 
@@ -686,7 +687,7 @@ std::vector<chain::asset> chain_api_plugin_impl::get_currency_balance( const get
 fc::variant chain_api_plugin_impl::get_currency_stats( const get_currency_stats_params& p ) const {
     const chain::name scope = eosio::chain::string_to_symbol(0, boost::algorithm::to_upper_copy(p.symbol).c_str()) >> 8;
     auto& chaindb = chain_controller_.chaindb();
-    auto itr = chaindb.begin({p.code, scope, N(stat), cyberway::chaindb::names::primary_index});
+    auto itr = chaindb.sbegin({p.code, scope, N(stat), cyberway::chaindb::names::primary_index});
 
     if (itr.pk == cyberway::chaindb::primary_key::End) {
         return {};
@@ -756,7 +757,7 @@ std::string chain_api_plugin_impl::get_agent_public_key(chain::account_name acco
 
     const cyberway::chaindb::index_request request{N(), N(), N(stake.agent), N(bykey)};
 
-    const auto it = chaindb.lower_bound(request, fc::mutable_variant_object()("token_code", symbol.to_symbol_code())("account", account));
+    const auto it = chaindb.lower_bound(request, fc::mutable_variant_object("token_code", symbol.to_symbol_code())("account", account));
 
     if (it.pk != cyberway::chaindb::primary_key::End) {
         return chaindb.object_at_cursor({N(), it.cursor}).value["signing_key"].as_string();

@@ -22,6 +22,25 @@ namespace cyberway { namespace chaindb {
         InRAM,
     }; // enum class cursor_open
 
+
+    class chaindb_controller;
+    class sync_find_info {
+    public:
+        sync_find_info(cursor_t cursor, primary_key_t pk, const chaindb_controller& controller, account_name_t code);
+
+        sync_find_info(sync_find_info && other);
+
+        ~sync_find_info();
+
+        cursor_t cursor;
+        primary_key_t pk;
+
+    private:
+        bool is_open_ = false;
+        const chaindb_controller& controller_;
+        account_name_t code_;
+    };
+
     class chaindb_controller final {
     public:
         chaindb_controller() = delete;
@@ -141,15 +160,20 @@ namespace cyberway { namespace chaindb {
 
         find_info lower_bound(const index_request&, cursor_kind, const char* key, size_t) const;
         find_info lower_bound(const table_request&, cursor_kind, primary_key_t) const;
-        find_info lower_bound(const index_request&, const variant&) const;
+
+        sync_find_info lower_bound(const index_request&, const variant&) const;
 
         find_info upper_bound(const index_request&, const char* key, size_t) const;
         find_info upper_bound(const table_request&, primary_key_t) const;
-        find_info upper_bound(const index_request&, const variant&) const;
+
+        sync_find_info upper_bound(const index_request&, const variant&) const;
 
         find_info locate_to(const index_request&, const char* key, size_t, primary_key_t) const;
 
         find_info begin(const index_request&) const;
+
+        sync_find_info sbegin(const index_request&) const;
+
         find_info end(const index_request&) const;
         find_info clone(const cursor_request&) const;
 

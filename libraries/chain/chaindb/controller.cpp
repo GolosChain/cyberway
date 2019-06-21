@@ -776,8 +776,9 @@ namespace cyberway { namespace chaindb {
         return impl_->lower_bound(request, kind, pk);
     }
 
-    find_info chaindb_controller::lower_bound(const index_request& request, const variant& orders) const {
-        return impl_->lower_bound(request, orders);
+    sync_find_info chaindb_controller::lower_bound(const index_request& request, const variant& orders) const {
+        const auto info = impl_->lower_bound(request, orders);
+        return {info.cursor, info.pk, *this, request.code};
     }
 
     find_info chaindb_controller::upper_bound(const index_request& request, const char* key, size_t size) const {
@@ -790,9 +791,9 @@ namespace cyberway { namespace chaindb {
         return {info.id, info.pk};
     }
 
-    find_info chaindb_controller::upper_bound(const index_request& request, const variant& orders) const {
+    sync_find_info chaindb_controller::upper_bound(const index_request& request, const variant& orders) const {
         auto info = impl_->upper_bound(request, orders);
-        return {info.id, info.pk};
+        return {info.id, info.pk, *this, request.code};
     }
 
     find_info chaindb_controller::locate_to(
@@ -805,6 +806,11 @@ namespace cyberway { namespace chaindb {
     find_info chaindb_controller::begin(const index_request& request) const {
         const auto& info = impl_->begin(request);
         return {info.id, info.pk};
+    }
+
+    sync_find_info chaindb_controller::sbegin(const index_request& request) const {
+        const auto& info = impl_->begin(request);
+        return {info.id, info.pk, *this, request.code};
     }
 
     find_info chaindb_controller::end(const index_request& request) const {
@@ -1000,6 +1006,31 @@ namespace cyberway { namespace chaindb {
 
     uint64_t chaindb_session::calc_ram_bytes() const {
         return controller_.impl_->cache_.calc_ram_bytes(revision_);
+    }
+
+    sync_find_info::sync_find_info(cursor_t cursor, primary_key_t pk, const chaindb_controller& controller, account_name_t code) :
+        is_open_(cursor != invalid_cursor),
+        controller_(controller),
+        code_(code)
+    {
+        this->cursor = cursor;
+        this->pk = pk;
+    }
+
+    sync_find_info::sync_find_info(sync_find_info&& other) :
+        is_open_(other.is_open_),
+        controller_(other.controller_),
+        code_(other.code_)
+    {
+        this->cursor = other.cursor;
+        this->pk = other.pk;
+        other.is_open_ = false;
+    }
+
+    sync_find_info::~sync_find_info() {
+        if (is_open_) {
+            controller_.close({code_, cursor});
+        }
     }
 
 } } // namespace cyberway::chaindb
