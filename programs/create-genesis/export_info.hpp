@@ -68,6 +68,7 @@ struct export_info {
     fc::flat_map<acc_idx, mvo> account_infos;
     std::vector<mvo> currency_stats;
     std::vector<mvo> balance_events;
+    std::vector<mvo> delegations;
     fc::flat_map<uint64_t, cyberway::golos::active_comment_data> active_comments;
 
     fc::flat_map<acc_idx, converted_info>* conv_gbg = nullptr;
