@@ -415,6 +415,10 @@ private:
         const_iterator_impl& operator=(const_iterator_impl&& src) {
             if (this == &src) return *this;
 
+            if (is_cursor_initialized()) {
+                controller().close(get_cursor_request());
+            }
+
             controller_ = src.controller_;
             cursor_ = src.cursor_;
             primary_key_ = src.primary_key_;
@@ -431,6 +435,10 @@ private:
         }
         const_iterator_impl& operator=(const const_iterator_impl& src) {
             if (this == &src) return *this;
+
+            if (is_cursor_initialized()) {
+                controller().close(get_cursor_request());
+            }
 
             controller_ = src.controller_;
             primary_key_ = src.primary_key_;
