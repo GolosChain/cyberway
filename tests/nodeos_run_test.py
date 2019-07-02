@@ -301,7 +301,8 @@ try:
             key="[actions][0][name]"
             typeVal=  transaction["actions"][0]["name"]
             key="[actions][0][data][quantity]"
-            amountVal=transaction["actions"][0]["data"]["quantity"]["amount"]
+            amountVal=transaction["actions"][0]["data"]["quantity"]
+            amountVal=int(decimal.Decimal(amountVal.split()[0])*10000)
     except (TypeError, KeyError) as e:
         Print("transaction%s not found. Transaction: %s" % (key, transaction))
         raise

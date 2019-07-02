@@ -96,6 +96,7 @@ ecmd create account cyber cyber.token $pubsyskey $pubsyskey
 ecmd create account cyber cyber.vpay $pubsyskey $pubsyskey
 
 ecmd set contract cyber.token contracts/cyber.token
+sleep 3
 ecmd set contract cyber.msig contracts/cyber.msig
 
 echo ===== Start: $step ============ >> $logfile

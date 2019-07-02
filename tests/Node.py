@@ -67,7 +67,8 @@ class Node(object):
 
     @staticmethod
     def assetToValue(asset):
-        return "%.*f %s" % (asset["decs"], asset["amount"]/(10**asset["decs"]), asset["sym"])
+        return asset
+        #return "%.*f %s" % (asset["decs"], asset["amount"]/(10**asset["decs"]), asset["sym"])
 
     @staticmethod
     def validateTransaction(trans):
