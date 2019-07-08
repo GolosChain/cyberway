@@ -4,7 +4,7 @@
  */
 #pragma once
 
-#include <chainbase/chainbase.hpp>
+#include <eosio/chain/multi_index_includes.hpp>
 #include <fc/array.hpp>
 
 namespace eosio {
@@ -13,8 +13,8 @@ using chain::public_key_type;
 using chain::permission_name;
 using namespace boost::multi_index;
 
-class public_key_history_object : public chainbase::object<chain::public_key_history_object_type, public_key_history_object> {
-   OBJECT_CTOR(public_key_history_object)
+class public_key_history_object : public cyberway::chaindb::object<chain::public_key_history_object_type, public_key_history_object> {
+   CHAINDB_OBJECT_ID_CTOR(public_key_history_object)
 
    id_type           id;
    public_key_type   public_key;
@@ -25,31 +25,31 @@ class public_key_history_object : public chainbase::object<chain::public_key_his
 struct by_id;
 struct by_pub_key;
 struct by_account_permission;
-using public_key_history_multi_index = chainbase::shared_multi_index_container<
-   public_key_history_object,
-   indexed_by<
-      ordered_unique<tag<by_id>, BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_history_object::id_type, id)>,
-      ordered_unique<tag<by_pub_key>,
-         composite_key< public_key_history_object,
-            member<public_key_history_object, public_key_type,                    &public_key_history_object::public_key>,
-            member<public_key_history_object, public_key_history_object::id_type, &public_key_history_object::id>
-         >
-      >,
-      ordered_unique<tag<by_account_permission>,
-         composite_key< public_key_history_object,
-            member<public_key_history_object, account_name,     &public_key_history_object::name>,
-            member<public_key_history_object, permission_name,  &public_key_history_object::permission>,
-            member<public_key_history_object, public_key_history_object::id_type, &public_key_history_object::id>
-         >
-      >
-   >
+
+using public_key_history_table = cyberway::chaindb::table_container<
+    public_key_history_object,
+    cyberway::chaindb::indexed_by<
+        cyberway::chaindb::ordered_unique<tag<by_id>,
+            BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_history_object::id_type, id)>,
+        cyberway::chaindb::ordered_unique<tag<by_pub_key>,
+            cyberway::chaindb::composite_key< public_key_history_object,
+                BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_type, public_key),
+                BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_history_object::id_type, id)
+            >
+        >,
+        ordered_unique<tag<by_account_permission>,
+            composite_key< public_key_history_object,
+                BOOST_MULTI_INDEX_MEMBER(public_key_history_object, account_name, name),
+                BOOST_MULTI_INDEX_MEMBER(public_key_history_object, permission_name, permission),
+                BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_history_object::id_type, id)
+            >
+        >
+    >
 >;
-
-typedef chainbase::generic_index<public_key_history_multi_index> public_key_history_index;
-
 }
 
-CHAINBASE_SET_INDEX_TYPE( eosio::public_key_history_object, eosio::public_key_history_multi_index )
+CHAINDB_SET_TABLE_TYPE( eosio::public_key_history_object, eosio::public_key_history_table )
+CHAINDB_TAG(eosio::public_key_history_object, pybkeyhist)
 
 FC_REFLECT( eosio::public_key_history_object, (public_key)(name)(permission) )
 

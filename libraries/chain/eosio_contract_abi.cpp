@@ -737,4 +737,38 @@ abi_def domain_contract_abi(abi_def abi) {
     return abi;
 }
 
+abi_def history_contract_abi(abi_def abi) {
+    set_common_defs(abi);
+    abi.structs.emplace_back(struct_def {"pybkeyhist", "", {
+        {"public_key", "name"},
+        {"name",       "account_name"},
+        {"permission", "permission_name"}}
+    });
+    abi.structs.emplace_back(struct_def {"acchistory", "", {
+        {"account", "account_name"},
+        {"action_sequence_num", "uint64"},
+        {"account_sequence_num",    "int32"}}
+    });
+    abi.structs.emplace_back(struct_def {"acthistory", "", {
+        {"action_sequence_num", "uint64"},
+        {"packed_action_trace", "string"},
+        {"block_num", "int32"},
+        {"block_time", "block_timestamp_type"},
+        {"trx_id", "transaction_id_type"}}
+    });
+    abi.structs.emplace_back(struct_def {"ctrlhistory", "", {
+        {"controlled_account",    "account_name"},
+        {"controlled_permission", "permission_name"},
+        {"controlling_account",   "account_name"}}
+    });
+
+
+    abi.actions.push_back(action_def{name("pybkeyhist"), "pybkeyhist"});
+    abi.actions.push_back(action_def{name("acchistory"), "acchistory"});
+    abi.actions.push_back(action_def{name("acthistory"), "acthistory"});
+    abi.actions.push_back(action_def{name("ctrlhistory"), "ctrlhistory"});
+
+    return abi;
+}
+
 } } /// eosio::chain
