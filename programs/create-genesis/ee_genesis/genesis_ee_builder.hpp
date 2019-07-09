@@ -1,5 +1,6 @@
 #pragma once
 #include "golos_dump_container.hpp"
+#include "golos_operations.hpp"
 #include "event_engine_genesis.hpp"
 #include "map_objects.hpp"
 #include "../genesis_create.hpp"
@@ -42,6 +43,7 @@ private:
 
     void build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created);
     void build_reblogs(std::vector<reblog_info>& reblogs, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs);
+    comment_operation get_comment(const comment_header& comment);
     void write_messages();
     void write_transfers();
     void write_withdraws();

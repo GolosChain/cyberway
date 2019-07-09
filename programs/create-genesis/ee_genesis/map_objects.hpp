@@ -8,6 +8,7 @@
 #include <boost/multi_index/composite_key.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <chainbase/chainbase.hpp>
+#include <boost/interprocess/containers/vector.hpp>
 
 namespace cyberway { namespace genesis { namespace ee {
 
@@ -26,14 +27,15 @@ enum object_type
 
 struct comment_header : public chainbase::object<comment_header_object_type, comment_header> {
     template<typename Constructor, typename Allocator>
-    comment_header(Constructor &&c, chainbase::allocator<Allocator> a) {
+    comment_header(Constructor &&c, chainbase::allocator<Allocator> a) : offsets(a) {
+        offsets.reserve(30);
         c(*this);
     }
 
     id_type id;
     uint64_t hash;
     uint64_t parent_hash;
-    uint64_t offset;
+    boost::interprocess::vector<uint64_t, chainbase::allocator<uint64_t>> offsets;
     operation_number create_op;
     operation_number last_delete_op;
     fc::time_point_sec created;
