@@ -377,27 +377,29 @@ namespace cyberway { namespace chaindb {
 
             paths.clear();
             indexes.clear();
+
+            auto pk_order = find_pk_order(*ttr->second);
             for (auto& index: ttr->second->indexes) {
                 indexes.emplace(index.name, &index);
                 path.clear();
                 for (auto& order: index.orders) {
-                    path.append(":").append(order.field);
+                    path.append(":").append(order.order).append("+").append(order.field);
                 }
                 if (!index.unique) {
-                    path.append(":").append(ttr->second->indexes.front().orders.front().field);
+                    path.append(":").append(names::asc_order).append("+").append(pk_order->field);
                 }
                 paths.insert(path);
             }
             CYBERWAY_ASSERT(ttr->second->indexes.size() == indexes.size() && indexes.size() == paths.size(),
-                unique_index_name_exception,
-                "The account '${table} should has unique indexes", ("table", get_full_table_name(table)));
+                unique_index_name_exception, "The table '${table}' has indices with the same field list",
+                ("table", get_full_table_name(table)));
 
             for (auto& db_index: db_table.indexes) {
                 auto itr   = indexes.find(db_index.name);
                 auto index = _detail::generate_index_info(*this, db_table, db_index);
                 if (indexes.end() == itr || !itr->second || !_detail::is_equal_index(*itr->second, db_index)) {
                     CYBERWAY_ASSERT(db_table.row_count == 0, table_has_rows_exception,
-                        "Can't drop the index '${index}', because the table '${table}' has ${row_cnt} rows",
+                        "Can't drop index '${index}', because the table '${table}' has ${row_cnt} rows",
                         ("index", get_full_index_name(table, db_index))
                         ("table", get_full_table_name(table))("row_cnt", db_table.row_count));
                     drop_indexes.emplace_back(std::move(index));
