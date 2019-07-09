@@ -380,7 +380,12 @@ namespace cyberway { namespace chaindb {
             for (auto& index: ttr->second->indexes) {
                 indexes.emplace(index.name, &index);
                 path.clear();
-                for (auto& order: index.orders) path.append(":").append(order.field);
+                for (auto& order: index.orders) {
+                    path.append(":").append(order.field);
+                }
+                if (!index.unique) {
+                    path.append(":").append(ttr->second->indexes.front().orders.front().field);
+                }
                 paths.insert(path);
             }
             CYBERWAY_ASSERT(ttr->second->indexes.size() == indexes.size() && indexes.size() == paths.size(),
