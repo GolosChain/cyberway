@@ -1,19 +1,23 @@
 #include "genesis_ee_builder.hpp"
-#include "golos_operations.hpp"
+#include "diff_match_patch.h"
+#include <boost/locale/encoding_utf.hpp>
+#include <fc/utf8.hpp>
 #include "../config.hpp"
 #include "../genesis_generate_name.hpp"
+
+using boost::locale::conv::utf_to_utf;
 
 #define MEGABYTE 1024*1024
 
 // Comments:
-// 8000000 * 192 = 1.6 GB
+// 8000000 * 480 = 4.0 GB
 // +
 // 8000000 * 144 * 5 (votes on comment) = 6.0 GB
 // +
 // 1000000 * 128 (reblogs on comment) = 0.2 GB
 // Follows:
 // 2300000 * 160 = 0.4 GB
-#define MAP_FILE_SIZE uint64_t(22*1024)*MEGABYTE
+#define MAP_FILE_SIZE uint64_t(25*1024)*MEGABYTE
 
 namespace cyberway { namespace genesis { namespace ee {
 
@@ -62,6 +66,14 @@ bool genesis_ee_builder::read_operation(bfs::ifstream& in, Operation& op) {
         return false;
     }
     return true;
+}
+
+std::wstring utf8_to_wstring(const std::string& str) {
+    return utf_to_utf<wchar_t>(str.c_str(), str.c_str() + str.size());
+}
+
+std::string wstring_to_utf8(const std::wstring& str) {
+    return utf_to_utf<char>(str.c_str(), str.c_str() + str.size());
 }
 
 void genesis_ee_builder::process_delete_comments() {
@@ -120,9 +132,22 @@ void genesis_ee_builder::process_comments() {
                 continue;
             }
 
+            bool patch = false;
+            if (op.body.size()) {
+                try {
+                    if (diff_match_patch<std::wstring>().patch_fromText(utf8_to_wstring(op.body)).size()) {
+                        patch = true;
+                    }
+                } catch (...) {
+                }
+            }
+
             maps_.modify(*comment, [&](auto& c) {
                 c.parent_hash = parent_hash;
-                c.offset = op.offset;
+                if (!patch) {
+                    c.offsets.clear();
+                }
+                c.offsets.emplace_back(op.offset);
                 c.create_op = op.num;
                 if (c.created == fc::time_point_sec::min()) {
                     c.created = op.timestamp;
@@ -134,7 +159,7 @@ void genesis_ee_builder::process_comments() {
         maps_.create<comment_header>([&](auto& c) {
             c.hash = op.hash;
             c.parent_hash = parent_hash;
-            c.offset = op.offset;
+            c.offsets.emplace_back(op.offset);
             c.create_op = op.num;
             c.created = op.timestamp;
         });
@@ -449,6 +474,32 @@ void genesis_ee_builder::build_reblogs(std::vector<reblog_info>& reblogs, uint64
     }
 }
 
+comment_operation genesis_ee_builder::get_comment(const comment_header& comment) {
+    comment_operation op;
+    std::string body;
+
+    dump_comments.seekg(comment.offsets[0]);
+    read_operation(dump_comments, op);
+    body = op.body;
+
+    for (auto i = 1; i < comment.offsets.size(); ++i) {
+        dump_comments.seekg(comment.offsets[i]);
+        read_operation(dump_comments, op);
+
+        diff_match_patch<std::wstring> dmp;
+        auto patch = dmp.patch_fromText(utf8_to_wstring(op.body));
+        auto patched_body = wstring_to_utf8(dmp.patch_apply(patch, utf8_to_wstring(body)).first);
+        if (!fc::is_utf8(patched_body)) {
+            body = fc::prune_invalid_utf8(patched_body);
+        } else {
+            body = patched_body;
+        }
+    }
+
+    op.body = body;
+    return op;
+}
+
 void genesis_ee_builder::write_messages() {
     if (!dump_comments.is_open()) {
         return;
@@ -466,10 +517,7 @@ void genesis_ee_builder::write_messages() {
         auto comment_itr = comment_idx.lower_bound(parent_hash);
         for (; comment_itr != comment_idx.end() && comment_itr->parent_hash == parent_hash; ++comment_itr) {
             auto& comment = *comment_itr;
-
-            dump_comments.seekg(comment.offset);
-            comment_operation op;
-            read_operation(dump_comments, op);
+            comment_operation op = get_comment(comment);
 
             out.emplace<comment_info>([&](auto& c) {
                 c.parent_author = generate_name(op.parent_author);
