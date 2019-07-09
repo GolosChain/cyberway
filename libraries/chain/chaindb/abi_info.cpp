@@ -43,7 +43,7 @@ namespace cyberway { namespace chaindb {
             fields.reserve(index.orders.size());
             for (auto& order: index.orders) fields.emplace(order.field);
             CYBERWAY_ASSERT(fields.size() == index.orders.size(), unique_field_name_exception,
-                "The index '${index}' should has unique field names",
+                "Index '${index}' has duplicates of fields",
                 ("index", get_full_index_name(abi.code(), table, index)));
         }
 
@@ -131,9 +131,9 @@ namespace cyberway { namespace chaindb {
             auto struct_name = get_root_index_name(table, index);
 
             CYBERWAY_ASSERT(!index.orders.empty(), invalid_index_description_exception,
-                "The index ${index} should have fields", ("index", struct_name));
+                "Index ${index} doesn't have fields", ("index", struct_name));
             CYBERWAY_ASSERT(index.orders.size() <= abi_info::MaxFieldCnt, invalid_index_description_exception,
-                "The index ${index} has too many fields ${orders} > ${max}",
+                "Index ${index} has too many fields ${orders} (> maximum = ${max})",
                 ("index", struct_name)("orders", index.orders.size())("max", int(abi_info::MaxFieldCnt)));
 
             auto max_size = index.orders.size() * abi_info::MaxPathDepth;
@@ -149,14 +149,14 @@ namespace cyberway { namespace chaindb {
             for (auto& order: index.orders) {
                 CYBERWAY_ASSERT(order.order == names::asc_order || order.order == names::desc_order,
                     invalid_index_description_exception,
-                    "Invalid type '${type}' for the index order for the index ${index}",
+                    "Invalid type '${type}' for index order for the index ${index}",
                     ("type", order.order)("index", root_struct.name));
 
                 boost::split(order.path, order.field, [](char c){return c == '.';});
                 CYBERWAY_ASSERT(!order.path.empty(), invalid_index_description_exception,
-                    "Path for index doesn't have any part in the index ${index}", ("index", root_struct.name));
+                    "Path in the index ${index} doesn't have any part ", ("index", root_struct.name));
                 CYBERWAY_ASSERT(order.path.size() <= abi_info::MaxPathDepth, invalid_index_description_exception,
-                    "Path for index is too long in the index ${index}", ("index", root_struct.name));
+                    "Path in the index ${index} is too long", ("index", root_struct.name));
 
                 auto dst_struct = &root_struct;
                 auto src_struct = &table_struct;
@@ -166,7 +166,7 @@ namespace cyberway { namespace chaindb {
                     for (auto& src_field: src_struct->fields) {
                         if (src_field.name != key) continue;
                         CYBERWAY_ASSERT(!serializer_.is_array(src_field.type), array_field_exception,
-                            "The field ${path} can't be used for the index ${index}",
+                            "Field ${path} can't be used for the index ${index}",
                             ("path", order.field)("index", root_struct.name));
 
                         was_key = true;
@@ -211,7 +211,7 @@ namespace cyberway { namespace chaindb {
 
         void validate_pk_index(const table_def& table) const {
             CYBERWAY_ASSERT(!table.indexes.empty(), invalid_primary_key_exception,
-                "The table ${table} must contain at least one index", ("table", get_table_name(table)));
+                "Table ${table} must contain at least one index", ("table", get_table_name(table)));
 
             auto& p = table.indexes.front();
             CYBERWAY_ASSERT(p.unique && p.orders.size() == 1, invalid_primary_key_exception,
@@ -222,7 +222,7 @@ namespace cyberway { namespace chaindb {
             CYBERWAY_ASSERT(
                 primary_key::is_valid_kind(k.type),
                 invalid_primary_key_exception,
-                "The field ${field} of the table ${table} is declared as primary and it should has type: "
+                "Field ${field} of table ${table} is declared as primary and it should has type: "
                 "int64, uint64, name, symbol_code or symbol",
                 ("field", k.field)("table", get_table_name(table)));
 
@@ -257,14 +257,14 @@ namespace cyberway { namespace chaindb {
         serializer_.set_abi(def, max_abi_time_);
 
         CYBERWAY_ASSERT(def.tables.size() <= MaxTableCnt, max_table_count_exception,
-            "The account '${code}' can't create more than ${max} tables",
+            "Account '${code}' can't create more than ${max} tables",
             ("code", get_code_name(code_))("max", size_t(MaxTableCnt)));
 
 
         table_map_.reserve(def.tables.size());
         for (auto& table: def.tables) {
             CYBERWAY_ASSERT(table.indexes.size() <= MaxIndexCnt, max_index_count_exception,
-                "The table '${table}' can't has more than ${max} indexes",
+                "Table '${table}' can't has more than ${max} indicies",
                 ("table", get_full_table_name(code_, table))("max", size_t(MaxIndexCnt)));
             auto id = table.name;
             table_map_.emplace(id, std::move(table));
@@ -291,7 +291,7 @@ namespace cyberway { namespace chaindb {
 //                ("value_type", value_type)("type", db_type())("value", value));
 
         CYBERWAY_ASSERT(value.is_object(), invalid_abi_store_type_exception,
-            "ABI serializer returns bad type for the ${value_type} for ${type}: ${value}",
+            "ABI serializer returns bad type for ${value_type} for '${type}': ${value}",
             ("value_type", value_type)("type", db_type())("value", value));
 
         return value;
@@ -305,7 +305,7 @@ namespace cyberway { namespace chaindb {
 //                ("value", value_type)("type", db_type())("value", value));
 
         CYBERWAY_ASSERT(value.is_object(), invalid_abi_store_type_exception,
-            "ABI serializer receive wrong type for the ${value_type} for '${type}': ${value}",
+            "ABI serializer receive wrong type for ${value_type} for '${type}': ${value}",
             ("value_type", value_type)("type", db_type())("value", value));
 
         return serializer_.variant_to_binary(type, value, max_abi_time_);
@@ -368,7 +368,7 @@ namespace cyberway { namespace chaindb {
             auto table = _detail::generate_table_info(*this, db_table);
             if (tables.end() == ttr || !ttr->second) {
                 CYBERWAY_ASSERT(db_table.row_count == 0, table_has_rows_exception,
-                    "Can't drop the table '${table}', because it has ${row_cnt} rows",
+                    "Can't drop table '${table}', because it has ${row_cnt} rows",
                     ("table", get_full_table_name(table))("row_cnt", db_table.row_count));
 
                 drop_tables.emplace_back(std::move(table));
@@ -410,7 +410,7 @@ namespace cyberway { namespace chaindb {
 
             for (auto& index: indexes) if (index.second) {
                 CYBERWAY_ASSERT(db_table.row_count == 0, table_has_rows_exception,
-                    "Can't create the index '${index}', because the table '${table}' has ${row_cnt} rows",
+                    "Can't create index '${index}', because the table '${table}' has ${row_cnt} rows",
                     ("index", get_full_index_name(table, index.second))
                     ("table", get_full_table_name(table))("row_cnt", db_table.row_count));
                 _detail::validate_unique_field_names(*this, *ttr->second, *index.second);
