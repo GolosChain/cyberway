@@ -215,7 +215,7 @@ namespace eosio {
             auto& chain = chain_plug->chain();
             auto& chaindb = chain.chaindb();
 
-//            const auto& idx = chaindb.get_index<account_history_table, by_account_action_seq>();
+            const auto& idx = chaindb.get_index<account_history_table, by_account_action_seq>();
 //            auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
 
 //            uint64_t asn = 0;
