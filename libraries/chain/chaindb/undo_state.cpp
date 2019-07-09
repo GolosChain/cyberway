@@ -6,6 +6,7 @@
 #include <cyberway/chaindb/table_object.hpp>
 #include <cyberway/chaindb/journal.hpp>
 #include <cyberway/chaindb/value_verifier.hpp>
+
 #include <eosio/chain/config.hpp>
 
 /** Session exception is a critical errors and they doesn't handle by chain */
@@ -15,6 +16,12 @@
             elog(FORMAT, __VA_ARGS__);                                  \
             FC_THROW_EXCEPTION(session_exception, FORMAT, __VA_ARGS__); \
         }                                                               \
+    FC_MULTILINE_MACRO_END
+
+#define CYBERWAY_SESSION_THROW(FORMAT, ...)                             \
+    FC_MULTILINE_MACRO_BEGIN                                            \
+        elog(FORMAT, __VA_ARGS__);                                      \
+        FC_THROW_EXCEPTION(session_exception, FORMAT, __VA_ARGS__);     \
     FC_MULTILINE_MACRO_END
 
 namespace cyberway { namespace chaindb {
@@ -121,8 +128,7 @@ namespace cyberway { namespace chaindb {
                     break;
             }
 
-            CYBERWAY_SESSION_ASSERT(false,
-                "Wrong stage ${stage} of the table ${table} on getting of a head.",
+            CYBERWAY_SESSION_THROW("Wrong stage ${stage} of the table ${table} on getting of a head.",
                 ("table", get_full_table_name())("stage", stage_));
         }
 
@@ -131,8 +137,7 @@ namespace cyberway { namespace chaindb {
                 return stack_.front();
             }
 
-            CYBERWAY_SESSION_ASSERT(false,
-                "Wrong stage ${stage} of the table ${table} on getting of a tail.",
+            CYBERWAY_SESSION_THROW("Wrong stage ${stage} of the table ${table} on getting of a tail.",
                 ("table", get_full_table_name())("stage", stage_));
         }
 
@@ -152,8 +157,7 @@ namespace cyberway { namespace chaindb {
                     return stack_.back();
             }
 
-            CYBERWAY_SESSION_ASSERT(false,
-                "Wrong stage ${stage} of the table ${table} on getting of a previous state.",
+            CYBERWAY_SESSION_THROW("Wrong stage ${stage} of the table ${table} on getting of a previous state.",
                 ("table", get_full_table_name())("stage", stage_));
         }
 
@@ -172,8 +176,7 @@ namespace cyberway { namespace chaindb {
                 }
             }
 
-            CYBERWAY_SESSION_ASSERT(false,
-                "Wrong stage ${stage} of the table ${table} on squashing of changes.",
+            CYBERWAY_SESSION_THROW("Wrong stage ${stage} of the table ${table} on squashing of changes.",
                 ("table", get_full_table_name())("stage", stage_));
         }
 
@@ -192,8 +195,7 @@ namespace cyberway { namespace chaindb {
                 }
             }
 
-            CYBERWAY_SESSION_ASSERT(false,
-                "Wrong stage ${stage} of the table ${table} on undoing of changes.",
+            CYBERWAY_SESSION_THROW("Wrong stage ${stage} of the table ${table} on undoing of changes.",
                 ("table", get_full_table_name())("stage", stage_));
         }
 
@@ -205,8 +207,7 @@ namespace cyberway { namespace chaindb {
                     stage_ = undo_stage::Unknown;
                 }
             } else {
-                CYBERWAY_SESSION_ASSERT(false,
-                    "Wrong stage ${stage} of the table ${table} on committing of changes.",
+                CYBERWAY_SESSION_THROW("Wrong stage ${stage} of the table ${table} on committing of changes.",
                     ("table", get_full_table_name())("stage", stage_));
             }
         }
@@ -457,8 +458,22 @@ namespace cyberway { namespace chaindb {
             auto& cursor = driver_.lower_bound(index, {});
             for (; cursor.pk != primary_key::End; driver_.next(cursor)) {
                 auto obj = driver_.object_at_cursor(cursor, false);
-                if (obj.service.code != 0 || obj.service.table != account_table) {
+                if (!is_system_code(obj.service.code) || obj.service.table != account_table) {
                     continue;
+                }
+
+                switch (obj.service.undo_rec) {
+                    case undo_record::NextPk:
+                    case undo_record::NewValue:
+                        continue;
+
+                    case undo_record::OldValue:
+                    case undo_record::RemovedValue:
+                        break;
+
+                    case undo_record::Unknown:
+                    default:
+                        CYBERWAY_SESSION_THROW("Unknown undo state on loading from DB");
                 }
 
                 auto& abi = obj.value["abi"];
@@ -537,7 +552,7 @@ namespace cyberway { namespace chaindb {
 
                     case undo_record::Unknown:
                     default:
-                        CYBERWAY_SESSION_ASSERT(false, "Unknown undo state on loading from DB");
+                        CYBERWAY_SESSION_THROW("Unknown undo state on loading from DB");
                 }
             }
             driver_.close({cursor.index.code, cursor.id});
@@ -548,7 +563,7 @@ namespace cyberway { namespace chaindb {
         } catch (const session_exception&) {
             throw;
         } catch (const std::exception& e) {
-            CYBERWAY_SESSION_ASSERT(false, e.what());
+            CYBERWAY_SESSION_THROW(e.what());
         }
 
     private:
