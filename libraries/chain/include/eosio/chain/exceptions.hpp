@@ -251,7 +251,7 @@ namespace eosio { namespace chain {
                                  3060100, "Guard Exception" )
 
       FC_DECLARE_DERIVED_EXCEPTION( database_guard_exception, guard_exception,
-                                    3060101, "Database usage is at unsafe levels" )
+                                    3060101, "Database is unavailable" )
       FC_DECLARE_DERIVED_EXCEPTION( reversible_guard_exception, guard_exception,
                                     3060102, "Reversible block log usage is at unsafe levels" )
 

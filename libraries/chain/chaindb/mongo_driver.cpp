@@ -131,11 +131,13 @@ namespace cyberway { namespace chaindb {
                 lambda();
                 return;
             } catch (const mongocxx::exception& e) {
-                if (_detail::get_mongo_code(e) == mongo_code::NoServer) {
-                    continue; // try again
-                }
+                elog("MongoDB error on reconnect: ${code}, ${what}", ("code", e.code().value())("what", e.what()));
 
-                throw;
+                CYBERWAY_ASSERT(_detail::get_mongo_code(e) == mongo_code::NoServer,
+                    driver_open_exception, "MongoDB driver error: ${code}, ${what}",
+                    ("code", e.code().value())("what", e.what()));
+
+                continue; // try again
             }
 
             CYBERWAY_THROW(driver_open_exception, "Fail to connect to MongoDB server");
@@ -385,9 +387,16 @@ namespace cyberway { namespace chaindb {
             lazy_open();
 
             for ( ; !is_end(); ) {
-                ++source_->begin();
-                try_to_init_pk_value();
+                try {
+                    ++source_->begin();
+                } catch (const mongocxx::exception& e) {
+                    elog("MongoDB error on iterate to next object: ${code}, ${what}",
+                        ("code", e.code().value())("what", e.what()));
+                    CYBERWAY_THROW(driver_open_exception, "MongoDB error on iterate to next object: ${code}, ${what}",
+                        ("code", e.code().value())("what", e.what()));
+                }
 
+                try_to_init_pk_value();
                 if (!skipped_pk_tree_.count(pk)) {
                     break;
                 }
@@ -965,15 +974,18 @@ namespace cyberway { namespace chaindb {
             void execute_bulk(bulk_info_t_& info) {
                 if (!info.op_cnt) return;
 
-                _detail::auto_reconnect([&]() { try {
+                // no reasons to do reconnect, exception can happen after writing and it will fail whole writing-process
+                try {
                     info.bulk.execute();
                 } catch (const mongocxx::bulk_write_exception& e) {
+                    elog("MongoDB error on bulk write: ${code}, ${what}", ("code", e.code().value())("what", e.what()));
+
+                    CYBERWAY_ASSERT(_detail::get_mongo_code(e) == mongo_code::DuplicateValue,
+                        driver_open_exception, "MongoDB driver error: ${code}, ${what}",
+                        ("code", e.code().value())("what", e.what()));
+
                     error_ = e.what();
-                    elog("Error on bulk write: ${code}, ${what}", ("what", error_)("code", e.code().value()));
-                    if (_detail::get_mongo_code(e) != mongo_code::DuplicateValue) {
-                        throw; // this shouldn't happen
-                    }
-                }});
+                }
             }
         }; // class write_ctx_t_
 

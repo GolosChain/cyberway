@@ -88,8 +88,7 @@ namespace cyberway { namespace chaindb {
         FC_DECLARE_DERIVED_EXCEPTION(driver_duplicate_exception, chaindb_internal_exception,
                                      3710014, "ChainDB driver duplicate unique records")
 
-        FC_DECLARE_DERIVED_EXCEPTION(driver_open_exception, chaindb_internal_exception,
-                                     3710015, "ChainDB driver fail to open database")
+        using driver_open_exception = eosio::chain::database_guard_exception;
 
         FC_DECLARE_DERIVED_EXCEPTION(driver_opened_cursors_exception, chaindb_internal_exception,
                                      3710016, "ChainDB driver has opened cursors")
