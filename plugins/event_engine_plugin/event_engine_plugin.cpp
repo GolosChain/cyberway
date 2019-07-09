@@ -69,7 +69,7 @@ private:
     }
 
     void send_genesis_message(const chain::name code, const chain::name name, const fc::variant& data) {
-        GenesisDataMessage msg(BaseMessage::GenesisData, genesis_msg_id++, code, name, data);
+        GenesisDataMessage msg(MsgChannel::Genesis, BaseMessage::GenesisData, genesis_msg_id++, code, name, data);
         send_message(msg);
     }
 
@@ -168,21 +168,21 @@ event_engine_plugin_impl::~event_engine_plugin_impl() {
 void event_engine_plugin_impl::accepted_block( const chain::block_state_ptr& state) {
     ilog("Accepted block: ${block_num}", ("block_num", state->block_num));
 
-    AcceptedBlockMessage msg(BlockMessage::AcceptBlock, state);
+    AcceptedBlockMessage msg(MsgChannel::Blocks, BlockMessage::AcceptBlock, state);
     send_message(msg);
 }
 
 void event_engine_plugin_impl::irreversible_block(const chain::block_state_ptr& state) {
     ilog("Irreversible block: ${block_num}", ("block_num", state->block_num));
 
-    BlockMessage msg(BlockMessage::CommitBlock, state);
+    BlockMessage msg(MsgChannel::Blocks, BlockMessage::CommitBlock, state);
     send_message(msg);
 }
 
 void event_engine_plugin_impl::accepted_transaction(const chain::transaction_metadata_ptr& trx_meta) {
     ilog("Accepted trx: ${id}, ${signed_id}", ("id", trx_meta->id)("signed_id", trx_meta->signed_id));
 
-    AcceptTrxMessage msg(BaseMessage::AcceptTrx, trx_meta);
+    AcceptTrxMessage msg(MsgChannel::Blocks, BaseMessage::AcceptTrx, trx_meta);
     send_message(msg);
 }
 
@@ -268,7 +268,7 @@ void event_engine_plugin_impl::applied_transaction(const chain::transaction_trac
         }
     };
 
-    ApplyTrxMessage msg(BaseMessage::ApplyTrx, trx_trace);
+    ApplyTrxMessage msg(MsgChannel::Blocks, BaseMessage::ApplyTrx, trx_trace);
     for(auto &trace: trx_trace->action_traces) {
         process_action_trace(msg, trace);
     }
