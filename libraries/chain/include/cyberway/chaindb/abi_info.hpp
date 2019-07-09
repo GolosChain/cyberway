@@ -73,9 +73,12 @@ namespace cyberway { namespace chaindb {
         }
 
         enum : size_t {
-            MaxTableCnt  = 64,
-            MaxIndexCnt  = 16,
-            MaxPathDepth = 4,
+            MaxTableCnt   = 64,
+            MaxIndexCnt   = 16,
+            MaxPathDepth  = 4,
+            MaxFieldCnt   = 16,
+            MaxIndexSize  = 1024,
+            MaxObjectSize = 1024 * 1024
         }; // constants
 
     private:

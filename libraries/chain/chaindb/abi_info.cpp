@@ -132,6 +132,9 @@ namespace cyberway { namespace chaindb {
 
             CYBERWAY_ASSERT(!index.orders.empty(), invalid_index_description_exception,
                 "The index ${index} should have fields", ("index", struct_name));
+            CYBERWAY_ASSERT(index.orders.size() <= abi_info::MaxFieldCnt, invalid_index_description_exception,
+                "The index ${index} has too many fields ${orders} > ${max}",
+                ("index", struct_name)("orders", index.orders.size())("max", int(abi_info::MaxFieldCnt)));
 
             auto max_size = index.orders.size() * abi_info::MaxPathDepth;
             _detail::struct_def_map_type dst_struct_map;
@@ -174,8 +177,11 @@ namespace cyberway { namespace chaindb {
                             order.type = field.type;
                             dst_struct->fields.emplace_back(std::move(field));
 
-                            auto index_cnt_res = table.field_index_map.emplace(order.field, 0);
-                            index_cnt_res.first->second++;
+                            auto index_cnt_res = table.field_indexes.emplace(order.field, eosio::chain::index_names());
+                            index_cnt_res.first->second.push_back(index.name);
+                            CYBERWAY_ASSERT(index_cnt_res.first->second.size() <= table.indexes.size(),
+                                invalid_index_description_exception, "Wrong description of the index ${index}",
+                                ("index", root_struct.name));
                         } else {
                             src_struct = &get_struct(src_field.type);
                             struct_name.append(1, ':').append(key);

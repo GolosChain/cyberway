@@ -174,4 +174,10 @@ namespace cyberway { namespace chaindb {
         FC_DECLARE_DERIVED_EXCEPTION(object_exception, chaindb_object_exception,
                                      3740003, "Object has reserved field name")
 
+        FC_DECLARE_DERIVED_EXCEPTION(index_size_exception, chaindb_object_exception,
+                                     3740004, "Object index size overflow")
+
+        FC_DECLARE_DERIVED_EXCEPTION(object_size_exception, chaindb_object_exception,
+                                     3740005, "Object size overflow")
+
 } } // namespace cyberway::chaindb
