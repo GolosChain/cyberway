@@ -128,14 +128,20 @@ namespace cyberway { namespace chaindb {
         }
 
         void build_index(table_def& table, index_def& index, const struct_def& table_struct) {
+            auto struct_name = get_root_index_name(table, index);
+
+            CYBERWAY_ASSERT(!index.orders.empty(), invalid_index_description_exception,
+                "The index ${index} should have fields", ("index", struct_name));
+
+            auto max_size = index.orders.size() * abi_info::MaxPathDepth;
             _detail::struct_def_map_type dst_struct_map;
             std::vector<struct_def*> dst_structs;
 
-            auto max_size = index.orders.size() * abi_info::MaxPathDepth;
             dst_struct_map.reserve(max_size);
             dst_structs.reserve(max_size);
-            auto struct_name = get_root_index_name(table, index);
+
             auto& root_struct = dst_struct_map.emplace(struct_name, struct_def(struct_name, "", {})).first->second;
+
             dst_structs.push_back(&root_struct);
             for (auto& order: index.orders) {
                 CYBERWAY_ASSERT(order.order == names::asc_order || order.order == names::desc_order,
@@ -144,6 +150,8 @@ namespace cyberway { namespace chaindb {
                     ("type", order.order)("index", root_struct.name));
 
                 boost::split(order.path, order.field, [](char c){return c == '.';});
+                CYBERWAY_ASSERT(!order.path.empty(), invalid_index_description_exception,
+                    "Path for index doesn't have any part in the index ${index}", ("index", root_struct.name));
                 CYBERWAY_ASSERT(order.path.size() <= abi_info::MaxPathDepth, invalid_index_description_exception,
                     "Path for index is too long in the index ${index}", ("index", root_struct.name));
 
