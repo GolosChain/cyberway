@@ -69,7 +69,7 @@ namespace cyberway { namespace chaindb {
         cache_cell::cache_cell_kind kind() const;
     }; // struct cache_object_state
 
-    struct cache_object final: public boost::intrusive_ref_counter<cache_object> {
+    struct cache_object final: public boost::intrusive_ref_counter<cache_object, boost::thread_unsafe_counter> {
         enum stage_kind {
             Released,
             Active,

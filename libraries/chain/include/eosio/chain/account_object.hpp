@@ -31,14 +31,14 @@ namespace eosio { namespace chain {
 
       void set_abi( bytes a ) {
          abi = std::move(a);
-         abi_info_.reset();
+         abi_info_ptr_.reset();
       }
 
       void set_abi( const eosio::chain::abi_def& a ) {
          abi.resize( fc::raw::pack_size( a ) );
          fc::datastream<char*> ds( const_cast<char*>(abi.data()), abi.size() );
          fc::raw::pack( ds, a );
-         abi_info_.reset();
+         abi_info_ptr_.reset();
       }
 
       eosio::chain::abi_def get_abi()const {
@@ -50,11 +50,10 @@ namespace eosio { namespace chain {
          return a;
       }
 
-      void generate_abi_info();
-      const cyberway::chaindb::abi_info& get_abi_info() const;
+      cyberway::chaindb::abi_info_ptr generate_abi_info();
 
    private:
-      std::unique_ptr<cyberway::chaindb::abi_info> abi_info_;
+      cyberway::chaindb::abi_info_ptr abi_info_ptr_;
    };
 
    struct by_name;

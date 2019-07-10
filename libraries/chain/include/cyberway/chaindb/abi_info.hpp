@@ -8,12 +8,17 @@
 #include <cyberway/chaindb/exception.hpp>
 #include <cyberway/chaindb/names.hpp>
 
+#include <boost/smart_ptr/intrusive_ref_counter.hpp>
+
 namespace cyberway { namespace chaindb {
 
     using eosio::chain::abi_def;
     using eosio::chain::abi_serializer;
 
-    struct abi_info final {
+    struct abi_info;
+    using  abi_info_ptr = boost::intrusive_ptr<abi_info>;
+
+    struct abi_info final: public boost::intrusive_ref_counter<abi_info, boost::thread_unsafe_counter> {
         abi_info() = default;
         abi_info(const account_name& code, abi_def);
         abi_info(const account_name& code, blob);
@@ -58,10 +63,11 @@ namespace cyberway { namespace chaindb {
         }
 
         const order_def* find_pk_order(const table_def& table) const {
-            if (!table.indexes.empty()) {
-                return &table.indexes.front().orders.front();
-            }
-            return nullptr;
+            assert(!table.indexes.empty());
+            assert(!table.indexes.front().orders.empty());
+            assert(table.indexes.front().unique);
+
+            return &table.indexes.front().orders.front();
         }
 
         const account_name& code() const {
@@ -77,7 +83,7 @@ namespace cyberway { namespace chaindb {
             MaxIndexCnt   = 16,
             MaxPathDepth  = 4,
             MaxFieldCnt   = 16,
-            MaxIndexSize  = 1024,
+            MaxIndexSize  = 1024 - 64,
             MaxObjectSize = 1024 * 1024
         }; // constants
 
