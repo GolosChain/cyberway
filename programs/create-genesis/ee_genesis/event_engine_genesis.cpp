@@ -255,6 +255,12 @@ static abi_def create_funds_abi() {
         }
     });
 
+    abi.structs.emplace_back( struct_def {
+        "vesting_supply", "", {
+            {"supply", "asset"},
+        }
+    });
+
     return abi;
 }
 

@@ -69,6 +69,7 @@ struct export_info {
     fc::flat_map<acc_idx, mvo> witnesses;
     fc::flat_map<acc_idx, fc::flat_set<name>> witness_votes;
     std::vector<mvo> currency_stats;
+    mvo vesting_supply;
     std::vector<mvo> balance_events;
     std::vector<mvo> delegations;
     fc::flat_map<uint64_t, cyberway::golos::active_comment_data> active_comments;

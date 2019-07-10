@@ -717,10 +717,12 @@ struct genesis_create::genesis_create_impl final {
         // vesting info
         db.start_section(_info.golos.names.vesting, N(stat), "vesting_stats", 1);
         primary_key_t vests_pk = VESTS >> 8;
-        db.insert(vests_pk, _info.golos.names.vesting, mvo
-            ("supply", asset(data.total_gests.get_amount(), symbol(VESTS)))
+        auto vesting_stat = mvo
+            ("supply", asset(data.total_gests.get_amount(), symbol(VESTS)));
+        db.insert(vests_pk, _info.golos.names.vesting, vesting_stat
             ("notify_acc", _info.golos.names.control)
         );
+        _exp_info.vesting_supply = vesting_stat;
 
         // funds
         const auto n_acc_balances = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& a) {return a.sys_balance;}); //
