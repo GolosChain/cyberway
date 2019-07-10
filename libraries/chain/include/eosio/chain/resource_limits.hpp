@@ -80,6 +80,9 @@ namespace resource_limits {
 
          ratio get_resource_usage_by_account_cost_ratio(account_name account, resource_id res) const;
          ratio get_account_stake_ratio(fc::time_point pending_block_time, const account_name& account, bool update_state);
+         
+         uint64_t get_used_resources_cost(account_name account, const std::vector<ratio>& prices, uint64_t max_cost = UINT64_MAX) const;
+         uint64_t get_used_resources_cost(account_name account) const { return get_used_resources_cost(account, get_pricelist()); };
 
          uint64_t get_account_balance(fc::time_point pending_block_time, const account_name& account, const std::vector<ratio>& prices, bool update_state);
 

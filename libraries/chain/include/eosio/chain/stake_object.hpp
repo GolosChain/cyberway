@@ -9,6 +9,7 @@
 #include <eosio/chain/database_utils.hpp>
 #include <eosio/chain/block_timestamp.hpp>
 #include <eosio/chain/multi_index_includes.hpp>
+#include <eosio/chain/int_arithmetic.hpp>
 
 namespace eosio { namespace chain {
 
@@ -25,7 +26,25 @@ class stake_agent_object : public cyberway::chaindb::object<stake_agent_object_t
     int64_t own_share;
     int16_t fee;
     int64_t min_own_staked;
+    int64_t provided;
+    int64_t received;
     int64_t get_total_funds()const { return balance + proxied; };
+        
+    int64_t get_own_funds() const {
+        auto total_funds = get_total_funds();
+        EOS_ASSERT(total_funds >= 0, chain_exception, "SYSTEM: incorrect total_funds value");
+        EOS_ASSERT(own_share >= 0, chain_exception, "SYSTEM: incorrect own_share value");
+        EOS_ASSERT(shares_sum >= 0, chain_exception, "SYSTEM: incorrect shares_sum value");
+        EOS_ASSERT((total_funds == 0) == (shares_sum == 0), chain_exception, "SYSTEM: incorrect total_funds or shares_sum");
+        return total_funds ? int_arithmetic::safe_prop(total_funds, own_share, shares_sum) : 0;
+    }
+    
+    int64_t get_effective_stake() const {
+        auto own_funds = get_own_funds();
+        EOS_ASSERT(provided <= own_funds, chain_exception, "SYSTEM: incorrect provided or own_funds");
+        EOS_ASSERT(received >= 0, chain_exception, "SYSTEM: incorrect received");
+        return (own_funds - provided) + received;
+    }
     struct by_key {};
 };
 
@@ -131,8 +150,7 @@ class stake_param_object : public cyberway::chaindb::object<stake_param_object_t
     id_type id;
     symbol token_symbol;
     std::vector<uint8_t> max_proxies;
-    int64_t payout_step_length;
-    uint16_t payout_steps_num;
+    int64_t depriving_window;
     int64_t min_own_staked_for_election = 0;
 };
 
@@ -184,7 +202,7 @@ CHAINDB_TAG(eosio::chain::stake_stat_object, stake.stat)
 
 FC_REFLECT(eosio::chain::stake_agent_object, 
     (id)(token_code)(account)(proxy_level)(last_proxied_update)(balance)
-    (proxied)(shares_sum)(own_share)(fee)(min_own_staked))
+    (proxied)(shares_sum)(own_share)(fee)(min_own_staked)(provided)(received))
     
 FC_REFLECT(eosio::chain::stake_candidate_object, 
     (id)(token_code)(account)(latest_pick)(votes)(priority)(signing_key)(enabled))
@@ -193,7 +211,7 @@ FC_REFLECT(eosio::chain::stake_grant_object,
     (id)(token_code)(grantor_name)(agent_name)(pct)(share)(break_fee)(break_min_own_staked))
     
 FC_REFLECT(eosio::chain::stake_param_object, 
-    (id)(token_symbol)(max_proxies)(payout_step_length)(payout_steps_num)(min_own_staked_for_election))
+    (id)(token_symbol)(max_proxies)(depriving_window)(min_own_staked_for_election))
     
 FC_REFLECT(eosio::chain::stake_stat_object, 
     (id)(token_code)(total_staked)(total_votes)(last_reward)(enabled))

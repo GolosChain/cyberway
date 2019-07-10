@@ -144,6 +144,10 @@ class privileged_api : public context_aware_api {
           int64_t now = context.control.pending_block_time().sec_since_epoch();
           stake::recall_proxied(context.chaindb, context.get_storage_payer(), now, symbol_code{token_code_raw}, grantor_name, agent_name, pct);
       }
+      
+      uint64_t get_used_resources_cost(account_name account) {
+          return context.control.get_resource_limits_manager().get_used_resources_cost(account);
+      }
 
       int64_t set_proposed_producers( array_ptr<char> packed_producer_schedule, size_t datalen) {
          datastream<const char*> ds( packed_producer_schedule, datalen );
@@ -1758,6 +1762,7 @@ REGISTER_INTRINSICS(privileged_api,
    (activate_feature,                 void(int64_t)                         )
    (update_stake_proxied,             void(int64_t,int64_t,int)             )
    (recall_stake_proxied,             void(int64_t,int64_t,int64_t,int32_t) )
+   (get_used_resources_cost,          int64_t(int64_t)                      )
    (set_proposed_producers,           int64_t(int,int)                      )
    (get_blockchain_parameters_packed, int(int, int)                         )
    (set_blockchain_parameters_packed, void(int,int)                         )

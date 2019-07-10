@@ -484,7 +484,9 @@ abi_def eosio_contract_abi(abi_def eos_abi)
         {"shares_sum", "int64"},
         {"own_share",  "int64"},
         {"fee", "int16"},
-        {"min_own_staked", "int64"}}});
+        {"min_own_staked", "int64"},
+        {"provided", "int64"},
+        {"received", "int64"}}});
 
    eos_abi.tables.emplace_back( eosio::chain::table_def {
       cyberway::chaindb::tag<stake_agent_object>::get_code(), "stake_agent_object", {
@@ -539,8 +541,7 @@ abi_def eosio_contract_abi(abi_def eos_abi)
         {"id", "uint64"},
         {"token_symbol", "symbol"},
         {"max_proxies", "uint8[]"},
-        {"payout_step_length", "int64"},
-        {"payout_steps_num", "uint16"},
+        {"depriving_window", "int64"},
         {"min_own_staked_for_election", "int64"}}});
 
    eos_abi.tables.emplace_back( eosio::chain::table_def {

@@ -179,12 +179,10 @@ void resource_limits_manager::add_storage_usage(const account_name& account, int
    if (delta == 0) {
       return;
    }
-
    // don't `curve the storage bw`, if no signature from the account
    if (!is_authorized && delta < 0 ) {
        return;
    }
-
     symbol_code token_code { symbol(CORE_SYMBOL).to_symbol_code() };
 
     const stake_param_object* param = nullptr;
@@ -203,7 +201,6 @@ void resource_limits_manager::add_storage_usage(const account_name& account, int
    state_table.modify(state, [&](resource_limits_state_object& rls) {
       rls.add_pending_delta(delta, _chaindb.get<global_property_object>().configuration, STORAGE);
    });
-   
    auto& usage = _chaindb.get<resource_usage_object>(account);
    _chaindb.modify( usage, [&]( auto& u ) {
       u.accumulators[STORAGE].add(delta, time_slot, config.account_usage_average_windows[STORAGE]);
@@ -329,15 +326,29 @@ ratio resource_limits_manager::get_account_stake_ratio(fc::time_point pending_bl
             update_proxied(_chaindb, get_storage_payer(block_timestamp_type(pending_block_time).slot, account_name()), 
                 pending_block_time.sec_since_epoch(), token_code, account, false);
         }
-
-        auto total_funds = agent->get_total_funds();
-        EOS_ASSERT(total_funds >= 0, chain_exception, "SYSTEM: incorrect total_funds value");
-        EOS_ASSERT(agent->own_share >= 0, chain_exception, "SYSTEM: incorrect own_share value");
-        EOS_ASSERT(agent->shares_sum >= 0, chain_exception, "SYSTEM: incorrect shares_sum value");
-        staked = safe_prop<uint64_t>(total_funds, agent->own_share, agent->shares_sum);
+        staked = agent->get_effective_stake();
     }
 
     return ratio{staked, static_cast<uint64_t>(stat->total_staked)};
+}
+
+uint64_t resource_limits_manager::get_used_resources_cost(account_name account, const std::vector<ratio>& prices, uint64_t max_cost) const {
+    auto res_usage = get_account_usage(account);
+        
+    uint64_t cost = 0;
+    for (size_t i = 0; i < resources_num; i++) {
+        auto add = safe_prop_ceil(res_usage[i], prices[i].numerator, prices[i].denominator);
+        cost = (UINT64_MAX - cost) > add ? cost + add : UINT64_MAX;
+    }
+    
+    EOS_ASSERT(max_cost >= cost, account_resources_exceeded, 
+        "account ${a} has insufficient staked tokens (${s}).\n usage: cpu ${uc}, net ${un}, ram ${ur}, storage ${us}; \n prices: cpu ${pc}, net ${pn}, ram ${pr}, storage ${ps};\n cost ${c}", 
+        ("a", account)("s",max_cost)
+        ("uc", res_usage[CPU])("un", res_usage[NET])("ur", res_usage[RAM])("us", res_usage[STORAGE])
+        ("pc", prices   [CPU])("pn", prices   [NET])("pr", prices   [RAM])("ps", prices   [STORAGE])
+        ("c", cost));
+    
+    return cost;
 }
 
 uint64_t resource_limits_manager::get_account_balance(fc::time_point pending_block_time, const account_name& account, const std::vector<ratio>& prices, bool update_state) {
@@ -349,23 +360,7 @@ uint64_t resource_limits_manager::get_account_balance(fc::time_point pending_blo
     if (total_staked == 0) {
         return UINT64_MAX;
     }
-
-    const auto& state  = _chaindb.get<resource_limits_state_object>();
-    auto res_usage = get_account_usage(account);
-        
-    uint64_t cost = 0;
-    for (size_t i = 0; i < resources_num; i++) {
-        auto add = safe_prop_ceil(res_usage[i], prices[i].numerator, prices[i].denominator);
-        cost = (UINT64_MAX - cost) > add ? cost + add : UINT64_MAX;
-    }
-    
-    EOS_ASSERT(!update_state || (staked >= cost), account_resources_exceeded, 
-        "account ${a} has insufficient staked tokens (${s}).\n usage: cpu ${uc}, net ${un}, ram ${ur}, storage ${us}; \n prices: cpu ${pc}, net ${pn}, ram ${pr}, storage ${ps};\n cost ${c}", 
-        ("a", account)("s",staked)
-        ("uc", res_usage[CPU])("un", res_usage[NET])("ur", res_usage[RAM])("us", res_usage[STORAGE])
-        ("pc", prices   [CPU])("pn", prices   [NET])("pr", prices   [RAM])("ps", prices   [STORAGE])
-        ("c", cost));
-
+    uint64_t cost = get_used_resources_cost(account, prices, update_state ? staked : UINT64_MAX);
     return (staked > cost) ? (staked - cost) : 0;
 }
 

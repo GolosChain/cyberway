@@ -187,8 +187,7 @@ struct genesis_info {
     struct stake_params {
         bool enabled = false;
         std::vector<uint8_t> max_proxies;
-        int64_t payout_step_length;
-        uint16_t payout_steps_num;
+        int64_t depriving_window;
         int64_t min_own_staked_for_election = 0;
     };
     struct hardfork_info {
@@ -234,7 +233,7 @@ FC_REFLECT(cyberway::genesis::genesis_info::golos_config::start_trx_params, (del
 FC_REFLECT(cyberway::genesis::genesis_info::golos_config,
     (domain)(names)(recovery)(max_supply)(sys_max_supply)(start_trx)(posts_trx))
 FC_REFLECT(cyberway::genesis::genesis_info::stake_params,
-    (enabled)(max_proxies)(payout_step_length)(payout_steps_num)(min_own_staked_for_election))
+    (enabled)(max_proxies)(depriving_window)(min_own_staked_for_election))
 FC_REFLECT(cyberway::genesis::genesis_info::hardfork_info, (version)(time))
 FC_REFLECT(cyberway::genesis::genesis_info::funds_share, (name)(numerator)(denominator))
 FC_REFLECT(cyberway::genesis::genesis_info::parameters, (stake)(posting_rules)(require_hardfork)(funds))
