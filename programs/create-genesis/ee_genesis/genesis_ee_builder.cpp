@@ -807,6 +807,10 @@ void genesis_ee_builder::write_funds() {
     for (auto& be : exp_info_.balance_events) {
         out.insert(be);
     }
+
+    out.start_section(info_.golos.names.vesting, N(stat), "vesting_supply");
+
+    out.insert(exp_info_.vesting_supply);
 }
 
 void genesis_ee_builder::write_balance_converts() {
