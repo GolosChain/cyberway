@@ -3797,6 +3797,7 @@ int main( int argc, char** argv ) {
                          ("table_key", "")
                          ("lower_bound", eosio::chain::string_to_name(proposal_name.c_str()))
                          ("upper_bound", eosio::chain::string_to_name(proposal_name.c_str()) + 1)
+                         ("index", "primary")
                          // Less than ideal upper_bound usage preserved so cleos can still work with old buggy nodeos versions
                          // Change to name(proposal_name).value when cleos no longer needs to support nodeos versions older than 1.5.0
                          ("limit", 1)
@@ -3834,6 +3835,7 @@ int main( int argc, char** argv ) {
                                        ("table_key", "")
                                        ("lower_bound", name(proposal_name).value)
                                        ("upper_bound", name(proposal_name).value + 1)
+                                       ("index", "primary")
                                        // Less than ideal upper_bound usage preserved so cleos can still work with old buggy nodeos versions
                                        // Change to name(proposal_name).value when cleos no longer needs to support nodeos versions older than 1.5.0
                                        ("limit", 1)
@@ -3866,6 +3868,7 @@ int main( int argc, char** argv ) {
                                        ("table_key", "")
                                        ("lower_bound", name(proposal_name).value)
                                        ("upper_bound", name(proposal_name).value + 1)
+                                       ("index", "primary")
                                        // Less than ideal upper_bound usage preserved so cleos can still work with old buggy nodeos versions
                                        // Change to name(proposal_name).value when cleos no longer needs to support nodeos versions older than 1.5.0
                                        ("limit", 1)
