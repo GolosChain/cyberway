@@ -26,22 +26,21 @@ class account_control_history_object : public cyberway::chaindb::object<chain::a
    account_name                       controlling_account;
 };
 
-struct by_id;
 struct by_controlling;
 struct by_controlled_authority;
 
 using account_control_history_table = cyberway::chaindb::table_container<
    account_control_history_object,
    cyberway::chaindb::indexed_by<
-      cyberway::chaindb::ordered_unique<tag<by_id>, BOOST_MULTI_INDEX_MEMBER(account_control_history_object, account_control_history_object::id_type, id)>,
-      cyberway::chaindb::ordered_unique<tag<by_controlling>,
-         composite_key< account_control_history_object,
-            BOOST_MULTI_INDEX_MEMBER(account_control_history_object, account_name,                            controlling_account),
+      cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_id>, BOOST_MULTI_INDEX_MEMBER(account_control_history_object, account_control_history_object::id_type, id)>,
+      cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_controlling>,
+         cyberway::chaindb::composite_key< account_control_history_object,
+            BOOST_MULTI_INDEX_MEMBER(account_control_history_object, account_name, controlling_account),
             BOOST_MULTI_INDEX_MEMBER(account_control_history_object, account_control_history_object::id_type, id)
          >
       >,
-      cyberway::chaindb::ordered_unique<tag<by_controlled_authority>,
-         composite_key< account_control_history_object,
+      cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_controlled_authority>,
+         cyberway::chaindb::composite_key< account_control_history_object,
             BOOST_MULTI_INDEX_MEMBER(account_control_history_object, account_name, controlled_account),
             BOOST_MULTI_INDEX_MEMBER(account_control_history_object, permission_name, controlled_permission),
             BOOST_MULTI_INDEX_MEMBER(account_control_history_object, account_name, controlling_account)
@@ -50,6 +49,9 @@ using account_control_history_table = cyberway::chaindb::table_container<
    >
 >;
 }
+
+CHAINDB_TAG(eosio::by_controlling, bycontrol)
+CHAINDB_TAG(eosio::by_controlled_authority, controlauth)
 
 CHAINDB_SET_TABLE_TYPE( eosio::account_control_history_object, eosio::account_control_history_table )
 CHAINDB_TAG(eosio::account_control_history_object, ctrlhistory)

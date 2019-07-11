@@ -9,6 +9,7 @@
 
 //#include <fc/io/json.hpp>
 
+#include <eosio/chain/config.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/signals2/connection.hpp>
 
@@ -48,18 +49,11 @@ namespace eosio {
    struct by_account_action_seq;
 //   struct by_trx_id;
 
-   using account_sequence_table = cyberway::chaindb::table_container<
-      account_history_object,
-      cyberway::chaindb::indexed_by<
-         cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_id>, BOOST_MULTI_INDEX_MEMBER(account_history_object, account_history_id_type, id)>
-      >
-   >;
-
    using account_history_table = cyberway::chaindb::table_container<
       account_history_object,
       cyberway::chaindb::indexed_by<
-         cyberway::chaindb::ordered_unique<tag<by_id>, BOOST_MULTI_INDEX_MEMBER(account_history_object, account_history_id_type, id)>,
-         cyberway::chaindb::ordered_unique<tag<by_account_action_seq>,
+         cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_id>, BOOST_MULTI_INDEX_MEMBER(account_history_object, account_history_id_type, id)>,
+         cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_account_action_seq>,
             cyberway::chaindb::composite_key< account_history_object,
                BOOST_MULTI_INDEX_MEMBER(account_history_object, account_name, account),
                BOOST_MULTI_INDEX_MEMBER(account_history_object, int32_t, account_sequence_num)
@@ -71,10 +65,10 @@ namespace eosio {
    using action_history_table = cyberway::chaindb::table_container<
       action_history_object,
       cyberway::chaindb::indexed_by<
-         cyberway::chaindb::ordered_unique<tag<by_id>, BOOST_MULTI_INDEX_MEMBER(action_history_object, action_history_id_type, id)>,
-         cyberway::chaindb::ordered_unique<tag<by_action_sequence_num>, BOOST_MULTI_INDEX_MEMBER(action_history_object, uint64_t, action_sequence_num)>,
-         cyberway::chaindb::ordered_unique<tag<by_trx_id>,
-            composite_key< action_history_object,
+         cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_id>, BOOST_MULTI_INDEX_MEMBER(action_history_object, action_history_id_type, id)>,
+         cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_action_sequence_num>, BOOST_MULTI_INDEX_MEMBER(action_history_object, uint64_t, action_sequence_num)>,
+         cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_trx_id>,
+            cyberway::chaindb::composite_key< action_history_object,
                BOOST_MULTI_INDEX_MEMBER(action_history_object, transaction_id_type, trx_id),
                BOOST_MULTI_INDEX_MEMBER(action_history_object, uint64_t, action_sequence_num)
             >
@@ -82,6 +76,9 @@ namespace eosio {
       >
    >;
 } /// namespace eosio
+
+CHAINDB_TAG(eosio::by_account_action_seq, accactionseq)
+CHAINDB_TAG(eosio::by_action_sequence_num, byactseqnum)
 
 CHAINDB_SET_TABLE_TYPE(eosio::account_history_object, eosio::account_history_table)
 CHAINDB_TAG(eosio::account_history_object, acchistory)
@@ -99,41 +96,42 @@ namespace eosio {
    static void remove(chaindb_controller& db, const account_name& account_name, const permission_name& permission)
    {
       const auto& idx = db.get_index<MultiIndex, LookupType>();
-//      auto& mutable_idx = db.get_mutable_index<MultiIndex>();
-      while(!idx.empty()) {
+      while(true) {
          auto key = boost::make_tuple(account_name, permission);
          const auto& itr = idx.lower_bound(key);
          if (itr == idx.end())
             break;
 
-         const auto& range_end = idx.upper_bound(key);
-         if (itr == range_end)
-            break;
+//         const auto& range_end = idx.upper_bound(key); // FIXME error: no member named 'tail' in 'boost::tuples::cons<eosio::chain::name, boost::tuples::null_type>' cons( const cons<HT2, TT2>& u ) : head(u.head), tail(u.tail) {}
+//         if (itr == range_end)
+//            break;
 
-//         mutable_idx.remove(*itr);
+//         chaindb.remove({config::history_account_name, config::history_account_name, N(acthistory)}, // FIXME remove item
+//                        context.get_storage_payer(config::history_account_name), pk);
+//         idx.remove(*itr);
       }
    }
 
    static void add(chaindb_controller& db, const vector<key_weight>& keys, const account_name& name, const permission_name& permission)
    {
-//      for (auto pub_key_weight : keys ) {
-//         db.create<public_key_history_object>([&](public_key_history_object& obj) {
-//            obj.public_key = pub_key_weight.key;
-//            obj.name = name;
-//            obj.permission = permission;
-//         });
-//      }
+      for (auto pub_key_weight : keys ) {
+         db.emplace<public_key_history_object>(config::history_account_name, [&](public_key_history_object& obj) {
+            obj.public_key = pub_key_weight.key;
+            obj.name = name;
+            obj.permission = permission;
+         });
+      }
    }
 
    static void add(chaindb_controller& db, const vector<permission_level_weight>& controlling_accounts, const account_name& account_name, const permission_name& permission)
    {
-//      for (auto controlling_account : controlling_accounts ) {
-//         db.create<account_control_history_object>([&](account_control_history_object& obj) {
-//            obj.controlled_account = account_name;
-//            obj.controlled_permission = permission;
-//            obj.controlling_account = controlling_account.permission.actor;
-//         });
-//      }
+      for (auto controlling_account : controlling_accounts ) {
+         db.emplace<account_control_history_object>(config::history_account_name, [&](account_control_history_object& obj) {
+            obj.controlled_account = account_name;
+            obj.controlled_permission = permission;
+            obj.controlling_account = controlling_account.permission.actor;
+         });
+      }
    }
 
    struct filter_entry {
@@ -224,19 +222,19 @@ namespace eosio {
             auto& chaindb = chain.chaindb();
 
             const auto& idx = chaindb.get_index<account_history_object, by_account_action_seq>();
-//            auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
+            auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
 
-//            uint64_t asn = 0;
-//            if( itr != idx.begin() ) --itr;
-//            if( itr->account == n )
-//               asn = itr->account_sequence_num + 1;
+            uint64_t asn = 0;
+            if( itr != idx.begin() ) --itr;
+            if( itr->account == n )
+               asn = itr->account_sequence_num + 1;
 
             //idump((n)(act.receipt.global_sequence)(asn));
-//            const auto& a = db.create<account_history_object>( [&]( auto& aho ) {
-//              aho.account = n;
-//              aho.action_sequence_num = act.receipt.global_sequence;
-//              aho.account_sequence_num = asn;
-//            });
+            const auto& a = chaindb.emplace<account_history_object>(config::history_account_name, [&]( auto& aho ) {
+              aho.account = n;
+              aho.action_sequence_num = act.receipt.global_sequence;
+              aho.account_sequence_num = asn;
+            });
             //idump((a.account)(a.action_sequence_num)(a.action_sequence_num));
          }
 
@@ -254,16 +252,16 @@ namespace eosio {
             else if( at.act.name == N(updateauth) )
             {
                const auto update = at.act.data_as<chain::updateauth>();
-//               remove<public_key_history_table, by_account_permission>(chaindb, update.account, update.permission);
-//               remove<account_control_history_table, by_controlled_authority>(chaindb, update.account, update.permission);
+               remove<public_key_history_object, by_account_permission>(chaindb, update.account, update.permission);
+               remove<account_control_history_object, by_controlled_authority>(chaindb, update.account, update.permission);
                add(chaindb, update.auth.keys, update.account, update.permission);
                add(chaindb, update.auth.accounts, update.account, update.permission);
             }
             else if( at.act.name == N(deleteauth) )
             {
                const auto del = at.act.data_as<chain::deleteauth>();
-//               remove<public_key_history_table, by_account_permission>(chaindb, del.account, del.permission);
-//               remove<account_control_history_table, by_controlled_authority>(chaindb, del.account, del.permission);
+               remove<public_key_history_object, by_account_permission>(chaindb, del.account, del.permission);
+               remove<account_control_history_object, by_controlled_authority>(chaindb, del.account, del.permission);
             }
          }
 
@@ -273,7 +271,8 @@ namespace eosio {
                auto& chain = chain_plug->chain();
                auto& chaindb = chain.chaindb();
 
-//               chaindb.emplace<action_history_object>( [&]( auto& aho ) {
+               // FIXME emplace, error allocator
+//               chaindb.emplace<action_history_object>(config::history_account_name, [&]( auto& aho ) {
 //                  auto ps = fc::raw::pack_size( at );
 //                  aho.packed_action_trace.resize(ps);
 //                  datastream<char*> ds( aho.packed_action_trace.data(), ps );
@@ -395,7 +394,7 @@ namespace eosio {
         const auto& chaindb = chain.chaindb();
         const auto abi_serializer_max_time = history->chain_plug->get_abi_serializer_max_time();
 
-//        const auto& idx = chaindb.get_index<account_history_object, by_account_action_seq>();
+        const auto& idx = chaindb.get_index<account_history_object, by_account_action_seq>();
 
         int32_t start = 0;
         int32_t pos = params.pos ? *params.pos : -1;
@@ -404,14 +403,14 @@ namespace eosio {
         auto n = params.account_name;
         idump((pos));
         if( pos == -1 ) {
-//            auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
-//            if( itr == idx.begin() ) {
-//               if( itr->account == n )
-//                  pos = itr->account_sequence_num+1;
-//            } else if( itr != idx.begin() ) --itr;
+            auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
+            if( itr == idx.begin() ) {
+               if( itr->account == n )
+                  pos = itr->account_sequence_num+1;
+            } else if( itr != idx.begin() ) --itr;
 
-//            if( itr->account == n )
-//               pos = itr->account_sequence_num + 1;
+            if( itr->account == n )
+               pos = itr->account_sequence_num + 1;
         }
 
         if( pos== -1 ) pos = 0xfffffff;
@@ -428,174 +427,174 @@ namespace eosio {
 
         idump((start)(end));
 
-//        auto start_itr = idx.lower_bound( boost::make_tuple( n, start ) );
-//        auto end_itr = idx.upper_bound( boost::make_tuple( n, end) );
+        auto start_itr = idx.lower_bound( boost::make_tuple( n, start ) );
+        auto end_itr = idx.upper_bound( boost::make_tuple( n, end) );
 
         auto start_time = fc::time_point::now();
         auto end_time = start_time;
 
         get_actions_result result;
         result.last_irreversible_block = chain.last_irreversible_block_num();
-//        while( start_itr != end_itr ) {
-//           const auto& a = chaindb.get<action_history_object, by_action_sequence_num>( start_itr->action_sequence_num );
-//           fc::datastream<const char*> ds( a.packed_action_trace.data(), a.packed_action_trace.size() );
-//           action_trace t;
-//           fc::raw::unpack( ds, t );
-//           result.actions.emplace_back( ordered_action_result{
-//                                 start_itr->action_sequence_num,
-//                                 start_itr->account_sequence_num,
-//                                 a.block_num, a.block_time,
-//                                 chain.to_variant_with_abi(t, abi_serializer_max_time)
-//                                 });
+        while( start_itr != end_itr ) {
+           const auto& a = chaindb.get<action_history_object, by_action_sequence_num>( start_itr->action_sequence_num );
+           fc::datastream<const char*> ds( a.packed_action_trace.data(), a.packed_action_trace.size() );
+           action_trace t;
+           fc::raw::unpack( ds, t );
+           result.actions.emplace_back( ordered_action_result{
+                                 start_itr->action_sequence_num,
+                                 start_itr->account_sequence_num,
+                                 a.block_num, a.block_time,
+                                 chain.to_variant_with_abi(t, abi_serializer_max_time)
+                                 });
 
-//           end_time = fc::time_point::now();
-//           if( end_time - start_time > fc::microseconds(100000) ) {
-//              result.time_limit_exceeded_error = true;
-//              break;
-//           }
-//           ++start_itr;
-//        }
+           end_time = fc::time_point::now();
+           if( end_time - start_time > fc::microseconds(100000) ) {
+              result.time_limit_exceeded_error = true;
+              break;
+           }
+           ++start_itr;
+        }
         return result;
       }
 
       read_only::get_transaction_result read_only::get_transaction( const read_only::get_transaction_params& p )const {
-//         auto& chain = history->chain_plug->chain();
-//         const auto abi_serializer_max_time = history->chain_plug->get_abi_serializer_max_time();
+         auto& chain = history->chain_plug->chain();
+         const auto abi_serializer_max_time = history->chain_plug->get_abi_serializer_max_time();
 
-//         transaction_id_type input_id;
-//         auto input_id_length = p.id.size();
-//         try {
-//            FC_ASSERT( input_id_length <= 64, "hex string is too long to represent an actual transaction id" );
-//            FC_ASSERT( input_id_length >= 8,  "hex string representing transaction id should be at least 8 characters long to avoid excessive collisions" );
-//            input_id = transaction_id_type(p.id);
-//         } EOS_RETHROW_EXCEPTIONS(transaction_id_type_exception, "Invalid transaction ID: ${transaction_id}", ("transaction_id", p.id))
+         transaction_id_type input_id;
+         auto input_id_length = p.id.size();
+         try {
+            FC_ASSERT( input_id_length <= 64, "hex string is too long to represent an actual transaction id" );
+            FC_ASSERT( input_id_length >= 8,  "hex string representing transaction id should be at least 8 characters long to avoid excessive collisions" );
+            input_id = transaction_id_type(p.id);
+         } EOS_RETHROW_EXCEPTIONS(transaction_id_type_exception, "Invalid transaction ID: ${transaction_id}", ("transaction_id", p.id))
 
-//         auto txn_id_matched = [&input_id, input_id_size = input_id_length/2, no_half_byte_at_end = (input_id_length % 2 == 0)]
-//                               ( const transaction_id_type &id ) -> bool // hex prefix comparison
-//         {
-//            bool whole_byte_prefix_matches = memcmp( input_id.data(), id.data(), input_id_size ) == 0;
-//            if( !whole_byte_prefix_matches || no_half_byte_at_end )
-//               return whole_byte_prefix_matches;
+         auto txn_id_matched = [&input_id, input_id_size = input_id_length/2, no_half_byte_at_end = (input_id_length % 2 == 0)]
+                               ( const transaction_id_type &id ) -> bool // hex prefix comparison
+         {
+            bool whole_byte_prefix_matches = memcmp( input_id.data(), id.data(), input_id_size ) == 0;
+            if( !whole_byte_prefix_matches || no_half_byte_at_end )
+               return whole_byte_prefix_matches;
 
-//            // check if half byte at end of specified part of input_id matches
-//            return (*(input_id.data() + input_id_size) & 0xF0) == (*(id.data() + input_id_size) & 0xF0);
-//         };
+            // check if half byte at end of specified part of input_id matches
+            return (*(input_id.data() + input_id_size) & 0xF0) == (*(id.data() + input_id_size) & 0xF0);
+         };
 
-//         const auto& db = chain.db();
-//         const auto& idx = db.get_index<action_history_index, by_trx_id>();
-//         auto itr = idx.lower_bound( boost::make_tuple( input_id ) );
+         const auto& chaindb = chain.chaindb();
+         const auto& idx = chaindb.get_index<action_history_object, by_trx_id>();
+         auto itr = idx.lower_bound( boost::make_tuple( input_id ) );
 
-//         bool in_history = (itr != idx.end() && txn_id_matched(itr->trx_id) );
+         bool in_history = (itr != idx.end() && txn_id_matched(itr->trx_id) );
 
-//         if( !in_history && !p.block_num_hint ) {
-//            EOS_THROW(tx_not_found, "Transaction ${id} not found in history and no block hint was given", ("id",p.id));
-//         }
+         if( !in_history && !p.block_num_hint ) {
+            EOS_THROW(tx_not_found, "Transaction ${id} not found in history and no block hint was given", ("id",p.id));
+         }
 
          get_transaction_result result;
 
-//         if( in_history ) {
-//            result.id         = itr->trx_id;
-//            result.last_irreversible_block = chain.last_irreversible_block_num();
-//            result.block_num  = itr->block_num;
-//            result.block_time = itr->block_time;
+         if( in_history ) {
+            result.id         = itr->trx_id;
+            result.last_irreversible_block = chain.last_irreversible_block_num();
+            result.block_num  = itr->block_num;
+            result.block_time = itr->block_time;
 
-//            while( itr != idx.end() && itr->trx_id == result.id ) {
+            while( itr != idx.end() && itr->trx_id == result.id ) {
 
-//              fc::datastream<const char*> ds( itr->packed_action_trace.data(), itr->packed_action_trace.size() );
-//              action_trace t;
-//              fc::raw::unpack( ds, t );
-//              result.traces.emplace_back( chain.to_variant_with_abi(t, abi_serializer_max_time) );
+              fc::datastream<const char*> ds( itr->packed_action_trace.data(), itr->packed_action_trace.size() );
+              action_trace t;
+              fc::raw::unpack( ds, t );
+              result.traces.emplace_back( chain.to_variant_with_abi(t, abi_serializer_max_time) );
 
-//              ++itr;
-//            }
+              ++itr;
+            }
 
-//            auto blk = chain.fetch_block_by_number( result.block_num );
-//            if( blk == nullptr ) { // still in pending
-//                auto blk_state = chain.pending_block_state();
-//                if( blk_state != nullptr ) {
-//                    blk = blk_state->block;
-//                }
-//            }
-//            if( blk != nullptr ) {
-//                for (const auto &receipt: blk->transactions) {
-//                    if (receipt.trx.contains<packed_transaction>()) {
-//                        auto &pt = receipt.trx.get<packed_transaction>();
-//                        if (pt.id() == result.id) {
-//                            fc::mutable_variant_object r("receipt", receipt);
-//                            r("trx", chain.to_variant_with_abi(pt.get_signed_transaction(), abi_serializer_max_time));
-//                            result.trx = move(r);
-//                            break;
-//                        }
-//                    } else {
-//                        auto &id = receipt.trx.get<transaction_id_type>();
-//                        if (id == result.id) {
-//                            fc::mutable_variant_object r("receipt", receipt);
-//                            result.trx = move(r);
-//                            break;
-//                        }
-//                    }
-//                }
-//            }
-//         } else {
-//            auto blk = chain.fetch_block_by_number(*p.block_num_hint);
-//            bool found = false;
-//            if (blk) {
-//               for (const auto& receipt: blk->transactions) {
-//                  if (receipt.trx.contains<packed_transaction>()) {
-//                     auto& pt = receipt.trx.get<packed_transaction>();
-//                     const auto& id = pt.id();
-//                     if( txn_id_matched(id) ) {
-//                        result.id = id;
-//                        result.last_irreversible_block = chain.last_irreversible_block_num();
-//                        result.block_num = *p.block_num_hint;
-//                        result.block_time = blk->timestamp;
-//                        fc::mutable_variant_object r("receipt", receipt);
-//                        r("trx", chain.to_variant_with_abi(pt.get_signed_transaction(), abi_serializer_max_time));
-//                        result.trx = move(r);
-//                        found = true;
-//                        break;
-//                     }
-//                  } else {
-//                     auto& id = receipt.trx.get<transaction_id_type>();
-//                     if( txn_id_matched(id) ) {
-//                        result.id = id;
-//                        result.last_irreversible_block = chain.last_irreversible_block_num();
-//                        result.block_num = *p.block_num_hint;
-//                        result.block_time = blk->timestamp;
-//                        fc::mutable_variant_object r("receipt", receipt);
-//                        result.trx = move(r);
-//                        found = true;
-//                        break;
-//                     }
-//                  }
-//               }
-//            }
+            auto blk = chain.fetch_block_by_number( result.block_num );
+            if( blk == nullptr ) { // still in pending
+                auto blk_state = chain.pending_block_state();
+                if( blk_state != nullptr ) {
+                    blk = blk_state->block;
+                }
+            }
+            if( blk != nullptr ) {
+                for (const auto &receipt: blk->transactions) {
+                    if (receipt.trx.contains<packed_transaction>()) {
+                        auto &pt = receipt.trx.get<packed_transaction>();
+                        if (pt.id() == result.id) {
+                            fc::mutable_variant_object r("receipt", receipt);
+                            r("trx", chain.to_variant_with_abi(pt.get_signed_transaction(), abi_serializer_max_time));
+                            result.trx = move(r);
+                            break;
+                        }
+                    } else {
+                        auto &id = receipt.trx.get<transaction_id_type>();
+                        if (id == result.id) {
+                            fc::mutable_variant_object r("receipt", receipt);
+                            result.trx = move(r);
+                            break;
+                        }
+                    }
+                }
+            }
+         } else {
+            auto blk = chain.fetch_block_by_number(*p.block_num_hint);
+            bool found = false;
+            if (blk) {
+               for (const auto& receipt: blk->transactions) {
+                  if (receipt.trx.contains<packed_transaction>()) {
+                     auto& pt = receipt.trx.get<packed_transaction>();
+                     const auto& id = pt.id();
+                     if( txn_id_matched(id) ) {
+                        result.id = id;
+                        result.last_irreversible_block = chain.last_irreversible_block_num();
+                        result.block_num = *p.block_num_hint;
+                        result.block_time = blk->timestamp;
+                        fc::mutable_variant_object r("receipt", receipt);
+                        r("trx", chain.to_variant_with_abi(pt.get_signed_transaction(), abi_serializer_max_time));
+                        result.trx = move(r);
+                        found = true;
+                        break;
+                     }
+                  } else {
+                     auto& id = receipt.trx.get<transaction_id_type>();
+                     if( txn_id_matched(id) ) {
+                        result.id = id;
+                        result.last_irreversible_block = chain.last_irreversible_block_num();
+                        result.block_num = *p.block_num_hint;
+                        result.block_time = blk->timestamp;
+                        fc::mutable_variant_object r("receipt", receipt);
+                        result.trx = move(r);
+                        found = true;
+                        break;
+                     }
+                  }
+               }
+            }
 
-//            if (!found) {
-//               EOS_THROW(tx_not_found, "Transaction ${id} not found in history or in block number ${n}", ("id",p.id)("n", *p.block_num_hint));
-//            }
-//         }
+            if (!found) {
+               EOS_THROW(tx_not_found, "Transaction ${id} not found in history or in block number ${n}", ("id",p.id)("n", *p.block_num_hint));
+            }
+         }
 
          return result;
       }
 
       read_only::get_key_accounts_results read_only::get_key_accounts(const get_key_accounts_params& params) const {
          std::set<account_name> accounts;
-//         const auto& db = history->chain_plug->chain().db();
-//         const auto& pub_key_idx = db.get_index<public_key_history_multi_index, by_pub_key>();
-//         auto range = pub_key_idx.equal_range( params.public_key );
-//         for (auto obj = range.first; obj != range.second; ++obj)
-//            accounts.insert(obj->name);
+         const auto& chaindb = history->chain_plug->chain().chaindb();
+         const auto& pub_key_idx = chaindb.get_index<public_key_history_object, by_pub_key>();
+         auto range = pub_key_idx.equal_range( params.public_key );
+         for (auto obj = range.first; obj != range.second; ++obj)
+            accounts.insert(obj->name);
          return {vector<account_name>(accounts.begin(), accounts.end())};
       }
 
       read_only::get_controlled_accounts_results read_only::get_controlled_accounts(const get_controlled_accounts_params& params) const {
          std::set<account_name> accounts;
-//         const auto& db = history->chain_plug->chain().db();
-//         const auto& account_control_idx = db.get_index<account_control_history_multi_index, by_controlling>();
-//         auto range = account_control_idx.equal_range( params.controlling_account );
-//         for (auto obj = range.first; obj != range.second; ++obj)
-//            accounts.insert(obj->controlled_account);
+         const auto& chaindb = history->chain_plug->chain().chaindb();
+         const auto& account_control_idx = chaindb.get_index<account_control_history_object, by_controlling>();
+         auto range = account_control_idx.equal_range( params.controlling_account );
+         for (auto obj = range.first; obj != range.second; ++obj)
+            accounts.insert(obj->controlled_account);
          return {vector<account_name>(accounts.begin(), accounts.end())};
       }
 

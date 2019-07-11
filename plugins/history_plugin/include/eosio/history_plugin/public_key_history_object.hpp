@@ -26,23 +26,22 @@ class public_key_history_object : public cyberway::chaindb::object<chain::public
    permission_name   permission;
 };
 
-struct by_id;
 struct by_pub_key;
 struct by_account_permission;
 
 using public_key_history_table = cyberway::chaindb::table_container<
     public_key_history_object,
     cyberway::chaindb::indexed_by<
-        cyberway::chaindb::ordered_unique<tag<by_id>,
+        cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_id>,
             BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_history_object::id_type, id)>,
-        cyberway::chaindb::ordered_unique<tag<by_pub_key>,
+        cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_pub_key>,
             cyberway::chaindb::composite_key< public_key_history_object,
                 BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_type, public_key),
                 BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_history_object::id_type, id)
             >
         >,
-        ordered_unique<tag<by_account_permission>,
-            composite_key< public_key_history_object,
+        cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_account_permission>,
+            cyberway::chaindb::composite_key< public_key_history_object,
                 BOOST_MULTI_INDEX_MEMBER(public_key_history_object, account_name, name),
                 BOOST_MULTI_INDEX_MEMBER(public_key_history_object, permission_name, permission),
                 BOOST_MULTI_INDEX_MEMBER(public_key_history_object, public_key_history_object::id_type, id)
@@ -51,6 +50,9 @@ using public_key_history_table = cyberway::chaindb::table_container<
     >
 >;
 }
+
+CHAINDB_TAG(eosio::by_pub_key, bypubkey)
+CHAINDB_TAG(eosio::by_account_permission, byaccperm)
 
 CHAINDB_SET_TABLE_TYPE( eosio::public_key_history_object, eosio::public_key_history_table )
 CHAINDB_TAG(eosio::public_key_history_object, pybkeyhist)
