@@ -17,30 +17,25 @@ namespace cyberway { namespace chaindb {
 
         account_name code() const {
             if (has_abi_info()) {
-                return account().name;
+                return abi_info_ptr_->code();
             }
             return account_name();
         }
 
         bool has_abi_info() const {
-            return !!account_ptr_;
+            return !!abi_info_ptr_;
         }
 
         const abi_info& abi() const {
-            return account().get_abi_info();
+            return *abi_info_ptr_;
         }
 
     private:
-        cache_object_ptr account_ptr_;
+        abi_info_ptr abi_info_ptr_;
 
-        template<typename Abi> void init(account_name_t, Abi&&);
+        template<typename Abi> void init(account_name_t, Abi);
 
         void init(cache_object_ptr);
-
-        const account_object& account() const {
-            assert(has_abi_info());
-            return multi_index_item_data<account_object>::get_T(account_ptr_);
-        }
     }; // struct account_abi_info
 
     struct system_abi_info final {

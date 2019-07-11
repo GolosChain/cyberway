@@ -95,6 +95,9 @@ struct index_def {
    vector<order_def>  orders;
 };
 
+using index_names = std::vector<index_name>;
+using field_index_map = fc::flat_map<field_name, index_names>;
+
 struct table_def {
    table_def() = default;
    table_def(const table_name& name, const type_name& type, const vector<index_def>& indexes)
@@ -110,8 +113,8 @@ struct table_def {
    vector<index_def>  indexes;     //
 
    // The following fields are service and set by chain code
-   int64_t                    row_count = 0;
-   flat_map<field_name, uint> field_index_map;
+   int64_t         row_count = 0;
+   field_index_map field_indexes;
 };
 
 struct error_message {

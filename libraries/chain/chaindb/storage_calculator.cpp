@@ -26,8 +26,11 @@ namespace cyberway { namespace chaindb {
     struct path_info final {
         const table_def& table;
         string path;
+        fc::flat_map<index_name, int> index_sizes;
 
-        path_info(const table_def& table) : table(table) { }
+        path_info(const table_def& table) : table(table) {
+            index_sizes.reserve(table.indexes.size() + 16);
+        }
     }; // struct path_info
 
     struct stack_path final {
@@ -47,10 +50,16 @@ namespace cyberway { namespace chaindb {
         int adjust_elem_size(const int size) const {
             if (!info_) return size;
 
-            auto itr = info_->table.field_index_map.find(info_->path);
-            if (info_->table.field_index_map.end() == itr) return size;
+            auto itr = info_->table.field_indexes.find(info_->path);
+            if (info_->table.field_indexes.end() == itr) return size;
 
-            return size * itr->second;
+            for (auto& n: itr->second) {
+                auto res = info_->index_sizes.emplace(n, 12 + 8);
+                res.first->second += size;
+                CYBERWAY_ASSERT(res.first->second < abi_info::MaxIndexSize, index_size_exception, "Object index size overflow");
+            }
+
+            return size * itr->second.size();
         }
 
     private:
@@ -173,6 +182,7 @@ namespace cyberway { namespace chaindb {
         } else {
             size += calc_storage_usage(var, nullptr);
         }
+        CYBERWAY_ASSERT(size < abi_info::MaxObjectSize, object_size_exception, "Object size overflow");
         return size;
     }
 

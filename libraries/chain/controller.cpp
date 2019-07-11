@@ -497,8 +497,13 @@ struct controller_impl {
 
 // TODO: removed by CyberWay
 //      db.flush();
-      chaindb.apply_all_changes();
+
       reversible_blocks.flush();
+      try {
+         chaindb.apply_all_changes();
+      } catch ( const guard_exception& e ) {
+         dlog("Details: ${details}", ("details", e.to_detail_string()));
+      }
    }
 
    void add_indices() {
@@ -782,6 +787,8 @@ struct controller_impl {
          trx_context.squash();
          restore.cancel();
          return trace;
+      } catch( const guard_exception& e ) {
+         throw;
       } catch( const fc::exception& e ) {
          cpu_time_to_bill_us = trx_context.update_billed_cpu_time( fc::time_point::now() );
          ram_to_bill_bytes = trx_context.update_billed_ram_bytes();
@@ -937,6 +944,8 @@ struct controller_impl {
          restore.cancel();
 
          return trace;
+      } catch( const guard_exception& e ) {
+         throw;
       } catch( const fc::exception& e ) {
          cpu_time_to_bill_us = trx_context.update_billed_cpu_time( fc::time_point::now() );
          ram_to_bill_bytes = trx_context.update_billed_ram_bytes();
@@ -1126,6 +1135,8 @@ struct controller_impl {
                unapplied_transactions.erase( trx->signed_id );
             }
             return trace;
+         } catch (const guard_exception& e) {
+            throw;
          } catch (const fc::exception& e) {
             trace->except = e;
             trace->except_ptr = std::current_exception();
@@ -1398,8 +1409,11 @@ struct controller_impl {
                head = *ritr;
                fork_db.mark_in_current_chain( *ritr, true );
                (*ritr)->validated = true;
+            } catch (const guard_exception& e ) {
+               throw;
+            } catch (const fc::exception& e) {
+               except = e;
             }
-            catch (const fc::exception& e) { except = e; }
             if (except) {
                elog("exception thrown while switching forks ${e}", ("e", except->to_detail_string()));
 
@@ -1618,6 +1632,9 @@ struct controller_impl {
             }
         } catch( const boost::interprocess::bad_alloc& e  ) {
             elog( "system transaction failed due to a bad allocation" );
+            throw;
+        } catch( const guard_exception& e ) {
+            elog( "system transaction failed due to a guard_exception" );
             throw;
         } catch( const fc::exception& e ) {
             wlog( "system transaction failed, but shouldn't impact block generation, system contract needs update" );

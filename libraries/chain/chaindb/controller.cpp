@@ -11,7 +11,6 @@
 #include <cyberway/chaindb/storage_payer_info.hpp>
 
 #include <eosio/chain/name.hpp>
-#include <eosio/chain/symbol.hpp>
 #include <eosio/chain/apply_context.hpp>
 #include <eosio/chain/resource_limits.hpp>
 #include <eosio/chain/transaction_context.hpp>
@@ -451,8 +450,8 @@ namespace cyberway { namespace chaindb {
                 cache_.set_object(table, cache_obj, std::move(obj));
                 return delta;
             } catch (...) {
-                // case of throwing in storage_payer_info::add_usage
-                cache_.set_object(table, cache_obj, cache_obj.object());
+                // case of throwing in storage_payer_info::add_usage(), value_verifier::verify()
+                cache_.set_value(table, cache_obj, cache_obj.object());
                 throw;
             }
         }

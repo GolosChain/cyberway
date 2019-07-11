@@ -5,14 +5,11 @@
 namespace eosio { namespace chain {
     namespace chaindb = cyberway::chaindb;
 
-    void account_object::generate_abi_info() {
-        if (!abi_info_) {
-            abi_info_ = std::make_unique<chaindb::abi_info>(name, get_abi());
+    cyberway::chaindb::abi_info_ptr account_object::generate_abi_info() {
+        if (!abi_info_ptr_) {
+            abi_info_ptr_.reset(new cyberway::chaindb::abi_info(name, get_abi()));
         }
-    }
-
-    const chaindb::abi_info& account_object::get_abi_info() const {
-        return *abi_info_.get();
+        return abi_info_ptr_;
     }
 
 } } // namespace eosio::chain
@@ -28,38 +25,26 @@ namespace cyberway { namespace  chaindb {
     }
 
     account_abi_info::account_abi_info(account_name_t code, blob b) {
-        init(code, std::move(b.data));
+        init(code, std::move(b));
     }
 
-    template<typename Abi> void account_abi_info::init(account_name_t code, Abi&& def) {
-        object_value obj;
-
-        obj.service.table = chaindb::tag<account_object>::get_code();
-        obj.service.pk    = code;
-
-        auto cache_ptr  = std::make_unique<cache_object>(std::move(obj));
-        cache_ptr->set_data<multi_index_item_data<account_object>>(code, [&](auto& a) {
-            a.set_abi(std::forward<Abi>(def));
-        });
-
-        init(cache_ptr.release());
+    template<typename Def> void account_abi_info::init(account_name_t code, Def def) {
+        abi_info_ptr_.reset(new cyberway::chaindb::abi_info(code, std::move(def)));
     }
 
     void account_abi_info::init(cache_object_ptr account_ptr) {
-        account_ptr_ = std::move(account_ptr);
-        if (!account_ptr_) {
+        if (!account_ptr) {
             return;
         }
 
-        assert(account_ptr_->service().table == chaindb::tag<account_object>::get_code());
+        assert(account_ptr->service().table == chaindb::tag<account_object>::get_code());
 
-        auto& a = account();
+        auto& a = multi_index_item_data<account_object>::get_T(account_ptr);
         if (a.abi.empty()) {
-            account_ptr_.reset();
             return;
         }
 
-        const_cast<account_object&>(a).generate_abi_info();
+        abi_info_ptr_ = const_cast<account_object&>(a).generate_abi_info();
     }
 
     struct system_abi_info_impl final {
@@ -87,8 +72,8 @@ namespace cyberway { namespace  chaindb {
             }
         }
 
-        template <typename Abi> void init_info(Abi&& def) {
-            info = account_abi_info(config::system_account_name, std::forward<Abi>(def));
+        template <typename Def> void init_info(Def def) {
+            info = account_abi_info(config::system_account_name, std::move(def));
             init_index();
         }
 

@@ -601,6 +601,13 @@ namespace cyberway { namespace chaindb {
             release_cache_object(*service_ptr, cache_obj, true);
         }
 
+        void set_value(const table_info& table, cache_object& cache_obj, const object_value& value) {
+            auto service_ptr = find_cache_service(table);
+            if (service_ptr) {
+                convert_value(*service_ptr, cache_obj, value);
+            }
+        }
+
         void set_object(const table_info& table, cache_object& cache_obj, object_value value) {
             set_object(table, find_cache_service(table), cache_obj, std::move(value));
         }
@@ -1039,6 +1046,7 @@ namespace cyberway { namespace chaindb {
             //   1. create object for interchain tables ->  value.is_null()
             //   2. loading object from chaindb         -> !value.is_null()
             //   3. restore from undo state             -> !value.is_null()
+            //   4. restore on fail to update           -> !value.is_null()
             if (service.converter && !value.is_null()) {
                 service.converter->convert_variant(cache_obj, value);
             }
@@ -1328,6 +1336,10 @@ namespace cyberway { namespace chaindb {
         assert(value);
         assert(size);
         return impl_->find_unsuccess(key, index, value, size);
+    }
+
+    void cache_map::set_value(const table_info& table, cache_object& cache_obj, const object_value& value) const {
+        impl_->set_value(table, cache_obj, value);
     }
 
     void cache_map::set_object(const table_info& table, cache_object& cache_obj, object_value value) const {

@@ -1417,7 +1417,13 @@ void producer_plugin_impl::schedule_production_loop() {
    _timer.cancel();
    std::weak_ptr<producer_plugin_impl> weak_this = shared_from_this();
 
-   auto result = start_block();
+   auto result = start_block_result::failed;
+   try {
+      result = start_block();
+   }  catch (const guard_exception& e) {
+      chain_plug->handle_guard_exception(e);
+      return;
+   }
 
    if (result == start_block_result::failed) {
       elog("Failed to start a pending block, will try again later");
@@ -1532,6 +1538,7 @@ bool producer_plugin_impl::maybe_produce_block() {
          return true;
       } catch ( const guard_exception& e ) {
          chain_plug->handle_guard_exception(e);
+         reschedule.cancel();
          return false;
       } FC_LOG_AND_DROP();
    } catch ( boost::interprocess::bad_alloc&) {
