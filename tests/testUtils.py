@@ -110,7 +110,7 @@ class Utils:
     @staticmethod
     def waitForObj(lam, timeout=None):
         if timeout is None:
-            timeout=60
+            timeout=120
 
         endTime=time.time()+timeout
         needsNewLine=False

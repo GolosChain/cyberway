@@ -1703,6 +1703,7 @@ struct setproxylvl_subcommand {
       set_proxy_level_action->add_option("account", account, localized("An account whose proxy level will be set"))->required();
       set_proxy_level_action->add_option("level", level, localized("A proxy level to set"))->required();
       set_proxy_level_action->add_option("--symbol", symbol, localized("A symbol of an asset used in the system"), true);
+      add_standard_transaction_options(set_proxy_level_action, "account@active");
 
       set_proxy_level_action->set_callback([this] {
           const auto proxy_status = call(get_proxy_status_func, fc::mutable_variant_object("account", account)("symbol", symbol));

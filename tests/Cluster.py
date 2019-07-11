@@ -78,6 +78,7 @@ class Cluster(object):
         self.defproduceraAccount=self.defProducerAccounts["defproducera"]= Account("defproducera")
         self.defproducerbAccount=self.defProducerAccounts["defproducerb"]= Account("defproducerb")
         self.eosioAccount=self.defProducerAccounts["cyber"]= Account("cyber")
+        self.eosioStakeAccount = Account("cyber.stake")
 
         self.defproduceraAccount.ownerPrivateKey=defproduceraPrvtKey
         self.defproduceraAccount.activePrivateKey=defproduceraPrvtKey
@@ -1104,8 +1105,8 @@ class Cluster(object):
         contract=eosioTokenAccount.name
         Utils.Print("push create action to %s contract" % (contract))
         action="create"
-        data="{\"issuer\":\"%s\",\"maximum_supply\":\"1000000000.0000 %s\",\"can_freeze\":\"0\",\"can_recall\":\"0\",\"can_whitelist\":\"0\"}" % (eosioTokenAccount.name, CORE_SYMBOL)
         opts="--permission %s@active" % (contract)
+        data="{\"issuer\":\"%s\",\"maximum_supply\":\"1000000000.0000 %s\",\"can_freeze\":\"0\",\"can_recall\":\"0\",\"can_whitelist\":\"0\"}" % (eosioAccount.name, CORE_SYMBOL)
         trans=biosNode.pushMessage(contract, action, data, opts)
         if trans is None or not trans[0]:
             Utils.Print("ERROR: Failed to push create action to cyber contract.")
@@ -1121,7 +1122,7 @@ class Cluster(object):
         Utils.Print("push issue action to %s contract" % (contract))
         action="issue"
         data="{\"to\":\"%s\",\"quantity\":\"1000000000.0000 %s\",\"memo\":\"initial issue\"}" % (eosioAccount.name, CORE_SYMBOL)
-        opts="--permission %s@active" % (contract)
+        opts="--permission %s@active" % eosioAccount.name
         trans=biosNode.pushMessage(contract, action, data, opts)
         if trans is None or not trans[0]:
             Utils.Print("ERROR: Failed to push issue action to cyber contract.")
@@ -1180,7 +1181,7 @@ class Cluster(object):
         action="init"
         data="{\"version\":0,\"core\":\"4,%s\"}" % (CORE_SYMBOL)
         opts="--permission %s@active" % (eosioAccount.name)
-        trans=biosNode.pushMessage(eosioAccount.name, action, data, opts)
+        # trans=biosNode.pushMessage(eosioAccount.name, action, data, opts)
         Utils.Print("Cluster bootstrap done.")
 
         return biosNode
