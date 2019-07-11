@@ -4,14 +4,18 @@
  */
 #pragma once
 
+#include <eosio/chain/database_utils.hpp>
+#include <eosio/chain/authority.hpp>
+#include <eosio/chain/block_timestamp.hpp>
+#include <eosio/chain/abi_def.hpp>
 #include <eosio/chain/multi_index_includes.hpp>
-#include <fc/array.hpp>
+
+#include <cyberway/chaindb/abi_info.hpp>
 
 namespace eosio {
 using chain::account_name;
 using chain::public_key_type;
 using chain::permission_name;
-using namespace boost::multi_index;
 
 class public_key_history_object : public cyberway::chaindb::object<chain::public_key_history_object_type, public_key_history_object> {
    CHAINDB_OBJECT_ID_CTOR(public_key_history_object)
@@ -51,5 +55,5 @@ using public_key_history_table = cyberway::chaindb::table_container<
 CHAINDB_SET_TABLE_TYPE( eosio::public_key_history_object, eosio::public_key_history_table )
 CHAINDB_TAG(eosio::public_key_history_object, pybkeyhist)
 
-FC_REFLECT( eosio::public_key_history_object, (public_key)(name)(permission) )
+FC_REFLECT( eosio::public_key_history_object, (id)(public_key)(name)(permission) )
 

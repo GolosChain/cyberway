@@ -1,14 +1,17 @@
 #include <eosio/history_plugin/history_plugin.hpp>
 #include <eosio/history_plugin/account_control_history_object.hpp>
 #include <eosio/history_plugin/public_key_history_object.hpp>
-#include <eosio/chain/controller.hpp>
-#include <eosio/chain/trace.hpp>
-#include <eosio/chain_plugin/chain_plugin.hpp>
 
-#include <fc/io/json.hpp>
+#include <eosio/chain/controller.hpp>
+
+//#include <eosio/chain/trace.hpp>
+//#include <eosio/chain_plugin/chain_plugin.hpp>
+
+//#include <fc/io/json.hpp>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/signals2/connection.hpp>
+
 
 namespace eosio {
    using namespace chain;
@@ -30,9 +33,8 @@ namespace eosio {
 
       CHAINDB_OBJECT_ID_CTOR( action_history_object );
 
-      id_type      id;
-      uint64_t     action_sequence_num; ///< the sequence number of the relevant action
-
+      id_type              id;
+      uint64_t             action_sequence_num; ///< the sequence number of the relevant action
       shared_string        packed_action_trace;
       uint32_t             block_num;
       block_timestamp_type block_time;
@@ -44,26 +46,19 @@ namespace eosio {
 
    struct by_action_sequence_num;
    struct by_account_action_seq;
-   //struct by_trx_id;
+//   struct by_trx_id;
 
-   using action_history_table = cyberway::chaindb::table_container<
-      action_history_object,
+   using account_sequence_table = cyberway::chaindb::table_container<
+      account_history_object,
       cyberway::chaindb::indexed_by<
-         cyberway::chaindb::ordered_unique<tag<by_id>, BOOST_MULTI_INDEX_MEMBER(action_history_object, action_history_object::id_type, id)>,
-         cyberway::chaindb::ordered_unique<tag<by_action_sequence_num>, BOOST_MULTI_INDEX_MEMBER(action_history_object, uint64_t, action_sequence_num)>,
-         cyberway::chaindb::ordered_unique<tag<by_trx_id>,
-            composite_key< action_history_object,
-               BOOST_MULTI_INDEX_MEMBER(action_history_object, transaction_id_type, trx_id),
-               BOOST_MULTI_INDEX_MEMBER(action_history_object, uint64_t, action_sequence_num)
-            >
-         >
+         cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_id>, BOOST_MULTI_INDEX_MEMBER(account_history_object, account_history_id_type, id)>
       >
    >;
 
    using account_history_table = cyberway::chaindb::table_container<
       account_history_object,
       cyberway::chaindb::indexed_by<
-         cyberway::chaindb::ordered_unique<tag<by_id>, BOOST_MULTI_INDEX_MEMBER(account_history_object, account_history_object::id_type, id)>,
+         cyberway::chaindb::ordered_unique<tag<by_id>, BOOST_MULTI_INDEX_MEMBER(account_history_object, account_history_id_type, id)>,
          cyberway::chaindb::ordered_unique<tag<by_account_action_seq>,
             cyberway::chaindb::composite_key< account_history_object,
                BOOST_MULTI_INDEX_MEMBER(account_history_object, account_name, account),
@@ -73,6 +68,19 @@ namespace eosio {
       >
    >;
 
+   using action_history_table = cyberway::chaindb::table_container<
+      action_history_object,
+      cyberway::chaindb::indexed_by<
+         cyberway::chaindb::ordered_unique<tag<by_id>, BOOST_MULTI_INDEX_MEMBER(action_history_object, action_history_id_type, id)>,
+         cyberway::chaindb::ordered_unique<tag<by_action_sequence_num>, BOOST_MULTI_INDEX_MEMBER(action_history_object, uint64_t, action_sequence_num)>,
+         cyberway::chaindb::ordered_unique<tag<by_trx_id>,
+            composite_key< action_history_object,
+               BOOST_MULTI_INDEX_MEMBER(action_history_object, transaction_id_type, trx_id),
+               BOOST_MULTI_INDEX_MEMBER(action_history_object, uint64_t, action_sequence_num)
+            >
+         >
+      >
+   >;
 } /// namespace eosio
 
 CHAINDB_SET_TABLE_TYPE(eosio::account_history_object, eosio::account_history_table)
@@ -81,8 +89,8 @@ CHAINDB_TAG(eosio::account_history_object, acchistory)
 CHAINDB_SET_TABLE_TYPE(eosio::action_history_object, eosio::action_history_table)
 CHAINDB_TAG(eosio::action_history_object, acthistory)
 
-//FC_REFLECT(eosio::account_history_object, (expiration)(action_sequence_num)(account_sequence_num))
-FC_REFLECT(eosio::action_history_object,  (action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
+FC_REFLECT(eosio::account_history_object, (id)(account)(action_sequence_num)(account_sequence_num))
+FC_REFLECT(eosio::action_history_object,  (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
 
 
 namespace eosio {
@@ -90,20 +98,20 @@ namespace eosio {
    template<typename MultiIndex, typename LookupType>
    static void remove(chaindb_controller& db, const account_name& account_name, const permission_name& permission)
    {
-//      const auto& idx = db.get_index<MultiIndex, LookupType>();
+      const auto& idx = db.get_index<MultiIndex, LookupType>();
 //      auto& mutable_idx = db.get_mutable_index<MultiIndex>();
-//      while(!idx.empty()) {
-//         auto key = boost::make_tuple(account_name, permission);
-//         const auto& itr = idx.lower_bound(key);
-//         if (itr == idx.end())
-//            break;
+      while(!idx.empty()) {
+         auto key = boost::make_tuple(account_name, permission);
+         const auto& itr = idx.lower_bound(key);
+         if (itr == idx.end())
+            break;
 
-//         const auto& range_end = idx.upper_bound(key);
-//         if (itr == range_end)
-//            break;
+         const auto& range_end = idx.upper_bound(key);
+         if (itr == range_end)
+            break;
 
 //         mutable_idx.remove(*itr);
-//      }
+      }
    }
 
    static void add(chaindb_controller& db, const vector<key_weight>& keys, const account_name& name, const permission_name& permission)
@@ -147,7 +155,7 @@ namespace eosio {
          bool bypass_filter = false;
          std::set<filter_entry> filter_on;
          std::set<filter_entry> filter_out;
-         chain_plugin*          chain_plug = nullptr;
+         chain_plugin* chain_plug = nullptr;
          fc::optional<scoped_connection> applied_transaction_connection;
 
           bool filter(const action_trace& act) {
@@ -215,7 +223,7 @@ namespace eosio {
             auto& chain = chain_plug->chain();
             auto& chaindb = chain.chaindb();
 
-            const auto& idx = chaindb.get_index<account_history_table, by_account_action_seq>();
+            const auto& idx = chaindb.get_index<account_history_object, by_account_action_seq>();
 //            auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
 
 //            uint64_t asn = 0;
@@ -246,16 +254,16 @@ namespace eosio {
             else if( at.act.name == N(updateauth) )
             {
                const auto update = at.act.data_as<chain::updateauth>();
-               remove<public_key_history_table, by_account_permission>(chaindb, update.account, update.permission);
-               remove<account_control_history_table, by_controlled_authority>(chaindb, update.account, update.permission);
+//               remove<public_key_history_table, by_account_permission>(chaindb, update.account, update.permission);
+//               remove<account_control_history_table, by_controlled_authority>(chaindb, update.account, update.permission);
                add(chaindb, update.auth.keys, update.account, update.permission);
                add(chaindb, update.auth.accounts, update.account, update.permission);
             }
             else if( at.act.name == N(deleteauth) )
             {
                const auto del = at.act.data_as<chain::deleteauth>();
-               remove<public_key_history_table, by_account_permission>(chaindb, del.account, del.permission);
-               remove<account_control_history_table, by_controlled_authority>(chaindb, del.account, del.permission);
+//               remove<public_key_history_table, by_account_permission>(chaindb, del.account, del.permission);
+//               remove<account_control_history_table, by_controlled_authority>(chaindb, del.account, del.permission);
             }
          }
 
@@ -387,7 +395,7 @@ namespace eosio {
         const auto& chaindb = chain.chaindb();
         const auto abi_serializer_max_time = history->chain_plug->get_abi_serializer_max_time();
 
-//        const auto& idx = chaindb.get_index<eosio::account_history_table, eosio::by_account_action_seq>();
+//        const auto& idx = chaindb.get_index<account_history_object, by_account_action_seq>();
 
         int32_t start = 0;
         int32_t pos = params.pos ? *params.pos : -1;

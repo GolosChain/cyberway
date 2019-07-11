@@ -611,7 +611,9 @@ struct controller_impl {
             a.set_abi(eosio_contract_abi());
          } else if (name == config::domain_account_name) {
             a.set_abi(domain_contract_abi());
-         }
+          }else if (name == config::history_account_name) {
+             a.set_abi(history_contract_abi());
+          }
       });
       chaindb.emplace<account_sequence_object>(name.value, [&](auto & a) { });
 
@@ -659,6 +661,7 @@ struct controller_impl {
           create_native_account( config::system_account_name, system_auth, system_auth, true );
           create_native_account(config::msig_account_name, system_auth, system_auth, true);
           create_native_account(config::domain_account_name, system_auth, system_auth);
+          create_native_account(config::history_account_name, system_auth, system_auth);
           create_native_account(config::govern_account_name, system_auth, system_auth, true);
           create_native_account(config::stake_account_name, system_auth, system_auth, true);
     

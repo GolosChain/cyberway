@@ -3,16 +3,19 @@
  *  @copyright defined in eos/LICENSE
  */
 #pragma once
-
+#include <eosio/chain/database_utils.hpp>
+#include <eosio/chain/authority.hpp>
+#include <eosio/chain/block_timestamp.hpp>
+#include <eosio/chain/abi_def.hpp>
 #include <eosio/chain/multi_index_includes.hpp>
-#include <eosio/chain/types.hpp>
+
+#include <cyberway/chaindb/abi_info.hpp>
 
 namespace eosio {
 using chain::account_name;
 using chain::permission_name;
 using chain::shared_vector;
 using chain::transaction_id_type;
-using namespace boost::multi_index;
 
 class account_control_history_object : public cyberway::chaindb::object<chain::account_control_history_object_type, account_control_history_object> {
    CHAINDB_OBJECT_ID_CTOR(account_control_history_object)
@@ -50,5 +53,5 @@ using account_control_history_table = cyberway::chaindb::table_container<
 
 CHAINDB_SET_TABLE_TYPE( eosio::account_control_history_object, eosio::account_control_history_table )
 CHAINDB_TAG(eosio::account_control_history_object, ctrlhistory)
-FC_REFLECT( eosio::account_control_history_object, (controlled_account)(controlled_permission)(controlling_account) )
+FC_REFLECT( eosio::account_control_history_object, (id)(controlled_account)(controlled_permission)(controlling_account) )
 

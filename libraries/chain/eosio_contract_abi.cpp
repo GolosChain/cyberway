@@ -745,6 +745,7 @@ abi_def history_contract_abi(abi_def abi) {
         {"permission", "permission_name"}}
     });
     abi.structs.emplace_back(struct_def {"acchistory", "", {
+        {"id", "uint64"},
         {"account", "account_name"},
         {"action_sequence_num", "uint64"},
         {"account_sequence_num",    "int32"}}
@@ -761,12 +762,6 @@ abi_def history_contract_abi(abi_def abi) {
         {"controlled_permission", "permission_name"},
         {"controlling_account",   "account_name"}}
     });
-
-
-    abi.actions.push_back(action_def{name("pybkeyhist"), "pybkeyhist"});
-    abi.actions.push_back(action_def{name("acchistory"), "acchistory"});
-    abi.actions.push_back(action_def{name("acthistory"), "acthistory"});
-    abi.actions.push_back(action_def{name("ctrlhistory"), "ctrlhistory"});
 
     return abi;
 }
