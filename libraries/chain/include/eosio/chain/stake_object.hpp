@@ -122,7 +122,7 @@ class stake_grant_object : public cyberway::chaindb::object<stake_grant_object_t
     id_type id;
     symbol_code token_code;
     account_name grantor_name;
-    account_name agent_name;
+    account_name recipient_name;
     int16_t pct;
     int64_t share;
     int16_t break_fee;
@@ -140,7 +140,7 @@ using stake_grant_table = cyberway::chaindb::table_container<
            cyberway::chaindb::composite_key<stake_grant_object,
               BOOST_MULTI_INDEX_MEMBER(stake_grant_object, symbol_code, token_code),
               BOOST_MULTI_INDEX_MEMBER(stake_grant_object, account_name, grantor_name),
-              BOOST_MULTI_INDEX_MEMBER(stake_grant_object, account_name, agent_name)>
+              BOOST_MULTI_INDEX_MEMBER(stake_grant_object, account_name, recipient_name)>
         >
     >
 >;
@@ -208,7 +208,7 @@ FC_REFLECT(eosio::chain::stake_candidate_object,
     (id)(token_code)(account)(latest_pick)(votes)(priority)(signing_key)(enabled))
     
 FC_REFLECT(eosio::chain::stake_grant_object, 
-    (id)(token_code)(grantor_name)(agent_name)(pct)(share)(break_fee)(break_min_own_staked))
+    (id)(token_code)(grantor_name)(recipient_name)(pct)(share)(break_fee)(break_min_own_staked))
     
 FC_REFLECT(eosio::chain::stake_param_object, 
     (id)(token_symbol)(max_proxies)(depriving_window)(min_own_staked_for_election))

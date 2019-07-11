@@ -522,7 +522,7 @@ abi_def eosio_contract_abi(abi_def eos_abi)
         {"id", "uint64"},
         {"token_code", "symbol_code"},
         {"grantor_name", "name"},
-        {"agent_name", "name"},
+        {"recipient_name", "name"},
         {"pct", "int16"},
         {"share", "int64"},
         {"break_fee", "int16"},
@@ -532,7 +532,7 @@ abi_def eosio_contract_abi(abi_def eos_abi)
       cyberway::chaindb::tag<stake_grant_object>::get_code(), "stake_grant_object", {
          {cyberway::chaindb::tag<by_id>::get_code(), true, {{"id", "asc"}}},
          {cyberway::chaindb::tag<stake_agent_object::by_key>::get_code(), true,
-             {{"token_code", "asc"},{"grantor_name", "asc"},{"agent_name", "asc"}}}
+             {{"token_code", "asc"},{"grantor_name", "asc"},{"recipient_name", "asc"}}}
       }
    });
 

@@ -538,7 +538,7 @@ struct genesis_create::genesis_create_impl final {
             db.emplace<stake_grant_object>(g.from, [&](auto& o) {
                 o.token_code = sys_sym.to_symbol_code(),
                 o.grantor_name = g.from,
-                o.agent_name = g.to,
+                o.recipient_name = g.to,
                 o.pct = g.pct,
                 o.share = g.granted;
                 o.break_fee = config::percent_100;

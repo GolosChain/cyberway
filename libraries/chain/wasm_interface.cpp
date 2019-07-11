@@ -140,9 +140,9 @@ class privileged_api : public context_aware_api {
           stake::update_proxied(context.chaindb, context.get_storage_payer(), now, symbol_code{token_code_raw}, account, static_cast<bool>(force));
       }
 
-      void recall_stake_proxied(uint64_t token_code_raw, account_name grantor_name, account_name agent_name, int32_t pct) {
+      void recall_stake_proxied(uint64_t token_code_raw, account_name grantor_name, account_name recipient_name, int32_t pct) {
           int64_t now = context.control.pending_block_time().sec_since_epoch();
-          stake::recall_proxied(context.chaindb, context.get_storage_payer(), now, symbol_code{token_code_raw}, grantor_name, agent_name, pct);
+          stake::recall_proxied(context.chaindb, context.get_storage_payer(), now, symbol_code{token_code_raw}, grantor_name, recipient_name, pct);
       }
       
       uint64_t get_used_resources_cost(account_name account) {
