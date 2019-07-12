@@ -4,10 +4,8 @@
 
 #include <eosio/chain/controller.hpp>
 
-//#include <eosio/chain/trace.hpp>
-//#include <eosio/chain_plugin/chain_plugin.hpp>
-
-//#include <fc/io/json.hpp>
+#include <eosio/chain/trace.hpp>
+#include <fc/io/json.hpp>
 
 #include <eosio/chain/config.hpp>
 #include <boost/algorithm/string.hpp>
@@ -36,7 +34,7 @@ namespace eosio {
 
       id_type              id;
       uint64_t             action_sequence_num; ///< the sequence number of the relevant action
-      shared_string        packed_action_trace;
+      std::string/*shared_string*/ packed_action_trace;
       uint32_t             block_num;
       block_timestamp_type block_time;
       transaction_id_type  trx_id;
@@ -47,7 +45,6 @@ namespace eosio {
 
    struct by_action_sequence_num;
    struct by_account_action_seq;
-//   struct by_trx_id;
 
    using account_history_table = cyberway::chaindb::table_container<
       account_history_object,
@@ -87,7 +84,7 @@ CHAINDB_SET_TABLE_TYPE(eosio::action_history_object, eosio::action_history_table
 CHAINDB_TAG(eosio::action_history_object, acthistory)
 
 FC_REFLECT(eosio::account_history_object, (id)(account)(action_sequence_num)(account_sequence_num))
-FC_REFLECT(eosio::action_history_object,  (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
+FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
 
 
 namespace eosio {
@@ -106,16 +103,15 @@ namespace eosio {
 //         if (itr == range_end)
 //            break;
 
-//         chaindb.remove({config::history_account_name, config::history_account_name, N(acthistory)}, // FIXME remove item
-//                        context.get_storage_payer(config::history_account_name), pk);
-//         idx.remove(*itr);
+         idx.erase(*itr);
       }
    }
 
    static void add(chaindb_controller& db, const vector<key_weight>& keys, const account_name& name, const permission_name& permission)
    {
+      const auto& table = db.get_table<public_key_history_object>();
       for (auto pub_key_weight : keys ) {
-         db.emplace<public_key_history_object>(config::history_account_name, [&](public_key_history_object& obj) {
+         table.emplace([&](public_key_history_object& obj) {
             obj.public_key = pub_key_weight.key;
             obj.name = name;
             obj.permission = permission;
@@ -125,8 +121,9 @@ namespace eosio {
 
    static void add(chaindb_controller& db, const vector<permission_level_weight>& controlling_accounts, const account_name& account_name, const permission_name& permission)
    {
+      const auto& table = db.get_table<account_control_history_object>();
       for (auto controlling_account : controlling_accounts ) {
-         db.emplace<account_control_history_object>(config::history_account_name, [&](account_control_history_object& obj) {
+         table.emplace([&](account_control_history_object& obj) {
             obj.controlled_account = account_name;
             obj.controlled_permission = permission;
             obj.controlling_account = controlling_account.permission.actor;
@@ -230,7 +227,7 @@ namespace eosio {
                asn = itr->account_sequence_num + 1;
 
             //idump((n)(act.receipt.global_sequence)(asn));
-            const auto& a = chaindb.emplace<account_history_object>(config::history_account_name, [&]( auto& aho ) {
+            const auto& a = idx.emplace([&]( auto& aho ) {
               aho.account = n;
               aho.action_sequence_num = act.receipt.global_sequence;
               aho.account_sequence_num = asn;
@@ -271,17 +268,19 @@ namespace eosio {
                auto& chain = chain_plug->chain();
                auto& chaindb = chain.chaindb();
 
-               // FIXME emplace, error allocator
-//               chaindb.emplace<action_history_object>(config::history_account_name, [&]( auto& aho ) {
+               const auto& table = chaindb.get_table<action_history_object>();
+               table.emplace([&]( auto& aho ) {
+
 //                  auto ps = fc::raw::pack_size( at );
 //                  aho.packed_action_trace.resize(ps);
 //                  datastream<char*> ds( aho.packed_action_trace.data(), ps );
 //                  fc::raw::pack( ds, at );
-//                  aho.action_sequence_num = at.receipt.global_sequence;
-//                  aho.block_num = chain.pending_block_state()->block_num;
-//                  aho.block_time = chain.pending_block_time();
-//                  aho.trx_id     = at.trx_id;
-//               });
+
+                  aho.action_sequence_num = at.receipt.global_sequence;
+                  aho.block_num = chain.pending_block_state()->block_num;
+                  aho.block_time = chain.pending_block_time();
+                  aho.trx_id     = at.trx_id;
+               });
 
                auto aset = account_set( at );
                for( auto a : aset ) {
@@ -361,19 +360,16 @@ namespace eosio {
          EOS_ASSERT( my->chain_plug, chain::missing_chain_plugin_exception, ""  );
          auto& chain = my->chain_plug->chain();
 
-         auto& chaindb = chain.chaindb();
+//         auto& chaindb = chain.chaindb();
+//         chaindb.add_chaindb_index<account_history_object>(chaindb);
+//         chaindb.add_chaindb_index<action_history_object>(chaindb);
+//         chaindb.add_chaindb_index<account_control_history_object>(chaindb);
+//         chaindb.add_chaindb_index<public_key_history_object>(chaindb);
 
-//         chainbase::database& db = const_cast<chainbase::database&>( chain.db() ); // Override read-only access to state DB (highly unrecommended practice!)
-//         // TODO: Use separate chainbase database for managing the state of the history_plugin (or remove deprecated history_plugin entirely)
-//         db.add_chaindb_index<account_history_index>(chaindb);
-//         db.add_chaindb_index<action_history_index>(chaindb);
-//         db.add_chaindb_index<account_control_history_multi_index>(chaindb);
-//         db.add_chaindb_index<public_key_history_multi_index>(chaindb);
-
-//         my->applied_transaction_connection.emplace(
-//               chain.applied_transaction.connect( [&]( const transaction_trace_ptr& p ) {
-//                  my->on_applied_transaction( p );
-//               } ));
+         my->applied_transaction_connection.emplace(
+               chain.applied_transaction.connect( [&]( const transaction_trace_ptr& p ) {
+                  my->on_applied_transaction( p );
+               } ));
       } FC_LOG_AND_RETHROW()
    }
 
