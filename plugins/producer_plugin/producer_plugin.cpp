@@ -178,7 +178,7 @@ class producer_plugin_impl : public std::enable_shared_from_this<producer_plugin
 
 
       void on_block( const block_state_ptr& bsp ) {
-         if( bsp->header.timestamp <= _last_signed_block_time ) return;
+         if( bsp->header.timestamp.to_time_point() <= _last_signed_block_time ) return;
          if( bsp->header.timestamp <= _start_time ) return;
          if( bsp->block_num <= _last_signed_block_num ) return;
 
@@ -1007,7 +1007,6 @@ enum class tx_category {
 producer_plugin_impl::start_block_result producer_plugin_impl::process_pending_transactions(
    const fc::time_point& preprocess_deadline, size_t orig_size
 ) {
-   auto ret = start_block_result::succeeded;
    while (orig_size && _pending_incoming_transactions.size()) {
       if (preprocess_deadline <= fc::time_point::now()) return start_block_result::exhausted;
       auto e = _pending_incoming_transactions.front();

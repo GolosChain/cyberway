@@ -289,6 +289,36 @@ class Node(object):
 
         return None
 
+    def getBlockState(self, blockNum, silentErrors=False, exitOnError=False):
+        """Given a blockNum will return block state details."""
+        assert(isinstance(blockNum, int))
+        # mongo only
+        assert(self.enableMongo)
+
+        cmd="%s %s" % (Utils.MongoPath, self.mongoEndpointArgs)
+        subcommand='db.block_states.findOne( { "block_num": %d } )' % (blockNum)
+        if Utils.Debug: Utils.Print("cmd: echo '%s' | %s" % (subcommand, cmd))
+        start=time.perf_counter()
+        try:
+            block=Node.runMongoCmdReturnJson(cmd.split(), subcommand, exitOnError=exitOnError)
+            if Utils.Debug:
+                end=time.perf_counter()
+                Utils.Print("cmd Duration: %.3f sec" % (end-start))
+            if block is not None:
+                return block
+        except subprocess.CalledProcessError as ex:
+            if not silentErrors:
+                end=time.perf_counter()
+                msg=ex.output.decode("utf-8")
+                errorMsg="Exception during get db node get block.  cmd Duration: %.3f sec. %s" % (end-start, msg)
+                if exitOnError:
+                    Utils.cmdError(errorMsg)
+                    Utils.errorExit(errorMsg)
+                else:
+                    Utils.Print("ERROR: %s" % (errorMsg))
+            return None
+        return None
+
     def getBlockByIdMdb(self, blockId, silentErrors=False):
         cmd="%s %s" % (Utils.MongoPath, self.mongoEndpointArgs)
         subcommand='db.blocks.findOne( { "block_id": "%s" } )' % (blockId)
@@ -992,6 +1022,36 @@ class Node(object):
 
         return self.waitForTransBlockIfNeeded(trans, waitForTransBlock, exitOnError=exitOnError)
 
+    def stakeOpen(self, account):
+        action="open"
+        data="""{"owner": "%s", "token_code": "%s"}""" % (account, CORE_SYMBOL)
+        opts="--permission %s@active" % account
+        return self.pushMessage("cyber.stake", action, data, opts)
+
+    def setProxyLevel(self, account, level, waitForTransBlock=False, exitOnError=False):
+        acc = account.name
+        cmdDesc = "system setproxylvl"
+        cmd = "%s -j %s %s --symbol \"4,%s\"" % (cmdDesc, acc, level, CORE_SYMBOL)
+        trans = self.processCleosCmd(cmd, cmdDesc, silentErrors=False, exitOnError=exitOnError)
+        self.trackCmdTransaction(trans)
+        return self.waitForTransBlockIfNeeded(trans, waitForTransBlock, exitOnError=exitOnError)
+
+    def setGrantTerms(self, grantor, agent, pct, breakFee=10000, breakMinStaked=0):
+        action="setgrntterms"
+        data="""{
+            "grantor_name": "%s",
+            "agent_name": "%s",
+            "token_code": "%s",
+            "pct": %s,
+            "break_fee": %s,
+            "break_min_own_staked": %s}""" % (grantor, agent, CORE_SYMBOL, pct, breakFee, breakMinStaked)
+        opts="--permission %s@active" % grantor
+        return self.pushMessage("cyber.stake", action, data, opts)
+
+    def stakeFunds(self, account, quantity, stakeAcc, waitForTransBlock=False, exitOnError=False):
+        return self.transferFunds(account, stakeAcc, "%s %s" % (quantity, CORE_SYMBOL), "",
+            waitForTransBlock=waitForTransBlock, exitOnError=exitOnError)
+
     def delegatebw(self, fromAccount, netQuantity, cpuQuantity, toAccount=None, transferTo=False, waitForTransBlock=False, exitOnError=False):
         if toAccount is None:
             toAccount=fromAccount
@@ -1038,6 +1098,46 @@ class Node(object):
         self.trackCmdTransaction(trans)
 
         return self.waitForTransBlockIfNeeded(trans, waitForTransBlock, exitOnError=exitOnError)
+
+    def trxTrackWait(self, trx, waitForTransBlock=False, exitOnError=False):
+        self.trackCmdTransaction(trx)
+        return self.waitForTransBlockIfNeeded(trx, waitForTransBlock, exitOnError=exitOnError)
+
+    def stakeDelegate(self, grantor, agent, quantity):
+        action="delegate"
+        data="""{"grantor_name":"%s", "agent_name":"%s", "quantity":"%s"}""" % (grantor, agent, quantity)
+        opts="--permission %s@active" % grantor
+        return self.pushMessage("cyber.stake", action, data, opts)
+
+    def stakeRecall(self, grantor, agent, pct = 10000):
+        action="recall"
+        data="""{"grantor_name":"%s", "agent_name":"%s", "token_code":"%s", "pct":"%i"}""" % (
+            grantor, agent, CORE_SYMBOL, pct)
+        opts="--permission %s@active" % grantor
+        return self.pushMessage("cyber.stake", action, data, opts)
+
+    def stakeEnable(self, issuer):
+        action="enable"
+        data="""{"token_symbol":"4,%s"}""" % CORE_SYMBOL
+        opts="--permission %s@active" % issuer
+        return self.pushMessage("cyber.stake", action, data, opts)
+
+    def voteProds(self, account, producers, sum, waitForTransBlock=False, exitOnError=False):
+        amount = sum/len(producers) - 0.00005   # force rounding down when format float
+        trx = None
+        for prod in producers:
+            ok,trx = self.stakeDelegate(account, prod, "%.4f %s" % (amount, CORE_SYMBOL))
+            if not ok:
+                return None
+        return self.trxTrackWait(trx, waitForTransBlock, exitOnError)
+
+    def unvoteProds(self, account, producers, waitForTransBlock=False, exitOnError=False):
+        trx = None
+        for prod in producers:
+            ok,trx = self.stakeRecall(account, prod)
+            if not ok:
+                return None
+        return self.trxTrackWait(trx, waitForTransBlock, exitOnError)
 
     def processCleosCmd(self, cmd, cmdDesc, silentErrors=True, exitOnError=False, exitMsg=None, returnType=ReturnType.json):
         assert(isinstance(returnType, ReturnType))
@@ -1258,11 +1358,16 @@ class Node(object):
 
         return True
 
+    def getBlockStateByNum(self, blockNum, timeout=None, waitForBlock=True, exitOnError=True):
+        if waitForBlock:
+            self.waitForBlock(blockNum, timeout=timeout, blockType=BlockType.head)
+        return self.getBlockState(blockNum, exitOnError=exitOnError)
+
     def getBlockProducerByNum(self, blockNum, timeout=None, waitForBlock=True, exitOnError=True):
         if waitForBlock:
             self.waitForBlock(blockNum, timeout=timeout, blockType=BlockType.head)
         block=self.getBlock(blockNum, exitOnError=exitOnError)
-        blockProducer=block["producer"]
+        blockProducer=block["block"]["producer"]
         if blockProducer is None and exitOnError:
             Utils.cmdError("could not get producer for block number %s" % (blockNum))
             Utils.errorExit("Failed to get block's producer")
@@ -1271,7 +1376,7 @@ class Node(object):
     def getBlockProducer(self, timeout=None, waitForBlock=True, exitOnError=True, blockType=BlockType.head):
         blockNum=self.getBlockNum(blockType=blockType)
         block=self.getBlock(blockNum, exitOnError=exitOnError, blockType=blockType)
-        blockProducer=block["producer"]
+        blockProducer=block["block"]["producer"]
         if blockProducer is None and exitOnError:
             Utils.cmdError("could not get producer for block number %s" % (blockNum))
             Utils.errorExit("Failed to get block's producer")
@@ -1279,14 +1384,15 @@ class Node(object):
 
     def getNextCleanProductionCycle(self, trans):
         transId=Node.getTransId(trans)
-        rounds=21*12*2  # max time to ensure that at least 2/3+1 of producers x blocks per producer x at least 2 times
-        self.waitForTransFinalization(transId, timeout=rounds/2)
+        # rounds=21*12*2  # max time to ensure that at least 2/3+1 of producers x blocks per producer x at least 2 times
+        rounds=21*1*2  # max time to ensure that at least 2/3+1 of producers x blocks per producer x at least 2 times
+        self.waitForTransFinalization(transId, timeout=rounds*3)
         irreversibleBlockNum=self.getIrreversibleBlockNum()
 
         # The voted schedule should be promoted now, then need to wait for that to become irreversible
         votingTallyWindow=120  #could be up to 120 blocks before the votes were tallied
         promotedBlockNum=self.getHeadBlockNum()+votingTallyWindow
-        self.waitForIrreversibleBlock(promotedBlockNum, timeout=rounds/2)
+        self.waitForIrreversibleBlock(promotedBlockNum, timeout=rounds*3)
 
         ibnSchedActive=self.getIrreversibleBlockNum()
 
