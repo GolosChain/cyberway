@@ -191,6 +191,7 @@ namespace bacc = boost::accumulators;
    ,net_usage(trace->net_usage)
    ,storage_bytes(trace->storage_bytes)
    ,pseudo_start(s)
+   ,available_resources(*this)
    {
       if (!c.skip_db_sessions()) {
          // TODO: removed by CyberWay
@@ -252,8 +253,10 @@ namespace bacc = boost::accumulators;
       for( const auto& bw : storage_providers ) {
          bill_to_accounts.erase(bw.first);
       }
+      accounts_storage_deltas.reserve(bill_to_accounts.capacity());
 
-      available_resources.init(explicit_billed_cpu_time, rl, bill_to_accounts, control.pending_block_time());
+      pricelist = rl.get_pricelist();
+      available_resources.init();
 
       _deadline = start + get_billing_timer_duration_limit();
 
@@ -369,11 +372,16 @@ namespace bacc = boost::accumulators;
 
    void transaction_context::finalize() {
       validate_bw_usage();
-      control.get_mutable_resource_limits_manager().add_transaction_usage( bill_to_accounts,
-         static_cast<uint64_t>(billed_cpu_time_us),
-         net_usage,
-         billed_ram_bytes,
-         control.pending_block_time()); // can fail due to billed_ram_bytes
+
+      auto& rl = control.get_mutable_resource_limits_manager();
+      auto  pending_block_time = control.pending_block_time();
+
+      rl.add_transaction_usage( bill_to_accounts, pricelist,
+         static_cast<uint64_t>(billed_cpu_time_us), net_usage, billed_ram_bytes,
+         pending_block_time);
+
+      rl.add_storage_usage( accounts_storage_deltas, pricelist, pending_block_time );
+
       if( control.is_producing_block() ) {
          control.chaindb().apply_all_changes();
       }
@@ -503,16 +511,19 @@ namespace bacc = boost::accumulators;
       }
    }
 
-   void transaction_context::add_storage_usage( const storage_payer_info& storage, const bool is_authorized ) {
+   void transaction_context::add_storage_usage( const storage_payer_info& storage ) {
+      if( control.chaindb().get<account_object>(storage.payer).privileged ) {
+         return;
+      }
+
       storage_bytes += storage.delta;
       hard_limits[resource_limits::STORAGE].check(storage_bytes);
+
+      accounts_storage_deltas[storage.payer] += storage.delta;
 
       auto now = get_current_time();
       available_resources.update_storage_usage(storage);
       reset_billing_timer();
-
-      auto& rl = control.get_mutable_resource_limits_manager();
-      rl.add_storage_usage(storage.payer, storage.delta, control.pending_block_slot(), is_authorized);
    }
 
    uint32_t transaction_context::update_billed_cpu_time( fc::time_point now ) {
@@ -672,14 +683,15 @@ namespace bacc = boost::accumulators;
       return {*this, owner, get_storage_provider(owner)};
    }
 
-    void transaction_context::available_resources_t::init(bool ecpu_time, resource_limits_manager& rl, const flat_set<account_name>& accounts, fc::time_point pending_block_time) {
-        explicit_cpu_time = ecpu_time;
-        pricelist = rl.get_pricelist();
-        auto& cpu_price = pricelist[resource_limits::CPU];
-        rl.update_account_usage(accounts, block_timestamp_type(pending_block_time).slot);
+    void transaction_context::available_resources_t::init() {
+        auto& cpu_price = trx_ctx.pricelist[resource_limits::CPU];
+        auto& rl = trx_ctx.control.get_mutable_resource_limits_manager();
+        auto  pending_block_time = trx_ctx.control.pending_block_time();
+        rl.update_account_usage(trx_ctx.bill_to_accounts, block_timestamp_type(pending_block_time).slot);
         min_cpu_limit = UINT64_MAX;
-        for (const auto& a : accounts) {
-            auto balance = rl.get_account_balance(pending_block_time, a, pricelist, true); //тут нада объективное бросать?ы
+        cpu_limits.reserve(trx_ctx.bill_to_accounts.capacity());
+        for (const auto& a : trx_ctx.bill_to_accounts) {
+            auto balance = rl.get_account_balance(pending_block_time, a, trx_ctx.pricelist, true); //тут нада объективное бросать?ы
             auto& lim = cpu_limits[a];
             lim = UINT64_MAX;
             if (cpu_price.numerator && balance < UINT64_MAX) {
@@ -690,7 +702,7 @@ namespace bacc = boost::accumulators;
     }
 
     void transaction_context::available_resources_t::update_storage_usage(const storage_payer_info& storage) {
-        if (explicit_cpu_time || !storage.delta) {
+        if (trx_ctx.explicit_billed_cpu_time || !storage.delta) {
             return;
         }
         auto lim_itr = cpu_limits.find(storage.payer);
@@ -700,8 +712,8 @@ namespace bacc = boost::accumulators;
         auto& lim = lim_itr->second;
         uint64_t delta_abs = std::abs(storage.delta);
         
-        auto& storage_price = pricelist[resource_limits::STORAGE];
-        auto& cpu_price     = pricelist[resource_limits::CPU];
+        auto& storage_price = trx_ctx.pricelist[resource_limits::STORAGE];
+        auto& cpu_price     = trx_ctx.pricelist[resource_limits::CPU];
 
         auto cost = safe_prop_ceil(delta_abs, storage_price.numerator, storage_price.denominator);
         auto cpu = cost ? (cpu_price.numerator ? safe_prop_ceil(cost, cpu_price.denominator, cpu_price.numerator) : UINT64_MAX) : 0;
@@ -730,12 +742,12 @@ namespace bacc = boost::accumulators;
 
     void transaction_context::available_resources_t::add_net_usage(int64_t delta) {
         EOS_ASSERT(delta >= 0, transaction_exception, "SYSTEM: available_resources_t::add_net_usage, usage_delta < 0");
-        auto& cpu_price = pricelist[resource_limits::CPU];
-        if (explicit_cpu_time || !delta || !cpu_price.numerator) {
+        auto& cpu_price = trx_ctx.pricelist[resource_limits::CPU];
+        if (trx_ctx.explicit_billed_cpu_time || !delta || !cpu_price.numerator) {
             return;
         }
         
-        auto& net_price = pricelist[resource_limits::NET];
+        auto& net_price = trx_ctx.pricelist[resource_limits::NET];
         
         auto cost = safe_prop_ceil(static_cast<uint64_t>(delta), net_price.numerator, net_price.denominator);
         auto cpu = safe_prop_ceil(cost, cpu_price.denominator, cpu_price.numerator);

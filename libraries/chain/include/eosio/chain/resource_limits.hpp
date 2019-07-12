@@ -33,7 +33,7 @@ namespace resource_limits {
 
    using ratio = impl::ratio<uint64_t>;
    static constexpr ratio constant_rate = ratio{ uint64_t(config::percent_100), uint64_t(config::percent_100) };
-   
+   using ratios = std::vector<ratio>;
    
    struct elastic_limit_parameters {
       uint64_t target;           // the desired usage
@@ -65,9 +65,10 @@ namespace resource_limits {
 
          void update_account_usage( const flat_set<account_name>& accounts, uint32_t ordinal );
 
-         void add_transaction_usage( const flat_set<account_name>& accounts, uint64_t cpu_usage, uint64_t net_usage, uint64_t ram_usage, fc::time_point pending_block_time, bool validate = true );
+         void add_transaction_usage( const flat_set<account_name>& accounts, const ratios&, uint64_t cpu_usage, uint64_t net_usage, uint64_t ram_usage, fc::time_point pending_block_time, bool validate = true );
 
-         void add_storage_usage(const account_name& account, int64_t delta, uint32_t time_slot, bool);
+         void add_storage_usage( const account_name& account, int64_t delta, uint32_t time_slot );
+         void add_storage_usage( const flat_map<account_name, int64_t>&, const ratios& prices, fc::time_point, bool validate = true );
 
          void process_block_usage(uint32_t time_slot);
 
@@ -76,7 +77,7 @@ namespace resource_limits {
 
          uint64_t get_block_limit(resource_id res, const chain_config& chain_cfg) const;
          
-         std::vector<ratio> get_pricelist() const;
+         ratios get_pricelist() const;
 
          ratio get_resource_usage_by_account_cost_ratio(account_name account, resource_id res) const;
          ratio get_account_stake_ratio(fc::time_point pending_block_time, const account_name& account, bool update_state);
@@ -84,7 +85,7 @@ namespace resource_limits {
          uint64_t get_used_resources_cost(account_name account, const std::vector<ratio>& prices, uint64_t max_cost = UINT64_MAX) const;
          uint64_t get_used_resources_cost(account_name account) const { return get_used_resources_cost(account, get_pricelist()); };
 
-         uint64_t get_account_balance(fc::time_point pending_block_time, const account_name& account, const std::vector<ratio>& prices, bool update_state);
+         uint64_t get_account_balance(fc::time_point pending_block_time, const account_name& account, const ratios& prices, bool update_state);
 
          std::vector<uint64_t> get_account_usage(const account_name& account) const;
 

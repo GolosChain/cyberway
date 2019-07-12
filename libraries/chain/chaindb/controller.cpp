@@ -113,9 +113,11 @@ namespace cyberway { namespace chaindb {
         } else if (BOOST_LIKELY(!!apply_ctx)) {
             apply_ctx->add_storage_usage(*this);
         } else if (!!transaction_ctx) {
-            transaction_ctx->add_storage_usage(*this, false);
+            transaction_ctx->add_storage_usage(*this);
         } else if (!!resource_mng) {
-            resource_mng->add_storage_usage(payer, delta, time_slot, false);
+            CYBERWAY_ASSERT(0 > delta /* updating and removing */ || 0 == time_slot /* genesis */,
+                eosio::chain::resource_limit_exception, "SYSTEM: attempt to use STORAGE without authorization");
+            resource_mng->add_storage_usage(payer, delta, time_slot);
         }
     }
 

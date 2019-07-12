@@ -102,7 +102,7 @@ namespace eosio { namespace chain {
          uint32_t update_billed_cpu_time( fc::time_point now );
          uint64_t update_billed_ram_bytes();
 
-         void add_storage_usage( const storage_payer_info&, bool is_authorized );
+         void add_storage_usage( const storage_payer_info& );
 
 // TODO: request bw, why provided?
 //         uint64_t get_provided_net_limit(account_name account) const;
@@ -170,6 +170,9 @@ namespace eosio { namespace chain {
 
          vector<action_receipt>        executed;
          flat_set<account_name>        bill_to_accounts;
+         flat_map<account_name, int64_t> accounts_storage_deltas;
+
+         resource_limits::ratios       pricelist;
 
          fc::microseconds              delay;
          bool                          is_input           = false;
@@ -205,14 +208,15 @@ namespace eosio { namespace chain {
 //         std::map<account_name, provided_bandwith> provided_bandwith_;
 
         fc::flat_map<account_name, account_name> storage_providers;
-         
+
         class available_resources_t {
-            std::vector<resource_limits::ratio> pricelist;
-            std::map<account_name, uint64_t> cpu_limits;
+            transaction_context& trx_ctx;
+            fc::flat_map<account_name, uint64_t> cpu_limits;
             uint64_t min_cpu_limit = UINT64_MAX;
-            bool explicit_cpu_time = false;
         public:
-            void init(bool, resource_limits_manager& rl, const flat_set<account_name>& accounts, fc::time_point pending_block_time);
+            available_resources_t(transaction_context& ctx): trx_ctx(ctx) { }
+
+            void init();
             void update_storage_usage(const storage_payer_info&);
             void add_net_usage(int64_t delta);
             void check_cpu_usage(int64_t usage) const;

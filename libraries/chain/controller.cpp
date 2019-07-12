@@ -987,7 +987,8 @@ struct controller_impl {
             ram_to_bill_bytes = std::min(ram_to_bill_bytes, trx_context.hard_limits[resource_limits::RAM].max);
          }
          
-         resource_limits.add_transaction_usage( trx_context.bill_to_accounts, cpu_time_to_bill_us, 0, ram_to_bill_bytes, self.pending_block_time(), false ); // Should never fail
+         resource_limits.add_transaction_usage( trx_context.bill_to_accounts, trx_context.pricelist,
+             cpu_time_to_bill_us, 0, ram_to_bill_bytes, self.pending_block_time(), false ); // Should never fail
          trace->receipt = push_receipt(gtrx.trx_id, transaction_receipt::hard_fail, cpu_time_to_bill_us, 0, ram_to_bill_bytes, 0);
 
          emit( self.accepted_transaction, trx );
