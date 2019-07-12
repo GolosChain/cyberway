@@ -402,6 +402,8 @@ namespace bacc = boost::accumulators;
        auto& rl = control.get_mutable_resource_limits_manager();
 
        update_billed_ram_bytes();
+
+       storage_bytes = ((storage_bytes + 1023) >> 10) << 10; // Round up to nearest kbytes
        
        net_usage = ((net_usage + 7)/8)*8;
        
