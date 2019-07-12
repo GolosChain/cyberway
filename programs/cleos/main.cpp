@@ -4129,27 +4129,27 @@ int main( int argc, char** argv ) {
 
    auto cancelDelay = canceldelay_subcommand(system);
 
-   auto rex = system->add_subcommand("rex", localized("Actions related to REX (the resource exchange)"));
-   rex->require_subcommand();
-   auto deposit        = deposit_subcommand(rex);
-   auto withdraw       = withdraw_subcommand(rex);
-   auto buyrex         = buyrex_subcommand(rex);
-   auto lendrex        = lendrex_subcommand(rex);
-   auto unstaketorex   = unstaketorex_subcommand(rex);
-   auto sellrex        = sellrex_subcommand(rex);
-   auto cancelrexorder = cancelrexorder_subcommand(rex);
-   auto mvtosavings    = mvtosavings_subcommand(rex);
-   auto mvfromsavings  = mvfrsavings_subcommand(rex);
-   auto rentcpu        = rentcpu_subcommand(rex);
-   auto rentnet        = rentnet_subcommand(rex);
-   auto fundcpuloan    = fundcpuloan_subcommand(rex);
-   auto fundnetloan    = fundnetloan_subcommand(rex);
-   auto defcpuloan     = defcpuloan_subcommand(rex);
-   auto defnetloan     = defnetloan_subcommand(rex);
-   auto consolidate    = consolidate_subcommand(rex);
-   auto updaterex      = updaterex_subcommand(rex);
-   auto rexexec        = rexexec_subcommand(rex);
-   auto closerex       = closerex_subcommand(rex);
+   auto rex = system->add_subcommand("rex", localized("Actions related to REX (the resource exchange). Not implemented yet"));
+//   rex->require_subcommand();
+//   auto deposit        = deposit_subcommand(rex);
+//   auto withdraw       = withdraw_subcommand(rex);
+//   auto buyrex         = buyrex_subcommand(rex);
+//   auto lendrex        = lendrex_subcommand(rex);
+//   auto unstaketorex   = unstaketorex_subcommand(rex);
+//   auto sellrex        = sellrex_subcommand(rex);
+//   auto cancelrexorder = cancelrexorder_subcommand(rex);
+//   auto mvtosavings    = mvtosavings_subcommand(rex);
+//   auto mvfromsavings  = mvfrsavings_subcommand(rex);
+//   auto rentcpu        = rentcpu_subcommand(rex);
+//   auto rentnet        = rentnet_subcommand(rex);
+//   auto fundcpuloan    = fundcpuloan_subcommand(rex);
+//   auto fundnetloan    = fundnetloan_subcommand(rex);
+//   auto defcpuloan     = defcpuloan_subcommand(rex);
+//   auto defnetloan     = defnetloan_subcommand(rex);
+//   auto consolidate    = consolidate_subcommand(rex);
+//   auto updaterex      = updaterex_subcommand(rex);
+//   auto rexexec        = rexexec_subcommand(rex);
+//   auto closerex       = closerex_subcommand(rex);
 
 
    try {
