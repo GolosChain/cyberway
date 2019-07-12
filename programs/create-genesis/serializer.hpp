@@ -32,7 +32,7 @@ enum class stored_contract_tables: int {
     withdrawal,
     witness_vote,   witness_info,
     reward_pool,
-    gtransaction,   bandwidths,
+    bandwidths,
     messages,       permlinks,
     votes,
 
