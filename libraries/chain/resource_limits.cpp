@@ -209,7 +209,7 @@ void resource_limits_manager::add_storage_usage(
 
       auto& usage = _chaindb.get<resource_usage_object>(a.first);
       _chaindb.modify( usage, [&]( auto& u ) {
-          u.accumulators[STORAGE].add(delta, time_slot, config.account_usage_average_windows[STORAGE]);
+          u.accumulators[STORAGE].add(a.second, time_slot, config.account_usage_average_windows[STORAGE]);
       });
       if( validate ) {
          get_account_balance(pending_block_time, a.first, prices, true);
