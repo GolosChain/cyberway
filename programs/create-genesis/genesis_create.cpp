@@ -1003,33 +1003,6 @@ struct genesis_create::genesis_create_impl final {
         }
         // store messages
         const int n = _visitor.comments.size();     // messages count
-        db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", n);
-        transaction tx{};
-        tx.actions.emplace_back(action{
-            {{_info.golos.names.posting, config::active_name}},
-            _info.golos.names.posting,
-            N(closemssg),
-            {}
-        });
-        const auto expiration_time = fc::hours(_info.golos.posts_trx.expiration_hours);
-        const auto delay = !_info.golos.posts_trx.initial_from ? microseconds{0} :
-            time_point_sec{_conf.initial_timestamp} - *_info.golos.posts_trx.initial_from;
-        for (const auto& cp : _visitor.comments) {
-            const auto& c = cp.second;
-            const auto n = name_by_acc(c.author);
-            db.emplace<generated_transaction_object>(n, [&](auto& t){
-                std::pair<name,string> data{n, c.permlink.str(_plnk_map)};
-                tx.actions[0].data = fc::raw::pack(data);
-                t.set(tx);
-                t.trx_id = tx.id();
-                t.sender = _info.golos.names.posting;
-                t.sender_id = (uint128_t(c.id) << 64) | n.value;
-                t.delay_until = std::max(time_point(c.active.cashout_time + delay), _conf.initial_timestamp);
-                t.expiration = t.delay_until + expiration_time;
-                t.published = c.active.created;
-            });
-        }
-
         db.start_section(_info.golos.names.posting, N(permlink), "permlink", _visitor.permlinks.size());
         auto key = [](acc_idx a, plk_idx p) { return uint64_t(a) << 32 | p; };
         std::unordered_map<uint64_t, uint64_t> post_ids;
@@ -1066,7 +1039,8 @@ struct genesis_create::genesis_create_impl final {
                 }
             }
             pk = c.id;
-            db.insert(pk, name_by_acc(c.author), mvo
+            db.insert(pk, _info.golos.names.posting, mvo
+                ("author", name_by_acc(c.author))
                 ("id", pk)
                 ("date", time_point(c.active.created).time_since_epoch().count())
                 ("pool_date", pool_date)
@@ -1078,7 +1052,7 @@ struct genesis_create::genesis_create_impl final {
                     ("voteshares", c.active.vote_rshares)
                     ("sumcuratorsw", vote_weights_sum[c.id]))
                 ("curators_prcnt", c.active.curation_rewards_percent)
-                ("closed", false)
+                ("cashout_time", std::max(time_point(c.active.cashout_time), _conf.initial_timestamp).time_since_epoch().count())
                 ("mssg_reward", asset(0, symbol(GLS)))
                 ("max_payout", to_gls.convert(c.active.max_accepted_payout))
                 ("paid_amount", 0)
