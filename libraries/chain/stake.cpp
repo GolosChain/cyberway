@@ -34,7 +34,7 @@ int64_t recall_proxied_traversal(const cyberway::chaindb::storage_payer_info& st
     const AgentIndex& agents_idx, const GrantIndex& grants_idx,
     GrantItr& arg_grant_itr, int64_t share, std::map<account_name, int64_t>& votes_changes, bool forced_erase = false
 ) {
-    auto agent = get_agent(token_code, agents_idx, arg_grant_itr->agent_name);
+    auto agent = get_agent(token_code, agents_idx, arg_grant_itr->recipient_name);
 
     EOS_ASSERT(share >= 0, transaction_exception, "SYSTEM: share can't be negative");
     EOS_ASSERT(share <= agent->shares_sum, transaction_exception, "SYSTEM: incorrect share val");
@@ -90,7 +90,7 @@ void update_proxied_traversal(
         auto grant_itr = grants_idx.lower_bound(grant_key(token_code, agent->account));
 
         while ((grant_itr != grants_idx.end()) && (grant_itr->token_code == token_code) && (grant_itr->grantor_name == agent->account)) {
-            auto proxy_agent = get_agent(token_code, agents_idx, grant_itr->agent_name);
+            auto proxy_agent = get_agent(token_code, agents_idx, grant_itr->recipient_name);
             update_proxied_traversal(ram, now, token_code, agents_idx, grants_idx, proxy_agent, last_reward, votes_changes, force);
 
             if (proxy_agent->proxy_level < agent->proxy_level &&
@@ -129,7 +129,7 @@ void update_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::c
 }
 
 void recall_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::chaindb::storage_payer_info& storage, int64_t now,
-                    symbol_code token_code, account_name grantor_name, account_name agent_name, int16_t pct) {
+                    symbol_code token_code, account_name grantor_name, account_name recipient_name, int16_t pct) {
                         
     EOS_ASSERT(1 <= pct && pct <= config::percent_100, transaction_exception, "pct must be between 0.01% and 100% (1-10000)");
     EOS_ASSERT((db.find<stake_param_object, by_id>(token_code.value)), transaction_exception, "no staking for token");
@@ -149,7 +149,7 @@ void recall_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::c
     int64_t amount = 0;
     auto grant_itr = grants_idx.lower_bound(grant_key(token_code, grantor_name));
     while ((grant_itr != grants_idx.end()) && (grant_itr->token_code == token_code) && (grant_itr->grantor_name == grantor_name)) {
-        if (grant_itr->agent_name == agent_name) {
+        if (grant_itr->recipient_name == recipient_name) {
             amount = recall_proxied_traversal(storage, token_code, agents_idx, grants_idx, grant_itr, safe_pct<int64_t>(pct, grant_itr->share), votes_changes);
             break;
         }

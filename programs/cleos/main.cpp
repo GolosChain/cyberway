@@ -1364,11 +1364,11 @@ struct create_account_subcommand {
 
 void delegate_stake(const std::string& grantor, const std::string& agent, const string& asset_quantity) {
     const fc::variant vote_action_params = fc::mutable_variant_object("grantor_name", grantor)
-                                                                     ("agent_name", agent)
+                                                                     ("recipient_name", agent)
                                                                      ("quantity", asset_quantity);
 
     auto accountPermissions = get_account_permissions(tx_permission, {grantor, config::active_name});
-    send_actions({create_action(accountPermissions, N(cyber.stake), N(delegate), vote_action_params)});
+    send_actions({create_action(accountPermissions, N(cyber.stake), N(delegatevote), vote_action_params)});
 }
 
 struct vote_producer_proxy_subcommand {

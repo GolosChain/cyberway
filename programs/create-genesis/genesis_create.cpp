@@ -387,9 +387,8 @@ struct genesis_create::genesis_create_impl final {
             p.id = sys_sym.to_symbol_code().value;
             p.token_symbol = sys_sym;
             p.max_proxies = inf.max_proxies;
-            p.payout_step_length = inf.payout_step_length;
-            p.payout_steps_num = inf.payout_steps_num;
             p.min_own_staked_for_election = inf.min_own_staked_for_election;
+            p.depriving_window = inf.depriving_window;
         });
 
         // first prepare staking balances and sort agents by level. keys and proxy info required to do this
@@ -539,7 +538,7 @@ struct genesis_create::genesis_create_impl final {
             db.emplace<stake_grant_object>(g.from, [&](auto& o) {
                 o.token_code = sys_sym.to_symbol_code(),
                 o.grantor_name = g.from,
-                o.agent_name = g.to,
+                o.recipient_name = g.to,
                 o.pct = g.pct,
                 o.share = g.granted;
                 o.break_fee = config::percent_100;
@@ -568,6 +567,8 @@ struct genesis_create::genesis_create_impl final {
                     a.shares_sum = x.shares_sum;
                     a.fee = config::percent_100;
                     a.min_own_staked = 0;
+                    a.provided = 0;
+                    a.received = 0;
                 });
             }
         }
@@ -585,6 +586,8 @@ struct genesis_create::genesis_create_impl final {
                     a.shares_sum = acc.sys_staked->get_amount();
                     a.fee = config::percent_100;
                     a.min_own_staked = 0;
+                    a.provided = 0;
+                    a.received = 0;
                 });
             }
         }
