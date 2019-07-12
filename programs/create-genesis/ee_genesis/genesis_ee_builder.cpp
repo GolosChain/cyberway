@@ -547,6 +547,7 @@ void genesis_ee_builder::write_messages() {
                     c.max_payout = to_gls.convert(active.max_accepted_payout);
                     c.curators_prcnt = active.curation_rewards_percent;
                     c.tokenprop = active.percent_steem_dollars / 2;
+                    c.net_rshares = active.net_rshares;
                 }
             });
 
