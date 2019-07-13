@@ -1138,9 +1138,9 @@ struct genesis_create::genesis_create_impl final {
     void schedule_start() {
         ilog("Scheduling Golos start...");
         db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", 2);
-        auto store_tx = [&](name code, name act_name, uint64_t sender_id_low) {
+        auto store_tx = [&](name code, name act_name, uint64_t sender_id_low, const bytes& data = {}) {
             transaction tx{};
-            tx.actions.emplace_back(action{{{code, config::active_name}}, code, act_name, {}});
+            tx.actions.emplace_back(action{{{code, config::active_name}}, code, act_name, data});
             auto actor = _info.golos.names.issuer;
             db.emplace<generated_transaction_object>(actor, [&](auto& t){
                 t.set(tx);
@@ -1153,7 +1153,7 @@ struct genesis_create::genesis_create_impl final {
             });
         };
         store_tx(_info.golos.names.emission, N(start), 1);
-        store_tx(_info.golos.names.vesting, N(timeout), 2);
+        store_tx(_info.golos.names.vesting, N(timeout), 2, fc::raw::pack(symbol(VESTS)));
         ilog("Done.");
     }
 
