@@ -679,9 +679,13 @@ namespace cyberway { namespace chaindb {
         int update(const table_info& table, storage_payer_info charge, object_value& obj, object_value orig_obj) {
             validate_object(table, obj, obj.pk());
 
-            charge.get_payer_from(orig_obj);
             charge.size   = calc_storage_usage(table, obj.value);
             charge.delta += charge.size - orig_obj.service.size;
+
+            if (charge.delta <= 0) {
+                charge.payer = charge.owner;
+            }
+            charge.get_payer_from(orig_obj);
 
             // don't charge on genesis
             if (undo_.revision() != start_revision) {

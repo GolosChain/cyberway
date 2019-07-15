@@ -186,6 +186,8 @@ namespace eosio { namespace chain {
          uint64_t&                     billed_ram_bytes;
          bool                          explicit_billed_ram_bytes = false;
 
+         fc::flat_map<account_name, account_name> storage_providers;
+
       private:
          bool                          is_initialized = false;
 
@@ -206,8 +208,6 @@ namespace eosio { namespace chain {
 
 // TODO: request bw, why provided?
 //         std::map<account_name, provided_bandwith> provided_bandwith_;
-
-        fc::flat_map<account_name, account_name> storage_providers;
 
         class available_resources_t {
             transaction_context& trx_ctx;

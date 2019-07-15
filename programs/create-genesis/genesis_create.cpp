@@ -9,6 +9,7 @@
 #include <eosio/chain/resource_limits.hpp>
 #include <eosio/chain/stake_object.hpp>
 #include <eosio/chain/int_arithmetic.hpp>
+#include <cyberway/chain/cyberway_contract_types.hpp>
 #include <fc/io/raw.hpp>
 #include <fc/variant.hpp>
 #include <boost/filesystem/path.hpp>
@@ -1139,9 +1140,13 @@ struct genesis_create::genesis_create_impl final {
         ilog("Scheduling Golos start...");
         db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", 2);
         auto store_tx = [&](name code, name act_name, uint64_t sender_id_low, const bytes& data = {}) {
+            auto providebw = cyberway::chain::providebw(_info.golos.names.issuer, code);
             transaction tx{};
             tx.actions.emplace_back(action{{{code, config::active_name}}, code, act_name, data});
-            auto actor = _info.golos.names.issuer;
+            tx.actions.emplace_back(action{{{providebw.provider, N(providebw)}},
+                providebw.get_account(), providebw.get_name(),
+                fc::raw::pack(providebw)});
+            auto actor = code;
             db.emplace<generated_transaction_object>(actor, [&](auto& t){
                 t.set(tx);
                 t.trx_id = tx.id();
