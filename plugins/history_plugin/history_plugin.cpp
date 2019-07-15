@@ -99,9 +99,9 @@ namespace eosio {
          if (itr == idx.end())
             break;
 
-//         const auto& range_end = idx.upper_bound(key); // FIXME error: no member named 'tail' in 'boost::tuples::cons<eosio::chain::name, boost::tuples::null_type>' cons( const cons<HT2, TT2>& u ) : head(u.head), tail(u.tail) {}
-//         if (itr == range_end)
-//            break;
+         const auto& range_end = idx.upper_bound(key); // FIXME error: no member named 'tail' in 'boost::tuples::cons<eosio::chain::name, boost::tuples::null_type>' cons( const cons<HT2, TT2>& u ) : head(u.head), tail(u.tail) {}
+         if (itr == range_end)
+            break;
 
          idx.erase(*itr);
       }
@@ -271,10 +271,10 @@ namespace eosio {
                const auto& table = chaindb.get_table<action_history_object>();
                table.emplace([&]( auto& aho ) {
 
-//                  auto ps = fc::raw::pack_size( at );
-//                  aho.packed_action_trace.resize(ps);
-//                  datastream<char*> ds( aho.packed_action_trace.data(), ps );
-//                  fc::raw::pack( ds, at );
+                  auto ps = fc::raw::pack_size( at );
+                  aho.packed_action_trace.resize(ps);
+                  datastream<char*> ds( aho.packed_action_trace.data(), ps );
+                  fc::raw::pack( ds, at );
 
                   aho.action_sequence_num = at.receipt.global_sequence;
                   aho.block_num = chain.pending_block_state()->block_num;
