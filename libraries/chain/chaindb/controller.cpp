@@ -9,6 +9,7 @@
 #include <cyberway/chaindb/mongo_driver.hpp>
 #include <cyberway/chaindb/storage_calculator.hpp>
 #include <cyberway/chaindb/storage_payer_info.hpp>
+#include <cyberway/chaindb/index_order_validator.hpp>
 
 #include <eosio/chain/name.hpp>
 #include <eosio/chain/apply_context.hpp>
@@ -289,8 +290,10 @@ namespace cyberway { namespace chaindb {
         }
 
         // API request, it can't use cache
-        find_info lower_bound(const index_request& request, const variant& orders) {
-            auto& cursor = current(driver_.lower_bound(get_index(request), orders));
+        find_info lower_bound(const index_request& request, const variant& key) {
+            const auto index = get_index(request);
+            index_order_validator(index).verify(key);
+            const auto& cursor = current(driver_.lower_bound(get_index(request), key));
             return {cursor.id, cursor.pk, nullptr, controller_, request.code};
         }
 
@@ -306,8 +309,10 @@ namespace cyberway { namespace chaindb {
             return current(driver_.upper_bound(std::move(index), std::move(value)));
         }
 
-        const cursor_info& upper_bound(const index_request& request, const variant& orders) {
-            return current(driver_.upper_bound(get_index(request), orders));
+        const cursor_info& upper_bound(const index_request& request, const variant& key) {
+            auto index = get_index(request);
+            index_order_validator(index).verify(key);
+            return current(driver_.upper_bound(get_index(request), key));
         }
 
         const cursor_info& locate_to(const index_request& request, const char* key, size_t size, primary_key_t pk) {
