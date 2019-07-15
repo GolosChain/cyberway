@@ -9,19 +9,13 @@
 namespace cyberway { namespace chaindb {
 
     struct chaindb_guard final {
-        chaindb_guard() = delete;
+        chaindb_guard() = default;
         chaindb_guard(const chaindb_guard&) = delete;
         chaindb_guard(chaindb_guard&& other) = delete;
         chaindb_guard& operator = (const chaindb_guard& other) = delete;
         chaindb_guard& operator = (chaindb_guard&& other) = delete;
 
-        chaindb_guard(apply_context& context) :
-           context_(context) {
-        }
-
-        ~chaindb_guard() {
-            context_.cursors_guard = nullptr;
-        }
+        ~chaindb_guard() = default;
 
         cursor_t add(account_name_t code, find_info&& info) {
             external_code_cursors_[code].emplace_back(std::forward<find_info>(info));
@@ -51,7 +45,6 @@ namespace cyberway { namespace chaindb {
 
     private:
         std::map<account_name_t, std::vector<find_info>> external_code_cursors_;
-        apply_context& context_;
     }; // class chaindb_guard
 
     struct chaindb_cursor_cache final {

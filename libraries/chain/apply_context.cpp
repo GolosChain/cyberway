@@ -65,9 +65,10 @@ void apply_context::exec_one( action_trace& trace )
             try {
                auto reset_cache_on_exit = fc::make_scoped_exit([this]{
                   this->chaindb_cache = nullptr;
+                  this->cursors_guard = nullptr;
                });
 
-               chaindb_guard guard(*this);
+               chaindb_guard guard;
                chaindb_cursor_cache cache;
 
                this->chaindb_cache = &cache;
