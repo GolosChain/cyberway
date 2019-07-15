@@ -76,8 +76,6 @@ private:
 
     fc::optional<eosio::chain::asset> get_account_core_liquid_balance(const get_account_params& params) const;
 
-    fc::variant get_refunds(chain::account_name account, const resource_calculator& resource_calc) const;
-    fc::variant get_payout(chain::account_name account) const;
     std::string get_agent_public_key(chain::account_name account, chain::symbol symbol) const;
 
     uint32_t get_grantors_count(chain::account_name account, chain::symbol_code token_code) const;
@@ -374,39 +372,9 @@ get_account_results chain_api_plugin_impl::get_account(const get_account_params&
                                                                    ("net_weight", total_net_stake_part)
                                                                    ("cpu_weight", total_cpu_stake_part);
 
-    result.refund_request = get_refunds(params.account_name, resource_calc);
-
 //    result.voter_info = get_account_voter_info(params);
     return result;
 }
-
-fc::variant chain_api_plugin_impl::get_refunds(chain::account_name account, const resource_calculator& resource_calc) const {
-    const auto payout = get_payout(account);
-
-    if (!payout.is_null()) {
-        const auto balance = payout["balance"].as_uint64();
-        return fc::mutable_variant_object() ("owner", account)
-                                            ("request_time", payout["last_step"].as_string())
-                                            ("net_amount", chain::asset(resource_calc.get_resource_stake_part(balance, chain::resource_limits::NET)).to_string())
-                                            ("cpu_amount", chain::asset(resource_calc.get_resource_stake_part(balance, chain::resource_limits::CPU)).to_string());
-    }
-    return {};
-}
-
-fc::variant chain_api_plugin_impl::get_payout(chain::account_name account) const {
-    auto& chain_db = chain_controller_.chaindb();
-
-    const cyberway::chaindb::index_request request{N(cyber.stake), N(cyber.stake), N(payout), N(payoutacc)};
-
-    auto payouts_it = chain_db.lower_bound(request, fc::mutable_variant_object() ("token_code", chain::symbol(CORE_SYMBOL).to_symbol_code())
-                                                                                 ("account", account));
-
-    if (payouts_it.pk != cyberway::chaindb::primary_key::End) {
-        return chain_db.object_at_cursor({N(cyber.stake), payouts_it.cursor}).value;
-    }
-    return fc::variant();
-}
-
 
 fc::optional<eosio::chain::asset> chain_api_plugin_impl::get_account_core_liquid_balance(const get_account_params& params) const {
     static const auto token_code = N(cyber.token);
