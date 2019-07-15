@@ -611,9 +611,9 @@ struct controller_impl {
             a.set_abi(eosio_contract_abi());
          } else if (name == config::domain_account_name) {
             a.set_abi(domain_contract_abi());
-          }else if (name == config::history_account_name) {
-             a.set_abi(history_contract_abi());
-          }
+         } else if (name == config::history_account_name) {
+            a.set_abi(history_contract_abi());
+         }
       });
       chaindb.emplace<account_sequence_object>(name.value, [&](auto & a) { });
 

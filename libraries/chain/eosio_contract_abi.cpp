@@ -739,29 +739,94 @@ abi_def domain_contract_abi(abi_def abi) {
 
 abi_def history_contract_abi(abi_def abi) {
     set_common_defs(abi);
-    abi.structs.emplace_back(struct_def {"pybkeyhist", "", {
-        {"public_key", "name"},
-        {"name",       "account_name"},
-        {"permission", "permission_name"}}
-    });
+
     abi.structs.emplace_back(struct_def {"acchistory", "", {
         {"id", "uint64"},
         {"account", "account_name"},
         {"action_sequence_num", "uint64"},
-        {"account_sequence_num",    "int32"}}
+        {"account_sequence_num", "int32"}}
     });
+
+    abi.tables.emplace_back( eosio::chain::table_def {
+       name("acchistory"), "acchistory", {
+          { name("primary"), true, {{"id", "asc"}}},
+          { name("accactionseq"), true, {
+               {"account", "asc"},
+               {"account_sequence_num", "asc"},
+            }
+          },
+       }
+    });
+
     abi.structs.emplace_back(struct_def {"acthistory", "", {
+        {"id", "uint64"},
         {"action_sequence_num", "uint64"},
         {"packed_action_trace", "string"},
         {"block_num", "int32"},
         {"block_time", "block_timestamp_type"},
         {"trx_id", "transaction_id_type"}}
     });
+
+    abi.tables.emplace_back( eosio::chain::table_def {
+       name("acthistory"), "acthistory", {
+          { name("primary"), true, {{"id", "asc"}} },
+          { name("byactseqnum"), true, {{"action_sequence_num", "asc"}} },
+          { name("trxid"), true, {
+                {"trx_id", "asc"},
+                {"action_sequence_num", "asc"}
+            }
+          }
+       }
+    });
+
+    abi.structs.emplace_back(struct_def {"pybkeyhist", "", {
+        {"id", "uint64"},
+        {"public_key", "name"},
+        {"name",       "account_name"},
+        {"permission", "permission_name"}}
+    });
+
+    abi.tables.emplace_back( eosio::chain::table_def {
+       name("pybkeyhist"), "pybkeyhist", {
+          { name("primary"), true, {{"id", "asc"}} },
+          { name("bypubkey"), true, {
+                {"public_key", "asc"},
+                {"id", "asc"}
+            }
+          },
+          { name("byaccperm"), true, {
+                {"name", "asc"},
+                {"permission", "asc"},
+                {"id", "asc"}
+            }
+          }
+       }
+    });
+
     abi.structs.emplace_back(struct_def {"ctrlhistory", "", {
+        {"id", "uint64"},
         {"controlled_account",    "account_name"},
         {"controlled_permission", "permission_name"},
         {"controlling_account",   "account_name"}}
     });
+
+    abi.tables.emplace_back( eosio::chain::table_def {
+       name("ctrlhistory"), "ctrlhistory", {
+          { name("primary"), true, {{"id", "asc"}} },
+          { name("bycontrol"), true, {
+                {"controlling_account", "asc"},
+                {"id", "asc"}
+            }
+          },
+          { name("controlauth"), true, {
+                {"controlled_account", "asc"},
+                {"controlled_permission", "asc"},
+                {"controlling_account", "asc"}
+            }
+          }
+       }
+    });
+
 
     return abi;
 }

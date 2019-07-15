@@ -590,6 +590,11 @@ public:
             return lower_bound(key_converter<key_type>::convert(value), kind);
         }
 
+        template<typename Value>
+        const_iterator upper_bound(const Value& value, const cursor_kind kind = cursor_kind::ManyRecords) const {
+            return upper_bound(key_converter<key_type>::convert(value));
+        }
+
         const_iterator upper_bound(const key_type& key) const {
             chaindb::upper_bound<std::is_same<tag<IndexName>, typename PrimaryIndex::tag>::value> finder;
             auto info = finder(controller_, get_index_request(), key);

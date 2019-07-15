@@ -116,7 +116,7 @@ namespace cyberway { namespace chaindb {
     }; // struct object_id_extractor
 
     struct primary_index {
-        using tag = tag<by_id>;
+        using tag = cyberway::chaindb::tag<by_id>;
         using extractor = object_id_extractor;
     }; // struct primary_index
 

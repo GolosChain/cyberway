@@ -305,11 +305,9 @@ namespace eosio {
    };
 
    history_plugin::history_plugin()
-   :my(std::make_shared<history_plugin_impl>()) {
-   }
+    :my(std::make_shared<history_plugin_impl>()) {}
 
-   history_plugin::~history_plugin() {
-   }
+   history_plugin::~history_plugin() {}
 
 
 
@@ -359,12 +357,6 @@ namespace eosio {
          my->chain_plug = app().find_plugin<chain_plugin>();
          EOS_ASSERT( my->chain_plug, chain::missing_chain_plugin_exception, ""  );
          auto& chain = my->chain_plug->chain();
-
-//         auto& chaindb = chain.chaindb();
-//         chaindb.add_chaindb_index<account_history_object>(chaindb);
-//         chaindb.add_chaindb_index<action_history_object>(chaindb);
-//         chaindb.add_chaindb_index<account_control_history_object>(chaindb);
-//         chaindb.add_chaindb_index<public_key_history_object>(chaindb);
 
          my->applied_transaction_connection.emplace(
                chain.applied_transaction.connect( [&]( const transaction_trace_ptr& p ) {
