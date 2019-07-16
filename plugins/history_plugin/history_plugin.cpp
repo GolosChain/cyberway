@@ -91,9 +91,9 @@ FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action
 
 using history_table_set = eosio::chain::index_set<
     eosio::action_history_table,
-    eosio::account_history_table,
+    eosio::account_history_table/*,
     eosio::public_key_history_table,
-    eosio::account_control_history_table
+    eosio::account_control_history_table*/
 >;
 
 namespace eosio {
@@ -231,9 +231,12 @@ namespace eosio {
             auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
 
             uint64_t asn = 0;
+
             if( itr != idx.begin() ) --itr;
-            if( itr->account == n )
-               asn = itr->account_sequence_num + 1;
+            if (itr == idx.end())
+                asn = 1;
+            else if( itr->account == n )
+                   asn = itr->account_sequence_num + 1;
 
             //idump((n)(act.receipt.global_sequence)(asn));
             const auto& a = idx.emplace([&]( auto& aho ) {
