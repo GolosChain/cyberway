@@ -181,11 +181,14 @@ namespace {
 
     public:
 
-        resource_calculator(chain::resource_limits_manager& rm, chain::account_name name) :
+        resource_calculator(chain::resource_limits_manager& rm, cyberway::chaindb::chaindb_controller& controller, chain::account_name name) :
           rm_(rm),
+          controller_(controller),
           account_(name),
           prices_(rm.get_pricelist()),
           total_stake_(rm.get_account_stake_ratio(fc::time_point::now(), account_, false).numerator),
+          owned_stake_(controller_.find<eosio::chain::stake_agent_object, eosio::chain::stake_agent_object::by_key>
+                       (eosio::chain::stake::agent_key(chain::symbol(CORE_SYMBOL).to_symbol_code(), account_))->balance),
           resources_usage_(rm.get_account_usage(name)),
           resources_info_(chain::resource_limits::resources_num),
           resource_limits_(chain::resource_limits::resources_num),
@@ -232,13 +235,12 @@ namespace {
             return get_resource_total_count(chain::resource_limits::STORAGE);
         }
 
-        int64_t get_resource_stake_part(uint64_t stake, chain::resource_limits::resource_id code) const {
-            const auto part = resources_info_.at(code).part;
-            return chain::int_arithmetic::safe_prop(stake, part.numerator, part.denominator);
-        }
-
         int64_t get_resource_total_stake_part(chain::resource_limits::resource_id code) const {
             return get_resource_stake_part(total_stake_, code);
+        }
+
+        int64_t get_resource_owned_stake_part(chain::resource_limits::resource_id code) const {
+            return get_resource_stake_part(owned_stake_, code);
         }
 
     private:
@@ -294,12 +296,19 @@ namespace {
             return chain::int_arithmetic::safe_prop(stake_part, price.denominator, price.numerator);
         }
 
+        int64_t get_resource_stake_part(uint64_t stake, chain::resource_limits::resource_id code) const {
+            const auto part = resources_info_.at(code).part;
+            return chain::int_arithmetic::safe_prop(stake, part.numerator, part.denominator);
+        }
+
     private:
 
         const chain::resource_limits_manager& rm_;
+        cyberway::chaindb::chaindb_controller& controller_;
         chain::account_name account_;
         std::vector<chain::resource_limits::ratio> prices_;
         uint64_t total_stake_;
+        uint64_t owned_stake_;
         uint64_t account_balance_ = 0;
         std::vector<uint64_t> resources_usage_;
         std::vector<resource_info> resources_info_;
@@ -346,7 +355,7 @@ get_account_results chain_api_plugin_impl::get_account(const get_account_params&
 
     result.core_liquid_balance = get_account_core_liquid_balance(params);
 
-    resource_calculator resource_calc(rm, params.account_name);
+    resource_calculator resource_calc(rm, db_controller, params.account_name);
 
     result.net_limit = resource_calc.get_net_limit();
     result.cpu_limit = resource_calc.get_cpu_limit();
@@ -357,20 +366,33 @@ get_account_results chain_api_plugin_impl::get_account(const get_account_params&
     result.ram_quota = result.storage_limit.max;
 
     result.net_weight = resource_calc.get_net_weight();
-    result.cpu_weight = resource_calc.get_cpu_weight();
+                result.cpu_weight = resource_calc.get_cpu_weight();
 
     const std::string total_net_stake_part = chain::asset(resource_calc.get_resource_total_stake_part(chain::resource_limits::NET)).to_string();
     const std::string total_cpu_stake_part = chain::asset(resource_calc.get_resource_total_stake_part(chain::resource_limits::CPU)).to_string();
+    const std::string total_ram_stake_part = chain::asset(resource_calc.get_resource_total_stake_part(chain::resource_limits::RAM)).to_string();
+    const std::string total_store_stake_part = chain::asset(resource_calc.get_resource_total_stake_part(chain::resource_limits::STORAGE)).to_string();
+
+    const std::string owned_net_stake_part = chain::asset(resource_calc.get_resource_owned_stake_part(chain::resource_limits::NET)).to_string();
+    const std::string owned_cpu_stake_part = chain::asset(resource_calc.get_resource_owned_stake_part(chain::resource_limits::CPU)).to_string();
+    const std::string owned_ram_stake_part = chain::asset(resource_calc.get_resource_owned_stake_part(chain::resource_limits::RAM)).to_string();
+    const std::string owned_store_stake_part = chain::asset(resource_calc.get_resource_owned_stake_part(chain::resource_limits::STORAGE)).to_string();
 
     result.total_resources = fc::mutable_variant_object() ("owner", params.account_name)
                                                           ("ram_bytes", resource_calc.get_ram_total_count())
                                                           ("net_weight", total_net_stake_part)
-                                                          ("cpu_weight", total_cpu_stake_part);
+                                                          ("cpu_weight", total_cpu_stake_part)
+                                                          ("ram_weight", total_ram_stake_part)
+                                                          ("storage_weight", total_store_stake_part);
 
     result.self_delegated_bandwidth = fc::mutable_variant_object() ("from", params.account_name)
                                                                    ("to", params.account_name)
-                                                                   ("net_weight", total_net_stake_part)
-                                                                   ("cpu_weight", total_cpu_stake_part);
+                                                                   ("net_weight", owned_net_stake_part)
+                                                                   ("cpu_weight", owned_cpu_stake_part)
+                                                                   ("ram_weight", owned_ram_stake_part)
+                                                                   ("storage_weight", owned_store_stake_part);
+
+
 
 //    result.voter_info = get_account_voter_info(params);
     return result;

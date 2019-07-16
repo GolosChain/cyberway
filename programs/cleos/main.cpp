@@ -2376,19 +2376,27 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
          return ss.str();
       };
 
-
+      asset owned_memory_stake = asset::from_string(res.self_delegated_bandwidth.get_object()["ram_weight"].as_string());
+      asset total_memory_stake = asset::from_string(res.total_resources.get_object()["ram_weight"].as_string());
 
       std::cout << "memory: " << std::endl << indent
           <<   "quota (eq storage.max):" << std::setw(15) << to_pretty_net(res.ram_quota)
           <<   "max:"                    << std::setw(15) << to_pretty_net(res.ram_limit.max)
           <<   "used:"                   << std::setw(15) << to_pretty_net(res.ram_limit.used)
-          <<   "avilable:"               << std::setw(15) << to_pretty_net(res.ram_limit.available) << std::endl << std::endl;
+          <<   "avilable:"               << std::setw(15) << to_pretty_net(res.ram_limit.available) << std::endl << indent
+          <<   "staked:"                 << std::setw(20) << owned_memory_stake << std::endl << indent
+          <<   "delegated:"              << std::setw(17) << total_memory_stake - owned_memory_stake << std::endl << endl;
+
+
+      asset owned_storage_stake = asset::from_string(res.self_delegated_bandwidth.get_object()["storage_weight"].as_string());
+      asset total_storage_stake = asset::from_string(res.total_resources.get_object()["storage_weight"].as_string());
 
       std::cout << "storage: " << std::endl << indent
           <<   "max: "                    << std::setw(15) << to_pretty_net(res.storage_limit.max)
           <<   "used: "                   << std::setw(15) << to_pretty_net(res.storage_limit.used)
-          <<   "avilable: "               << std::setw(15) << to_pretty_net(res.storage_limit.available) << std::endl << std::endl;
-
+          <<   "avilable: "               << std::setw(15) << to_pretty_net(res.storage_limit.available) << std::endl << indent
+          <<   "staked:"                 << std::setw(20) << owned_storage_stake << std::endl << indent
+          <<   "delegated:"              << std::setw(17) << total_storage_stake - owned_storage_stake << std::endl << std::endl;
 
       std::cout << "net bandwidth: " << std::endl;
       if ( res.total_resources.is_object() ) {
@@ -2466,7 +2474,10 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
 
          if( res.self_delegated_bandwidth.is_object() ) {
             asset cpu_own = asset::from_string( res.self_delegated_bandwidth.get_object()["cpu_weight"].as_string() );
-            staked += cpu_own;
+            asset ram_own = asset::from_string( res.self_delegated_bandwidth.get_object()["ram_weight"].as_string() );
+            asset store_own = asset::from_string( res.self_delegated_bandwidth.get_object()["storage_weight"].as_string() );
+
+            staked += cpu_own + ram_own + store_own;
 
             auto cpu_others = cpu_total - cpu_own;
 
