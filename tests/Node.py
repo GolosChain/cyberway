@@ -966,6 +966,30 @@ class Node(object):
         Node.validateTransaction(trans)
         return self.waitForTransBlockIfNeeded(trans, waitForTransBlock, exitOnError=False)
 
+    def installContract(self, contract):
+        contractDir = "contracts/%s" % (contract)
+        wasmFile = "%s.wasm" % (contract)
+        abiFile = "%s.abi" % (contract)
+        Utils.Print("Publish %s contract" % (contract))
+        trans = self.publishContract(contract, contractDir, wasmFile, abiFile, waitForTransBlock=True)
+        if trans is None:
+            Utils.errorExit("ERROR: Failed to publish contract %s." % contract)
+
+    def installStake(self, signer, waitForTransBlock=False, exitOnError=False):
+        self.installContract("cyber.govern")
+        contract="cyber.stake"
+        self.installContract(contract)
+
+        Utils.Print("push create action to %s contract" % contract)
+        action = "create"
+        data = "{\"token_symbol\":\"4,%s\",\"max_proxies\":[30,10,3,1],\"depriving_window\":2592000,\"min_own_staked_for_election\":0}" % CORE_SYMBOL
+        opts = "--permission %s@active" % signer
+        trans = self.pushMessage(contract, action, data, opts)
+        if trans is None or not trans[0]:
+            Utils.errorExit("ERROR: Failed to push create action to %s contract." % contract)
+        self.trxTrackWait(trans[1], waitForTransBlock, exitOnError)
+
+
     def getTableRows(self, contract, scope, table):
         jsonData=self.getTable(contract, scope, table)
         if jsonData is None:
@@ -1104,14 +1128,14 @@ class Node(object):
         return self.waitForTransBlockIfNeeded(trx, waitForTransBlock, exitOnError=exitOnError)
 
     def stakeDelegate(self, grantor, agent, quantity):
-        action="delegate"
-        data="""{"grantor_name":"%s", "agent_name":"%s", "quantity":"%s"}""" % (grantor, agent, quantity)
+        action="delegatevote"
+        data="""{"grantor_name":"%s", "recipient_name":"%s", "quantity":"%s"}""" % (grantor, agent, quantity)
         opts="--permission %s@active" % grantor
         return self.pushMessage("cyber.stake", action, data, opts)
 
     def stakeRecall(self, grantor, agent, pct = 10000):
-        action="recall"
-        data="""{"grantor_name":"%s", "agent_name":"%s", "token_code":"%s", "pct":"%i"}""" % (
+        action="recallvote"
+        data="""{"grantor_name":"%s", "recipient_name":"%s", "token_code":"%s", "pct":"%i"}""" % (
             grantor, agent, CORE_SYMBOL, pct)
         opts="--permission %s@active" % grantor
         return self.pushMessage("cyber.stake", action, data, opts)

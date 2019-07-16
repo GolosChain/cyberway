@@ -166,16 +166,6 @@ def verifyProductionRounds(trans, node, prodsActive, rounds):
     Utils.Debug = temp
 
 
-def publishContract(node, contract):
-    contractDir = "contracts/%s" % (contract)
-    wasmFile = "%s.wasm" % (contract)
-    abiFile = "%s.abi" % (contract)
-    Utils.Print("Publish %s contract" % (contract))
-    trans = node.publishContract(contract, contractDir, wasmFile, abiFile, waitForTransBlock=True)
-    if trans is None:
-        Utils.errorExit("ERROR: Failed to publish contract %s." % contract)
-
-
 Print=Utils.Print
 errorExit=Utils.errorExit
 
@@ -237,18 +227,7 @@ try:
     Print("Wallet \"%s\" password=%s." % (testWalletName, testWallet.password.encode("utf-8")))
 
     node = cluster.getNode(0)
-    publishContract(node, "cyber.govern")
-    contract="cyber.stake"
-    publishContract(node, contract)
-
-    Utils.Print("push create action to %s contract" % contract)
-    action = "create"
-    data = "{\"token_symbol\":\"4,%s\",\"max_proxies\":[30,10,3,1],\"payout_step_length\":604800,\"payout_steps_num\":52,\"min_own_staked_for_election\":0}" % CORE_SYMBOL
-    opts = "--permission %s@active" % cluster.eosioAccount.name
-    trans = node.pushMessage(contract, action, data, opts)
-    if trans is None or not trans[0]:
-        Utils.errorExit("ERROR: Failed to push create action to %s contract." % contract)
-    node.trxTrackWait(trans[1], True, True)
+    node.installStake(cluster.eosioAccount.name, waitForTransBlock=True, exitOnError=True)
 
     for i in range(0, totalNodes):
         node=cluster.getNode(i)
