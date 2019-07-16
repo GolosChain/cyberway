@@ -3,13 +3,16 @@
 #include <eosio/history_plugin/public_key_history_object.hpp>
 
 #include <eosio/chain/controller.hpp>
-
 #include <eosio/chain/trace.hpp>
+
 #include <fc/io/json.hpp>
 
 #include <eosio/chain/config.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/signals2/connection.hpp>
+
+#include <eosio/chain/database_utils.hpp>
+
 
 
 namespace eosio {
@@ -17,7 +20,6 @@ namespace eosio {
    using boost::signals2::scoped_connection;
 
    static appbase::abstract_plugin& _history_plugin = app().register_plugin<history_plugin>();
-
 
    struct account_history_object : public cyberway::chaindb::object<account_history_object_type, account_history_object>  {
       CHAINDB_OBJECT_ID_CTOR( account_history_object );
@@ -86,6 +88,13 @@ CHAINDB_TABLE_TAG(eosio::action_history_object, acthistory, cyber.hist)
 FC_REFLECT(eosio::account_history_object, (id)(account)(action_sequence_num)(account_sequence_num))
 FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
 
+
+using history_table_set = eosio::chain::index_set<
+    eosio::action_history_table,
+    eosio::account_history_table,
+    eosio::public_key_history_table,
+    eosio::account_control_history_table
+>;
 
 namespace eosio {
 
@@ -365,13 +374,18 @@ namespace eosio {
    }
 
    void history_plugin::plugin_startup() {
+        add_indices();
    }
 
    void history_plugin::plugin_shutdown() {
-      my->applied_transaction_connection.reset();
+       my->applied_transaction_connection.reset();
    }
 
-
+   void history_plugin::add_indices() {
+       auto& chain = my->chain_plug->chain();
+       auto& chaindb = chain.chaindb();
+       history_table_set::add_indices(chaindb);
+   }
 
 
    namespace history_apis {
