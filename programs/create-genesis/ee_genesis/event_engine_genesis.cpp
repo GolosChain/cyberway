@@ -115,6 +115,8 @@ static abi_def create_rewards_abi() {
         "author_reward", "", {
             {"author", "name"},
             {"permlink", "string"},
+            {"parent_author", "name"},
+            {"parent_permlink", "string"},
             {"sbd_and_steem_payout", "asset"},
             {"vesting_payout", "asset"},
             {"time", "time_point_sec"},
@@ -126,6 +128,8 @@ static abi_def create_rewards_abi() {
             {"benefactor", "name"},
             {"author", "name"},
             {"permlink", "string"},
+            {"parent_author", "name"},
+            {"parent_permlink", "string"},
             {"reward", "asset"},
             {"time", "time_point_sec"},
         }
@@ -135,8 +139,10 @@ static abi_def create_rewards_abi() {
         "curation_reward", "", {
             {"curator", "name"},
             {"reward", "asset"},
-            {"comment_author", "name"},
-            {"comment_permlink", "string"},
+            {"author", "name"},
+            {"permlink", "string"},
+            {"parent_author", "name"},
+            {"parent_permlink", "string"},
             {"time", "time_point_sec"},
         }
     });

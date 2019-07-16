@@ -630,6 +630,18 @@ void genesis_ee_builder::write_rewards_history() {
     auto start_time = genesis_.get_conf().initial_timestamp;
     start_time -= fc::days(info_.ee_params.history_days.rewards);
 
+    const auto& comments = maps_.get_index<comment_header_index, by_hash>();
+    auto comment_by_op = [&](auto& op) {
+        comment_operation cop;
+        auto cmt = comments.find(op.hash);
+        if (cmt == comments.end()) {
+            return cop;
+        }
+        dump_comments.seekg(cmt->offsets.back());
+        read_operation(dump_comments, cop); // has incorrect body without patches but runs faster
+        return cop;
+    };
+
     if (dump_author_rewards.is_open()) {
         std::cout << "-> Writing author rewards..." << std::endl;
         out.start_section(info_.golos.names.posting, N(authreward), "author_reward");
@@ -640,9 +652,13 @@ void genesis_ee_builder::write_rewards_history() {
                 continue;
             }
 
+            auto cop = comment_by_op(op);
+
             out.emplace<author_reward>([&](auto& r) {
                 r.author = generate_name(op.author);
                 r.permlink = op.permlink;
+                r.parent_author = generate_name(cop.parent_author);
+                r.parent_permlink = cop.parent_permlink;
                 r.sbd_and_steem_payout = op.sbd_and_steem_in_golos;
                 r.vesting_payout = op.vesting_payout_in_golos;
                 r.time = op.timestamp;
@@ -660,11 +676,15 @@ void genesis_ee_builder::write_rewards_history() {
                 continue;
             }
 
+            auto cop = comment_by_op(op);
+
             out.emplace<curation_reward>([&](auto& r) {
                 r.curator = generate_name(op.curator);
                 r.reward = op.reward_in_golos;
-                r.comment_author = generate_name(op.comment_author);
-                r.comment_permlink = op.comment_permlink;
+                r.author = generate_name(op.comment_author);
+                r.permlink = op.comment_permlink;
+                r.parent_author = generate_name(cop.parent_author);
+                r.parent_permlink = cop.parent_permlink;
                 r.time = op.timestamp;
             });
         }
@@ -680,10 +700,14 @@ void genesis_ee_builder::write_rewards_history() {
                 continue;
             }
 
+            auto cop = comment_by_op(op);
+
             out.emplace<benefactor_reward>([&](auto& r) {
                 r.benefactor = generate_name(op.benefactor);
                 r.author = generate_name(op.author);
                 r.permlink = op.permlink;
+                r.parent_author = generate_name(cop.parent_author);
+                r.parent_permlink = cop.parent_permlink;
                 r.reward = op.reward_in_golos;
                 r.time = op.timestamp;
             });
