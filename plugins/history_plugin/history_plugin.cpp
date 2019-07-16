@@ -78,10 +78,10 @@ CHAINDB_TAG(eosio::by_account_action_seq, accactionseq)
 CHAINDB_TAG(eosio::by_action_sequence_num, byactseqnum)
 
 CHAINDB_SET_TABLE_TYPE(eosio::account_history_object, eosio::account_history_table)
-CHAINDB_TAG(eosio::account_history_object, acchistory)
+CHAINDB_TABLE_TAG(eosio::account_history_object, acchistory, cyber.hist)
 
 CHAINDB_SET_TABLE_TYPE(eosio::action_history_object, eosio::action_history_table)
-CHAINDB_TAG(eosio::action_history_object, acthistory)
+CHAINDB_TABLE_TAG(eosio::action_history_object, acthistory, cyber.hist)
 
 FC_REFLECT(eosio::account_history_object, (id)(account)(action_sequence_num)(account_sequence_num))
 FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
@@ -270,14 +270,13 @@ namespace eosio {
 
                const auto& table = chaindb.get_table<action_history_object>();
                table.emplace([&]( auto& aho ) {
-
                   auto ps = fc::raw::pack_size( at );
                   aho.packed_action_trace.resize(ps);
                   datastream<char*> ds( aho.packed_action_trace.data(), ps );
                   fc::raw::pack( ds, at );
 
                   aho.action_sequence_num = at.receipt.global_sequence;
-                  aho.block_num = chain.pending_block_state()->block_num;
+                  aho.block_num  = chain.pending_block_state()->block_num;
                   aho.block_time = chain.pending_block_time();
                   aho.trx_id     = at.trx_id;
                });
