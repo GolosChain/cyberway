@@ -132,7 +132,7 @@ namespace cyberway { namespace chaindb {
     }
 
     void storage_payer_info::set_payer_in(object_value& obj) const {
-        obj.service.payer  = owner;
+        obj.service.payer  = payer;
         obj.service.size   = size;
         obj.service.in_ram = in_ram;
     }
