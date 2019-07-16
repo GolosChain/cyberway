@@ -186,9 +186,10 @@ namespace {
           controller_(controller),
           account_(name),
           prices_(rm.get_pricelist()),
-          total_stake_(rm.get_account_stake_ratio(fc::time_point::now(), account_, false).numerator),
-          owned_stake_(controller_.find<eosio::chain::stake_agent_object, eosio::chain::stake_agent_object::by_key>
-                       (eosio::chain::stake::agent_key(chain::symbol(CORE_SYMBOL).to_symbol_code(), account_))->balance),
+          stake_agent_(controller_.find<eosio::chain::stake_agent_object, eosio::chain::stake_agent_object::by_key>
+                       (eosio::chain::stake::agent_key(chain::symbol(CORE_SYMBOL).to_symbol_code(), account_))),
+          total_stake_(stake_agent_->get_effective_stake()),
+          owned_stake_(stake_agent_->get_own_funds() - stake_agent_->provided),
           resources_usage_(rm.get_account_usage(name)),
           resources_info_(chain::resource_limits::resources_num),
           resource_limits_(chain::resource_limits::resources_num),
@@ -307,6 +308,7 @@ namespace {
         cyberway::chaindb::chaindb_controller& controller_;
         chain::account_name account_;
         std::vector<chain::resource_limits::ratio> prices_;
+        const eosio::chain::stake_agent_object* stake_agent_;
         uint64_t total_stake_;
         uint64_t owned_stake_;
         uint64_t account_balance_ = 0;
