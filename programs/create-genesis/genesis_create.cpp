@@ -799,6 +799,7 @@ struct genesis_create::genesis_create_impl final {
                 ("delegated", asset(vests.delegated, symbol(VESTS)))
                 ("received", asset(vests.received, symbol(VESTS)))
                 ("unlocked_limit", asset(0, symbol(VESTS)))
+                ("delegators", data.delegators[acc])
             );
         }
         ilog("Done.");

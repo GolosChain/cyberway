@@ -80,6 +80,7 @@ struct state_object_visitor {
     std::vector<golos::vesting_delegation_expiration_object> delegation_expirations;
     fc::flat_map<acc_idx, share_type> delegated_vests;
     fc::flat_map<acc_idx, share_type> received_vests;
+    fc::flat_map<acc_idx, uint32_t> delegators;
 
     fc::flat_map<acc_idx,acc_idx> withdraw_routes;  // from:to
 
@@ -154,6 +155,7 @@ struct state_object_visitor {
         delegations.emplace_back(d);
         delegated_vests[d.delegator.id] += d.vesting_shares.get_amount();
         received_vests[d.delegatee.id] += d.vesting_shares.get_amount();
+        delegators[d.delegatee.id]++;
     }
 
     void operator()(const golos::vesting_delegation_expiration_object& d) {
