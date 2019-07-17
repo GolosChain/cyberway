@@ -631,7 +631,7 @@ namespace cyberway { namespace chaindb {
                 } else {
                     idx_doc.append(kvp(field, -1));
                 }
-                was_pk |= (&order == info.pk_order);
+                was_pk |= (order.field == info.pk_order->field);
             }
 
             if (!was_pk && !index.unique) {
