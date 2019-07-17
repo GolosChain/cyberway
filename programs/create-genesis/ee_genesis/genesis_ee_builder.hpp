@@ -41,6 +41,7 @@ private:
     void process_follows();
     void process_account_metas();
 
+    void write_contract_abis();
     void build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created);
     void build_reblogs(std::vector<reblog_info>& reblogs, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs);
     comment_operation get_comment(const comment_header& comment);

@@ -422,6 +422,13 @@ void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     process_account_metas();
 }
 
+void genesis_ee_builder::write_contract_abis() {
+    std::cout << "-> Writing ABIs..." << std::endl;
+    for (const auto& acc: info_.accounts) if (!!acc.abi) {
+        out_.add_abi(acc.name, acc.abi->path);
+    }
+}
+
 void genesis_ee_builder::build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created) {
     const auto& vote_idx = maps_.get_index<vote_header_index, by_hash_voter>();
 
@@ -863,6 +870,7 @@ void genesis_ee_builder::build(const bfs::path& out_dir) {
 
     out_.start(out_dir, fc::sha256());
 
+    write_contract_abis();
     write_messages();
     write_transfers();
     write_withdraws();

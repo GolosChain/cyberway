@@ -271,6 +271,9 @@ static abi_def create_funds_abi() {
 }
 
 void event_engine_genesis::start(const bfs::path& ee_directory, const fc::sha256& hash) {
+    abi_dir = ee_directory / "abis";
+    fc::create_directories(abi_dir);
+
     using ser_info = std::tuple<string, abi_def>;
     const std::map<ee_ser_type, ser_info> infos = {
         {ee_ser_type::messages,    {"messages.dat",    create_messages_abi()}},
@@ -294,6 +297,10 @@ void event_engine_genesis::finalize() {
     for (auto& s: serializers) {
         s.second.finalize();
     }
+}
+
+void event_engine_genesis::add_abi(const account_name& abi_name, const bfs::path& abi_file) {
+    bfs::copy_file(abi_file, abi_dir / abi_name.to_string().append(".abi"), bfs::copy_option::overwrite_if_exists);
 }
 
 } } } // cyberway::genesis::ee

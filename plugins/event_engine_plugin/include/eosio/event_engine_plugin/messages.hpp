@@ -101,6 +101,7 @@ namespace eosio {
    };
 
    const auto core_genesis_code = N(core);
+   const auto abi_genesis_code = N(abi);
 
    struct AcceptTrxMessage : public BaseMessage, TrxMetadata {
        AcceptTrxMessage(MsgChannel msg_channel, BaseMessage::MsgType msg_type, const chain::transaction_metadata_ptr &trx_meta)

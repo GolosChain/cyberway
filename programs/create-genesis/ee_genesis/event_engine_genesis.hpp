@@ -16,14 +16,15 @@ public:
     void start(const bfs::path& ee_directory, const fc::sha256& hash);
     void finalize();
 
+    void add_abi(const account_name& abi_name, const bfs::path& abi_file);
+
     enum ee_ser_type {messages, transfers, withdraws, delegations, rewards, pinblocks, accounts, witnesses, funds, balance_conversions};
     ee_genesis_serializer& get_serializer(ee_ser_type type) {
         return serializers.at(type);
     }
-
 private:
+    bfs::path abi_dir;
     std::map<ee_ser_type, ee_genesis_serializer> serializers;
-
 };
 
 struct vote_info {

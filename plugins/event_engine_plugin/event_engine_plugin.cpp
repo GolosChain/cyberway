@@ -12,6 +12,7 @@
 #include <eosio/chain/generated_transaction_object.hpp>
 #include <fc/exception/exception.hpp>
 #include <fc/variant_object.hpp>
+#include <fc/io/fstream.hpp>
 #include <fc/io/json.hpp>
 
 #include <fstream>
@@ -44,6 +45,7 @@ public:
     controller &db;
     fc::microseconds abi_serializer_max_time;
     std::set<account_name> receiver_filter;
+    std::vector<bfs::path> genesis_abi_files;
     std::vector<bfs::path> genesis_files;
     cyberway::chaindb::account_abi_info account_abi;
 
@@ -52,8 +54,10 @@ public:
     void accepted_transaction(const chain::transaction_metadata_ptr&);
     void applied_transaction(const chain::transaction_trace_ptr&);
 
+    void send_genesis_abistart();
     void send_genesis_start();
     void send_genesis_end();
+    void send_genesis_abi(const bfs::path& abi_file);
     void send_genesis_file(const bfs::path& genesis_file);
 
     bool is_handled_contract(const account_name n) const;
@@ -190,12 +194,25 @@ bool event_engine_plugin_impl::is_handled_contract(const account_name n) const {
     return receiver_filter.empty() || receiver_filter.find(n) != receiver_filter.end();
 }
 
+void event_engine_plugin_impl::send_genesis_abistart() {
+    send_genesis_message(core_genesis_code, N(abistart), fc::variant_object());
+}
+
 void event_engine_plugin_impl::send_genesis_start() {
     send_genesis_message(core_genesis_code, N(datastart), fc::variant_object());
 }
 
 void event_engine_plugin_impl::send_genesis_end() {
     send_genesis_message(core_genesis_code, N(dataend), fc::variant_object());
+}
+
+void event_engine_plugin_impl::send_genesis_abi(const bfs::path& abi_file) {
+    std::cout << "Reading event engine genesis ABI from " << abi_file << "..." << std::endl;
+    auto contract_name = name(abi_file.stem().string()); // validates name
+    std::string abi;
+    fc::read_file_contents(abi_file, abi);
+    EOS_ASSERT(!abi.empty(), ee_extract_genesis_exception, "File is empty or not exists");
+    send_genesis_message(abi_genesis_code, contract_name, fc::json::from_string(abi));
 }
 
 void event_engine_plugin_impl::send_genesis_file(const bfs::path& genesis_file) {
@@ -282,10 +299,11 @@ event_engine_plugin::~event_engine_plugin(){}
 
 void event_engine_plugin::set_program_options(options_description&, options_description& cfg) {
     cfg.add_options()
-        ("event-engine-dumpfile", bpo::value<string>()->default_value(""))
-        ("event-engine-contract", bpo::value<vector<string>>()->composing()->multitoken(),
+        ("event-engine-dumpfile",     bpo::value<string>()->default_value(""))
+        ("event-engine-contract",     bpo::value<vector<string>>()->composing()->multitoken(),
          "Smart-contracts for which event_engine will handle events (may specify multiple times)")
-        ("event-engine-genesis",  bpo::value<vector<string>>()->composing()->multitoken())
+        ("event-engine-genesis",      bpo::value<vector<string>>()->composing()->multitoken())
+        ("event-engine-genesis-abi",  bpo::value<vector<string>>()->composing()->multitoken())
         ;
 }
 
@@ -304,6 +322,7 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
         my.reset(new event_engine_plugin_impl(chain, chain_plug->get_abi_serializer_max_time()));
 
         LOAD_VALUE_SET(options, "event-engine-contract", my->receiver_filter);
+        LOAD_VALUE_SET(options, "event-engine-genesis-abi", my->genesis_abi_files);
         LOAD_VALUE_SET(options, "event-engine-genesis", my->genesis_files);
 
         std::string dump_filename = options.at("event-engine-dumpfile").as<string>();
@@ -313,6 +332,10 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
             EOS_ASSERT(!my->dumpstream.fail(), chain::plugin_config_exception, "Can't open event-engine-dumpfile");
             my->dumpstream_opened = true;
 
+            my->send_genesis_abistart();
+            for(const auto& file: my->genesis_abi_files) {
+                my->send_genesis_abi(file);
+            }
             my->send_genesis_start();
             for(const auto& file: my->genesis_files) {
                 my->send_genesis_file(file);
