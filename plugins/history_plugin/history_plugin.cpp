@@ -36,7 +36,7 @@ namespace eosio {
 
       id_type              id;
       uint64_t             action_sequence_num; ///< the sequence number of the relevant action
-      std::string/*shared_string*/ packed_action_trace;
+      std::string          packed_action_trace;
       uint32_t             block_num;
       block_timestamp_type block_time;
       transaction_id_type  trx_id;
@@ -91,9 +91,9 @@ FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action
 
 using history_table_set = eosio::chain::index_set<
     eosio::action_history_table,
-    eosio::account_history_table/*,
+    eosio::account_history_table,
     eosio::public_key_history_table,
-    eosio::account_control_history_table*/
+    eosio::account_control_history_table
 >;
 
 namespace eosio {
@@ -108,7 +108,7 @@ namespace eosio {
          if (itr == idx.end())
             break;
 
-         const auto& range_end = idx.upper_bound(key); // FIXME error: no member named 'tail' in 'boost::tuples::cons<eosio::chain::name, boost::tuples::null_type>' cons( const cons<HT2, TT2>& u ) : head(u.head), tail(u.tail) {}
+         const auto& range_end = idx.upper_bound(key);
          if (itr == range_end)
             break;
 
@@ -118,8 +118,8 @@ namespace eosio {
 
    static void add(chaindb_controller& db, const vector<key_weight>& keys, const account_name& name, const permission_name& permission)
    {
-      const auto& table = db.get_table<public_key_history_object>();
-      for (auto pub_key_weight : keys ) {
+      auto table = db.get_table<public_key_history_object>();
+      for (auto& pub_key_weight : keys ) {
          table.emplace([&](public_key_history_object& obj) {
             obj.public_key = pub_key_weight.key;
             obj.name = name;
@@ -130,8 +130,8 @@ namespace eosio {
 
    static void add(chaindb_controller& db, const vector<permission_level_weight>& controlling_accounts, const account_name& account_name, const permission_name& permission)
    {
-      const auto& table = db.get_table<account_control_history_object>();
-      for (auto controlling_account : controlling_accounts ) {
+      auto table = db.get_table<account_control_history_object>();
+      for (auto& controlling_account : controlling_accounts ) {
          table.emplace([&](account_control_history_object& obj) {
             obj.controlled_account = account_name;
             obj.controlled_permission = permission;
@@ -398,7 +398,7 @@ namespace eosio {
         const auto& chaindb = chain.chaindb();
         const auto abi_serializer_max_time = history->chain_plug->get_abi_serializer_max_time();
 
-        const auto& idx = chaindb.get_index<account_history_object, by_account_action_seq>();
+        auto idx = chaindb.get_index<account_history_object, by_account_action_seq>();
 
         int32_t start = 0;
         int32_t pos = params.pos ? *params.pos : -1;
@@ -485,11 +485,10 @@ namespace eosio {
          };
 
          const auto& chaindb = chain.chaindb();
-         const auto& idx = chaindb.get_index<action_history_object, by_trx_id>();
+         auto idx = chaindb.get_index<action_history_object, by_trx_id>();
          auto itr = idx.lower_bound( boost::make_tuple( input_id ) );
 
          bool in_history = (itr != idx.end() && txn_id_matched(itr->trx_id) );
-
          if( !in_history && !p.block_num_hint ) {
             EOS_THROW(tx_not_found, "Transaction ${id} not found in history and no block hint was given", ("id",p.id));
          }
@@ -585,7 +584,7 @@ namespace eosio {
       read_only::get_key_accounts_results read_only::get_key_accounts(const get_key_accounts_params& params) const {
          std::set<account_name> accounts;
          const auto& chaindb = history->chain_plug->chain().chaindb();
-         const auto& pub_key_idx = chaindb.get_index<public_key_history_object, by_pub_key>();
+         auto pub_key_idx = chaindb.get_index<public_key_history_object, by_pub_key>();
          auto range = pub_key_idx.equal_range( params.public_key );
          for (auto obj = range.first; obj != range.second; ++obj)
             accounts.insert(obj->name);
@@ -595,7 +594,7 @@ namespace eosio {
       read_only::get_controlled_accounts_results read_only::get_controlled_accounts(const get_controlled_accounts_params& params) const {
          std::set<account_name> accounts;
          const auto& chaindb = history->chain_plug->chain().chaindb();
-         const auto& account_control_idx = chaindb.get_index<account_control_history_object, by_controlling>();
+         auto account_control_idx = chaindb.get_index<account_control_history_object, by_controlling>();
          auto range = account_control_idx.equal_range( params.controlling_account );
          for (auto obj = range.first; obj != range.second; ++obj)
             accounts.insert(obj->controlled_account);
