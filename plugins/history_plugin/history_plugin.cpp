@@ -104,11 +104,11 @@ namespace eosio {
       const auto& idx = db.get_index<MultiIndex, LookupType>();
       while(true) {
          auto key = boost::make_tuple(account_name, permission);
-         const auto& itr = idx.lower_bound(key);
+         auto itr = idx.lower_bound(key);
          if (itr == idx.end())
             break;
 
-         const auto& range_end = idx.upper_bound(key);
+         auto range_end = idx.upper_bound(key);
          if (itr == range_end)
             break;
 
@@ -227,7 +227,7 @@ namespace eosio {
             auto& chain = chain_plug->chain();
             auto& chaindb = chain.chaindb();
 
-            const auto& idx = chaindb.get_index<account_history_object, by_account_action_seq>();
+            auto idx = chaindb.get_index<account_history_object, by_account_action_seq>();
             auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
 
             uint64_t asn = 0;
@@ -280,7 +280,7 @@ namespace eosio {
                auto& chain = chain_plug->chain();
                auto& chaindb = chain.chaindb();
 
-               const auto& table = chaindb.get_table<action_history_object>();
+               auto table = chaindb.get_table<action_history_object>();
                table.emplace([&]( auto& aho ) {
                   auto ps = fc::raw::pack_size( at );
                   aho.packed_action_trace.resize(ps);
