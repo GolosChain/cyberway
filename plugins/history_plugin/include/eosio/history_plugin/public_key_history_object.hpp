@@ -55,7 +55,7 @@ CHAINDB_TAG(eosio::by_pub_key, bypubkey)
 CHAINDB_TAG(eosio::by_account_permission, byaccperm)
 
 CHAINDB_SET_TABLE_TYPE( eosio::public_key_history_object, eosio::public_key_history_table )
-CHAINDB_TABLE_TAG(eosio::public_key_history_object, pubkeyhist, cyber.history)
+CHAINDB_TABLE_TAG(eosio::public_key_history_object, pubkeyhist, .history)
 
 FC_REFLECT( eosio::public_key_history_object, (id)(public_key)(name)(permission) )
 

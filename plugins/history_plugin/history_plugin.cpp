@@ -80,10 +80,10 @@ CHAINDB_TAG(eosio::by_account_action_seq, accactionseq)
 CHAINDB_TAG(eosio::by_action_sequence_num, byactseqnum)
 
 CHAINDB_SET_TABLE_TYPE(eosio::account_history_object, eosio::account_history_table)
-CHAINDB_TABLE_TAG(eosio::account_history_object, acchistory, cyber.history)
+CHAINDB_TABLE_TAG(eosio::account_history_object, acchistory, .history)
 
 CHAINDB_SET_TABLE_TYPE(eosio::action_history_object, eosio::action_history_table)
-CHAINDB_TABLE_TAG(eosio::action_history_object, acthistory, cyber.history)
+CHAINDB_TABLE_TAG(eosio::action_history_object, acthistory, .history)
 
 FC_REFLECT(eosio::account_history_object, (id)(account)(action_sequence_num)(account_sequence_num))
 FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
@@ -157,6 +157,7 @@ namespace eosio {
    class history_plugin_impl {
       public:
          bool bypass_filter = false;
+         uint64_t timeout_get_action;
          std::set<filter_entry> filter_on;
          std::set<filter_entry> filter_out;
          chain_plugin* chain_plug = nullptr;
@@ -331,6 +332,10 @@ namespace eosio {
             ("filter-out,F", bpo::value<vector<string>>()->composing(),
              "Do not track actions which match receiver:action:actor. Action and Actor both blank excludes all from Reciever. Actor blank excludes all from reciever:action. Receiver may not be blank.")
             ;
+      cfg.add_options()
+            ("timeout-get-action,tga", bpo::value<uint64_t>()->composing(),
+             "Runtime get_action")
+            ;
    }
 
    void history_plugin::plugin_initialize(const variables_map& options) {
@@ -363,6 +368,11 @@ namespace eosio {
                            "Invalid value ${s} for --filter-out", ("s", s));
                my->filter_out.insert( fe );
             }
+         }
+         if( options.count( "timeout-get-action" )) {
+            my->timeout_get_action = options.at( "timeout-get-action" ).as<uint64_t>();
+         } else {
+             my->timeout_get_action = 100000;
          }
 
          my->chain_plug = app().find_plugin<chain_plugin>();
@@ -405,7 +415,7 @@ namespace eosio {
         int32_t end = 0;
         int32_t offset = params.offset ? *params.offset : -20;
         auto n = params.account_name;
-        idump((pos));
+//        idump((pos));
         if( pos == -1 ) {
             auto itr = idx.lower_bound( boost::make_tuple( name(n.value+1), 0 ) );
             if( itr == idx.begin() ) {
@@ -429,7 +439,7 @@ namespace eosio {
         }
         EOS_ASSERT( end >= start, chain::plugin_exception, "end position is earlier than start position" );
 
-        idump((start)(end));
+//        idump((start)(end));
 
         auto start_itr = idx.lower_bound( boost::make_tuple( n, start ) );
         auto end_itr = idx.upper_bound( boost::make_tuple( n, end) );
@@ -440,7 +450,6 @@ namespace eosio {
         get_actions_result result;
         result.last_irreversible_block = chain.last_irreversible_block_num();
         while( start_itr != end_itr ) {
-           idump((start_itr->action_sequence_num));
            auto a = chaindb.get<action_history_object, by_action_sequence_num>( start_itr->action_sequence_num );
            fc::datastream<const char*> ds( a.packed_action_trace.data(), a.packed_action_trace.size() );
            action_trace t;
@@ -454,10 +463,10 @@ namespace eosio {
 
            end_time = fc::time_point::now();
            auto temp = end_time - start_time;
-//           if( end_time - start_time > fc::microseconds(100000) ) {
-//              result.time_limit_exceeded_error = true;
-//              break;
-//           }
+           if( end_time - start_time > fc::microseconds(history->timeout_get_action) ) {
+              result.time_limit_exceeded_error = true;
+              break;
+           }
            ++start_itr;
         }
         return result;
