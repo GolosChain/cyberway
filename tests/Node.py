@@ -975,8 +975,9 @@ class Node(object):
         if trans is None:
             Utils.errorExit("ERROR: Failed to publish contract %s." % contract)
 
-    def installStake(self, signer, waitForTransBlock=False, exitOnError=False):
-        self.installContract("cyber.govern")
+    def installStaking(self, signer, withGovern=True, waitForTransBlock=False, exitOnError=False):
+        if withGovern:
+            self.installContract("cyber.govern")
         contract="cyber.stake"
         self.installContract(contract)
 
@@ -1432,9 +1433,80 @@ class Node(object):
         return blockNum
 
 
+    def waitActiveSchedule(self, prodsActive, maxBlocks, requireVersionChange=False):
+        Utils.Print("Wait producers to be scheduled")
+        temp = Utils.Debug
+        Utils.Debug = False
+
+        waitProds = set()
+        for prod in prodsActive:
+            waitProds.add(prod)
+        Utils.Print("wait: %s" %  ','.join(map(str, waitProds)))
+        assert(len(waitProds) == len(prodsActive))
+
+        def getScheduleProducers(schedule):
+            prods = []
+            for i in schedule["producers"]:
+                prods.append(i["producer_name"])
+            return prods
+
+        blockNum = self.getHeadBlockNum()
+        found = None
+        prevActive = prevPending = None
+        prevVersion = prevPendingVersion = None
+        prevSlot = None
+        slotSize = None
+        synced = False
+        while maxBlocks > 0:
+            block = self.getBlockStateByNum(blockNum)["block_header_state"]
+            slot = block["scheduled_shuffle_slot"]
+            if slot != prevSlot:
+                Utils.Print("Slot changed: %i/%i; (previous lasted %s blocks)" % (blockNum, slot, slotSize))
+                synced = prevSlot != None
+                prevSlot = slot
+                slotSize = 0
+            slotSize += 1
+
+            activeS = block["active_schedule"]
+            active = getScheduleProducers(activeS)
+            if found != "A":
+                if found != "P":
+                    pending = getScheduleProducers(block["pending_schedule"])
+                    if set(pending).intersection(waitProds) == waitProds:
+                        found = "P"
+                        Utils.Print("Found in pending schedule; %i/%i" % (blockNum, slot))
+                if set(active).intersection(waitProds) == waitProds:
+                    found = "A"
+                    Utils.Print("Found in active schedule; %i/%i" % (blockNum, slot))
+                    if not requireVersionChange:
+                        break
+
+            if activeS["version"] != prevVersion:
+                fakeChange = prevVersion == None
+                prevVersion = activeS["version"]
+                prevActive = active
+                Utils.Print("Changed active version: %i/%i/%i; [%s]" % (prevVersion, blockNum, slot, ','.join(map(str, active))))
+                if found == "A" and not fakeChange:
+                    break
+            elif set(prevActive) != set(active):
+                Utils.Print("Schedule changed without version change (%i/%i):\n[%s]" % (
+                    blockNum, slot, ','.join(map(str, active))))
+                prevActive = active
+            elif prevActive != active:
+                Utils.Print("Schedule shuffled (%i/%i):\n[%s]" % (blockNum, slot, ','.join(map(str, active))))
+                prevActive = active
+
+            blockNum += 1
+            maxBlocks -= 1
+        Utils.Debug = temp
+        if found != "A":
+            Utils.errorExit("Failed to find producers in active schedule")
+        return (blockNum+1, synced)
+
+
     # TBD: make nodeId an internal property
     # pylint: disable=too-many-locals
-    def relaunch(self, nodeId, chainArg, newChain=False, timeout=Utils.systemWaitTimeout, addOrSwapFlags=None, cachePopen=False):
+    def relaunch(self, nodeId, chainArg, newChain=False, timeout=Utils.systemWaitTimeout, addOrSwapFlags=None, cachePopen=False, skipGenesis=True):
 
         assert(self.pid is None)
         assert(self.killed)
@@ -1449,10 +1521,12 @@ class Node(object):
             swapValue=None
             for i in self.cmd.split():
                 Utils.Print("\"%s\"" % (i))
+                if "--delete-all-blocks" == i or "--mongodb-wipe" == i:
+                    continue
                 if skip:
                     skip=False
                     continue
-                if "--genesis-json" == i or "--genesis-timestamp" == i:
+                if skipGenesis and ("--genesis-json" == i or "--genesis-timestamp" == i):
                     skip=True
                     continue
 
@@ -1484,7 +1558,7 @@ class Node(object):
             if cachePopen:
                 self.popenProc=popen
             self.pid=popen.pid
-            if Utils.Debug: Utils.Print("restart Node host=%s, port=%s, pid=%s, cmd=%s" % (self.host, self.port, self.pid, self.cmd))
+            if Utils.Debug: Utils.Print("restart Node host=%s, port=%s, pid=%s, cmd=%s" % (self.host, self.port, self.pid, cmd))
 
         def isNodeAlive():
             """wait for node to be responsive."""

@@ -73,79 +73,18 @@ def syncWithShuffle(node, blockNum):
     Utils.Print("Synced with shuffle: block=%i; slot=%i" % (blockNum, slot))
     return blockNum + 1     # schedule will be applied starting from the next block
 
-def getScheduleProducers(schedule):
-    prods = []
-    for i in schedule["producers"]:
-        prods.append(i["producer_name"])
-    return prods
-
-def waitActiveSchedule(node, prodsActive):
-    Utils.Print("Wait producers to be scheduled")
-
-    waitProds = set()
-    for k,v in prodsActive.items():
-        if v:
-            waitProds.add(k)
-    Utils.Print("wait: %s" %  ','.join(map(str, waitProds)))
-    assert(len(waitProds) == top_producers)
-
-    blockNum = node.getHeadBlockNum()
-    maxBlocks = (schedulePeriodFactor + 1) * totalProducers * 2 + ((totalProducers*2//3)+1)*2
-    found = None
-    prevActive = prevPending = None
-    prevVersion = prevPendingVersion = None
-    prevSlot = None
-    slotSize = -1
-    synced = False
-    while maxBlocks > 0:
-        block = node.getBlockStateByNum(blockNum)["block_header_state"]
-        slot = block["scheduled_shuffle_slot"]
-        synced = slot != prevSlot
-        if synced:
-            Utils.Print("Slot changed: %i/%i; (previous lasted %i blocks)" % (blockNum, slot, slotSize))
-            prevSlot = slot
-            slotSize = 0
-        slotSize += 1
-
-        activeS = block["active_schedule"]
-        active = getScheduleProducers(activeS)
-        if found != "A":
-            if found != "P":
-                pending = getScheduleProducers(block["pending_schedule"])
-                if set(pending).intersection(waitProds) == waitProds:
-                    found = "P"
-                    Utils.Print("Found in pending schedule; %i/%i" % (blockNum, slot))
-            if set(active).intersection(waitProds) == waitProds:
-                found = "A"
-                Utils.Print("Found in active schedule; %i/%i" % (blockNum, slot))
-                break
-
-        if activeS["version"] != prevVersion:
-            prevVersion = activeS["version"]
-            prevActive = active
-            Utils.Print("Changed active version: %i/%i/%i; [%s]" % (prevVersion, blockNum, slot, ','.join(map(str, active))))
-        elif set(prevActive) != set(active):
-            Utils.Print("Schedule changed without version change (%i/%i):\n[%s]" % (
-                blockNum, slot, ','.join(map(str, active))))
-            prevActive = active
-        elif prevActive != active:
-            Utils.Print("Schedule shuffled (%i/%i):\n[%s]" % (blockNum, slot, ','.join(map(str, active))))
-            prevActive = active
-
-        blockNum += 1
-        maxBlocks -= 1
-    if found != "A":
-        Utils.errorExit("Failed to find producers in active schedule")
-    return (blockNum, synced)
 
 def verifyProductionRounds(trans, node, prodsActive, rounds):
     temp = Utils.Debug
     Utils.Debug = False
 
-    blockNum, synced = waitActiveSchedule(node, prodsActive)
-    if synced:
-        blockNum += 1
-    else:
+    prods = []
+    for k,v in prodsActive.items():
+        if v:
+            prods.append(k)
+    maxBlocks = (schedulePeriodFactor + 1) * totalProducers * 2 + ((totalProducers*2//3)+1)*2
+    blockNum, synced = node.waitActiveSchedule(prods, maxBlocks)
+    if not synced:
         blockNum = syncWithShuffle(node, blockNum)
 
     Utils.Print("Verify %s complete rounds of all producers producing" % (rounds))
@@ -227,7 +166,7 @@ try:
     Print("Wallet \"%s\" password=%s." % (testWalletName, testWallet.password.encode("utf-8")))
 
     node = cluster.getNode(0)
-    node.installStake(cluster.eosioAccount.name, waitForTransBlock=True, exitOnError=True)
+    node.installStaking(cluster.eosioAccount.name, waitForTransBlock=True, exitOnError=True)
 
     for i in range(0, totalNodes):
         node=cluster.getNode(i)

@@ -103,7 +103,8 @@ class Cluster(object):
     # pylint: disable=too-many-branches
     # pylint: disable=too-many-statements
     def launch(self, pnodes=1, totalNodes=1, prodCount=1, topo="mesh", p2pPlugin="net", delay=1, onlyBios=False, dontBootstrap=False,
-               totalProducers=None, extraNodeosArgs=None, useBiosBootFile=True, specificExtraNodeosArgs=None):
+               totalProducers=None, extraNodeosArgs=None, useBiosBootFile=True, specificExtraNodeosArgs=None,
+               delMongoData=True):
         """Launch cluster.
         pnodes: producer nodes count
         totalNodes: producer + non-producer nodes count
@@ -159,7 +160,9 @@ class Cluster(object):
         if not self.walletd:
             nodeosArgs += " --plugin eosio::wallet_api_plugin"
         if self.enableMongo:
-            nodeosArgs += " --plugin eosio::mongo_db_plugin --mongodb-wipe --delete-all-blocks --mongodb-uri %s" % self.mongoUri
+            nodeosArgs += " --plugin eosio::mongo_db_plugin --mongodb-uri %s" % self.mongoUri
+            if delMongoData:
+                nodeosArgs += " --delete-all-blocks --mongodb-wipe"
         if extraNodeosArgs is not None:
             assert(isinstance(extraNodeosArgs, str))
             nodeosArgs += extraNodeosArgs
@@ -1481,7 +1484,7 @@ class Cluster(object):
             Utils.Print("Block log from node %s:\n%s" % (i, json.dumps(blockLog, indent=1)))
 
 
-    def compareBlockLogs(self):
+    def compareBlockLogs(self, includeBios=True):
         blockLogs=[]
         blockNameExtensions=[]
         lowestMaxes=[]
@@ -1497,13 +1500,14 @@ class Cluster(object):
 
             maxes.append(max)
 
-        i="bios"
-        blockLog=self.getBlockLog(i)
-        if blockLog is None:
-            Utils.errorExit("Node %s does not have a block log, all nodes must have a block log" % (i))
-        blockLogs.append(blockLog)
-        blockNameExtensions.append(i)
-        sortLowest(lowestMaxes,back(blockLog)["block_num"])
+        if includeBios:
+            i="bios"
+            blockLog=self.getBlockLog(i)
+            if blockLog is None:
+                Utils.errorExit("Node %s does not have a block log, all nodes must have a block log" % (i))
+            blockLogs.append(blockLog)
+            blockNameExtensions.append(i)
+            sortLowest(lowestMaxes,back(blockLog)["block_num"])
 
         if not hasattr(self, "nodes"):
             Utils.errorExit("There are not multiple nodes to compare, this method assumes that two nodes or more are expected")

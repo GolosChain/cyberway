@@ -1522,7 +1522,7 @@ launcher_def::launch (eosd_def &instance, string &gts) {
   if (instance.name != "bios" && !specific_nodeos_args.empty()) {
      const auto node_num = boost::lexical_cast<uint16_t,string>(instance.get_node_num());
      if (specific_nodeos_args.count(node_num)) {
-        eosdcmd += specific_nodeos_args[node_num] + " ";
+        eosdcmd += " " + specific_nodeos_args[node_num];
      }
   }
 
