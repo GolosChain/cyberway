@@ -188,8 +188,8 @@ namespace {
           prices_(rm.get_pricelist()),
           stake_agent_(controller_.find<eosio::chain::stake_agent_object, eosio::chain::stake_agent_object::by_key>
                        (eosio::chain::stake::agent_key(chain::symbol(CORE_SYMBOL).to_symbol_code(), account_))),
-          total_stake_(stake_agent_->get_effective_stake()),
-          owned_stake_(stake_agent_->get_own_funds() - stake_agent_->provided),
+          total_stake_(stake_agent_ == nullptr ? 0 : stake_agent_->get_effective_stake()),
+          owned_stake_(stake_agent_ == nullptr ? 0 : (stake_agent_->get_own_funds() - stake_agent_->provided)),
           resources_usage_(rm.get_account_usage(name)),
           resources_info_(chain::resource_limits::resources_num),
           resource_limits_(chain::resource_limits::resources_num),
