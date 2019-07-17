@@ -1607,8 +1607,8 @@ struct bidname_info_subcommand {
                                ("code", name(config::system_account_name).to_string())
                                ("scope", name(config::system_account_name).to_string())
                                ("table", "namebids")
-                               ("lower_bound", newname.value)
-                               ("upper_bound", newname.value + 1)
+                               ("lower_bound", fc::mutable_variant_object("newname", newname))
+                               ("upper_bound", fc::variant())
                                ("index", "primary")
                                // Less than ideal upper_bound usage preserved so cleos can still work with old buggy nodeos versions
                                // Change to newname.value when cleos no longer needs to support nodeos versions older than 1.5.0
@@ -3796,11 +3796,8 @@ int main( int argc, char** argv ) {
                          ("scope", proposer)
                          ("table", "proposal")
                          ("table_key", "")
-                         ("lower_bound", eosio::chain::string_to_name(proposal_name.c_str()))
-                         ("upper_bound", eosio::chain::string_to_name(proposal_name.c_str()) + 1)
+                         ("lower_bound", fc::mutable_variant_object("proposal_name", proposal_name))
                          ("index", "primary")
-                         // Less than ideal upper_bound usage preserved so cleos can still work with old buggy nodeos versions
-                         // Change to name(proposal_name).value when cleos no longer needs to support nodeos versions older than 1.5.0
                          ("limit", 1)
                          );
 
@@ -3834,11 +3831,8 @@ int main( int argc, char** argv ) {
                                        ("scope", proposer)
                                        ("table", "approvals2")
                                        ("table_key", "")
-                                       ("lower_bound", name(proposal_name).value)
-                                       ("upper_bound", name(proposal_name).value + 1)
+                                       ("lower_bound", fc::mutable_variant_object("proposal_name", proposal_name))
                                        ("index", "primary")
-                                       // Less than ideal upper_bound usage preserved so cleos can still work with old buggy nodeos versions
-                                       // Change to name(proposal_name).value when cleos no longer needs to support nodeos versions older than 1.5.0
                                        ("limit", 1)
                                  );
             rows2 = result2.get_object()["rows"].get_array();
@@ -3867,11 +3861,8 @@ int main( int argc, char** argv ) {
                                        ("scope", proposer)
                                        ("table", "approvals")
                                        ("table_key", "")
-                                       ("lower_bound", name(proposal_name).value)
-                                       ("upper_bound", name(proposal_name).value + 1)
+                                       ("lower_bound", fc::mutable_variant_object("proposal_name", proposal_name))
                                        ("index", "primary")
-                                       // Less than ideal upper_bound usage preserved so cleos can still work with old buggy nodeos versions
-                                       // Change to name(proposal_name).value when cleos no longer needs to support nodeos versions older than 1.5.0
                                        ("limit", 1)
                                  );
             const auto& rows3 = result3.get_object()["rows"].get_array();
@@ -3901,10 +3892,7 @@ int main( int argc, char** argv ) {
                                           ("scope", msig_contract_str)
                                           ("table", "invals")
                                           ("table_key", "")
-                                          ("lower_bound", a.first.value)
-                                          ("upper_bound", a.first.value + 1)
-                                          // Less than ideal upper_bound usage preserved so cleos can still work with old buggy nodeos versions
-                                          // Change to name(proposal_name).value when cleos no longer needs to support nodeos versions older than 1.5.0
+                                          ("lower_bound", fc::mutable_variant_object("account", a.first))
                                           ("limit", 1)
                                     );
                const auto& rows4 = result4.get_object()["rows"].get_array();
