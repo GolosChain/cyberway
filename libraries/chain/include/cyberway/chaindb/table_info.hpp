@@ -21,7 +21,7 @@ namespace cyberway { namespace chaindb {
         }
 
         bool is_valid() const {
-            return nullptr != table;
+            return nullptr != table && nullptr != pk_order;
         }
 
         table_name_t table_name() const {

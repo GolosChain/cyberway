@@ -378,14 +378,16 @@ namespace cyberway { namespace chaindb {
             paths.clear();
             indexes.clear();
 
+            bool was_pk   = false;
             auto pk_order = find_pk_order(*ttr->second);
             for (auto& index: ttr->second->indexes) {
                 indexes.emplace(index.name, &index);
                 path.clear();
                 for (auto& order: index.orders) {
                     path.append(":").append(order.order).append("+").append(order.field);
+                    was_pk |= (order.field == pk_order->field);
                 }
-                if (!index.unique) {
+                if (!was_pk && !index.unique) {
                     path.append(":").append(names::asc_order).append("+").append(pk_order->field);
                 }
                 paths.insert(path);
