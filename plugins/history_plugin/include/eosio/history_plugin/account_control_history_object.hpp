@@ -55,6 +55,6 @@ CHAINDB_TAG(eosio::by_controlling, bycontrol)
 CHAINDB_TAG(eosio::by_controlled_authority, controlauth)
 
 CHAINDB_SET_TABLE_TYPE( eosio::account_control_history_object, eosio::account_control_history_table )
-CHAINDB_TABLE_TAG(eosio::account_control_history_object, ctrlhistory, cyber.hist)
+CHAINDB_TABLE_TAG(eosio::account_control_history_object, ctrlhistory, cyber.history)
 FC_REFLECT( eosio::account_control_history_object, (id)(controlled_account)(controlled_permission)(controlling_account) )
 

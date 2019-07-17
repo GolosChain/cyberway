@@ -80,10 +80,10 @@ CHAINDB_TAG(eosio::by_account_action_seq, accactionseq)
 CHAINDB_TAG(eosio::by_action_sequence_num, byactseqnum)
 
 CHAINDB_SET_TABLE_TYPE(eosio::account_history_object, eosio::account_history_table)
-CHAINDB_TABLE_TAG(eosio::account_history_object, acchistory, cyber.hist)
+CHAINDB_TABLE_TAG(eosio::account_history_object, acchistory, cyber.history)
 
 CHAINDB_SET_TABLE_TYPE(eosio::action_history_object, eosio::action_history_table)
-CHAINDB_TABLE_TAG(eosio::action_history_object, acthistory, cyber.hist)
+CHAINDB_TABLE_TAG(eosio::action_history_object, acthistory, cyber.history)
 
 FC_REFLECT(eosio::account_history_object, (id)(account)(action_sequence_num)(account_sequence_num))
 FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
@@ -440,7 +440,8 @@ namespace eosio {
         get_actions_result result;
         result.last_irreversible_block = chain.last_irreversible_block_num();
         while( start_itr != end_itr ) {
-           const auto& a = chaindb.get<action_history_object, by_action_sequence_num>( start_itr->action_sequence_num );
+           idump((start_itr->action_sequence_num));
+           auto a = chaindb.get<action_history_object, by_action_sequence_num>( start_itr->action_sequence_num );
            fc::datastream<const char*> ds( a.packed_action_trace.data(), a.packed_action_trace.size() );
            action_trace t;
            fc::raw::unpack( ds, t );
@@ -452,10 +453,11 @@ namespace eosio {
                                  });
 
            end_time = fc::time_point::now();
-           if( end_time - start_time > fc::microseconds(100000) ) {
-              result.time_limit_exceeded_error = true;
-              break;
-           }
+           auto temp = end_time - start_time;
+//           if( end_time - start_time > fc::microseconds(100000) ) {
+//              result.time_limit_exceeded_error = true;
+//              break;
+//           }
            ++start_itr;
         }
         return result;
