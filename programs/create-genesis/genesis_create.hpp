@@ -1,4 +1,5 @@
 #pragma once
+#include "genesis_exception.hpp"
 #include "genesis_info.hpp"
 #include "export_info.hpp"
 #include "supply_distributor.hpp"
@@ -8,8 +9,6 @@
 
 
 namespace cyberway { namespace genesis {
-
-FC_DECLARE_EXCEPTION(genesis_exception, 9000000, "genesis create exception");
 
 using namespace eosio::chain;
 namespace bfs = boost::filesystem;

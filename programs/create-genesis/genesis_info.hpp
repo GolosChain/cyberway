@@ -1,4 +1,5 @@
 #pragma once
+#include "genesis_exception.hpp"
 #include "posting_rules.hpp"
 #include <eosio/chain/types.hpp>
 #include <eosio/chain/asset.hpp>
@@ -126,6 +127,13 @@ struct genesis_info {
     };
     std::vector<auth_link> auth_links;
 
+    struct transit_account_authority {
+        name name;
+        std::string username;
+        std::vector<permission> permissions;
+    };
+    std::vector<transit_account_authority> transit_account_authorities;
+
     struct table {
         struct row {
             string scope;   // can be name/symbol/symbol_code
@@ -210,6 +218,23 @@ struct genesis_info {
             uint16_t rewards = 30;
         } history_days;
     } ee_params;
+
+    void init() {
+        for (auto& a: accounts) {
+            for (auto& p: a.permissions) {
+                EOS_ASSERT(p.key.length() == 0 || p.keys.size() == 0, genesis_exception,
+                    "Account ${a} permission can't contain both `key` and `keys` fields at the same time", ("a",a.name));
+                p.init();
+            }
+        }
+        for (auto& a: transit_account_authorities) {
+            for (auto& p: a.permissions) {
+                EOS_ASSERT(p.key.length() == 0 || p.keys.size() == 0, genesis_exception,
+                    "Transit account ${a} permission can't contain both `key` and `keys` fields at the same time", ("a",a.name));
+                p.init();
+            }
+        }
+    }
 };
 
 }} // cyberway::genesis
@@ -218,6 +243,7 @@ FC_REFLECT(cyberway::genesis::genesis_info::file_hash, (path)(hash))
 FC_REFLECT(cyberway::genesis::genesis_info::permission, (name)(threshold)(parent)(key)(keys)(accounts)(waits))
 FC_REFLECT(cyberway::genesis::genesis_info::account, (name)(update)(privileged)(permissions)(abi)(code)(sys_balance)(sys_staked)(prod_key))
 FC_REFLECT(cyberway::genesis::genesis_info::auth_link, (permission)(links))
+FC_REFLECT(cyberway::genesis::genesis_info::transit_account_authority, (username)(permissions))
 FC_REFLECT(cyberway::genesis::genesis_info::table::row, (scope)(payer)(pk)(data))
 FC_REFLECT(cyberway::genesis::genesis_info::table, (code)(table)(abi_type)(rows))
 FC_REFLECT(cyberway::genesis::genesis_info::golos_config::golos_names,
@@ -233,4 +259,4 @@ FC_REFLECT(cyberway::genesis::genesis_info::funds_share, (name)(numerator)(denom
 FC_REFLECT(cyberway::genesis::genesis_info::parameters, (stake)(posting_rules)(require_hardfork)(funds))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters::ee_history_days, (transfers)(withdraws)(rewards))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters, (history_days))
-FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(genesis_json)(accounts)(auth_links)(tables)(golos)(params)(ee_params))
+FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(genesis_json)(accounts)(auth_links)(transit_account_authorities)(tables)(golos)(params)(ee_params))

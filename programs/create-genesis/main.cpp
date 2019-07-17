@@ -157,13 +157,7 @@ void config_reader::read_config(const variables_map& options) {
     std::cout << "Initial configuration = {" << std::endl << genesis.initial_configuration << "}" << std::endl;
 
     // base validation and init
-    for (auto& a: info.accounts) {
-        for (auto& p: a.permissions) {
-            EOS_ASSERT(p.key.length() == 0 || p.keys.size() == 0, genesis_exception,
-                "Account ${a} permission can't contain both `key` and `keys` fields at the same time", ("a",a.name));
-            p.init();
-        }
-    }
+    info.init();
     EOS_ASSERT(info.golos.max_supply >= 0, genesis_exception, "max_supply can't be negative");
     EOS_ASSERT(info.golos.sys_max_supply >= 0, genesis_exception, "sys_max_supply can't be negative");
     for (const auto& f: info.params.funds) {

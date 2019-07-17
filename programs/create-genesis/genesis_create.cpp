@@ -92,6 +92,11 @@ struct genesis_create::genesis_create_impl final {
         return generate_name(_accs_map[idx]);
     }
 #endif
+    name name_by_username(const std::string& username) {
+        auto itr = std::find(_accs_map.begin(), _accs_map.end(), username);
+        EOS_ASSERT(itr != _accs_map.end(), genesis_exception, "User ${username} doesn't exist", ("username",username));
+        return name_by_idx(itr - _accs_map.begin());
+    }
     name name_by_acc(const golos::account_name_type& acc) {
         return name_by_idx(acc.id.value);
     }
@@ -185,6 +190,21 @@ struct genesis_create::genesis_create_impl final {
         return perm;
     }
 
+    void parse_and_store_permissions(account_name n, const std::vector<genesis_info::permission>& permissions, uint64_t& id, std::map<permission_name,perm_id_t>& parents, const public_key_type& initial_key) {
+        const uint64_t max_custom_parent_id = 100;            // this should be enough to cover build-in permissions
+        for (const auto& p: permissions) {
+            const auto& auth = p.make_authority(initial_key, n);
+            auto parent = p.get_parent();
+            bool root = parent == eosio::chain::name();
+            bool custom_parent = !root && parent.value < max_custom_parent_id;
+            EOS_ASSERT(root || custom_parent || parents.count(parent) > 0, genesis_exception,
+                    "Parent ${pa} not found for permission ${p} of account ${a}", ("a",n)("p",p.name)("pa",p.parent));
+            perm_id_t parent_id = root ? perm_id_t(0) : custom_parent ? perm_id_t(parent.value) : parents[parent];
+            const auto& perm = store_permission(n, p.name, parent_id, auth, id++);
+            parents[p.name] = perm.id;
+        }
+    }
+
     void store_contracts() {
         ilog("Creating contracts...");
         store_accounts_wo_perms(_contracts, [](auto& a){ return a.first; });
@@ -210,18 +230,7 @@ struct genesis_create::genesis_create_impl final {
         public_key_type system_key(_conf.initial_key);
         for (const auto& acc: _info.accounts) {
             std::map<permission_name,perm_id_t> parents;
-            for (const auto& p: acc.permissions) {
-                const auto n = acc.name;
-                const auto& auth = p.make_authority(system_key, n);
-                auto parent = p.get_parent();
-                bool root = parent == name();
-                bool custom_parent = !root && parent.value < max_custom_parent_id;
-                EOS_ASSERT(root || custom_parent || parents.count(parent) > 0, genesis_exception,
-                    "Parent ${pa} not found for permission ${p} of account ${a}", ("a",n)("p",p.name)("pa",p.parent));
-                perm_id_t parent_id = root ? perm_id_t(0) : custom_parent ? perm_id_t(parent.value) : parents[parent];
-                const auto& perm = store_permission(n, p.name, parent_id, auth, usage_id++);
-                parents[p.name] = perm.id;
-            }
+            parse_and_store_permissions(acc.name, acc.permissions, usage_id, parents, _conf.initial_key);
         }
         ilog("Done.");
     }
@@ -276,13 +285,25 @@ struct genesis_create::genesis_create_impl final {
         });
 
         // fill auths
+        uint64_t added_perms = 0;
+        for (auto& a: _info.transit_account_authorities) {
+            added_perms += a.permissions.size();
+            a.name = name_by_username(a.username);
+        }
+
         uint64_t usage_id = db.get_autoincrement<permission_usage_object>();
         const int permissions_per_account = 3;          // owner+active+posting
-        const auto perms_l = _visitor.auths.size() * permissions_per_account;
+        const auto perms_l = _visitor.auths.size() * permissions_per_account + added_perms;
         db.start_section(config::system_account_name, N(permusage), "permission_usage_object", perms_l);
         for (const auto a: _visitor.auths) {
             const auto n = name_by_acc(a.account);
-            for (int i = 0; i < permissions_per_account; i++) {
+            uint64_t added = 0;
+            auto itr = std::find_if(_info.transit_account_authorities.begin(), _info.transit_account_authorities.end(),
+                    [&](const auto& acc) {return acc.name == n;});
+            if (itr != _info.transit_account_authorities.end()) {
+                added = itr->permissions.size();
+            }
+            for (int i = 0; i < permissions_per_account + added; i++) {
                 db.emplace<permission_usage_object>(n, [&](auto& p) {
                     p.last_used = _conf.initial_timestamp;
                 });
@@ -325,6 +346,17 @@ struct genesis_create::genesis_create_impl final {
             const auto& owner  = store_permission(name, config::owner_name, 0, own, usage_id++);
             const auto& active = store_permission(name, config::active_name, owner.id, act, usage_id++);
             const auto& posting= store_permission(name, posting_auth_name, active.id, post, usage_id++);
+
+            auto itr = std::find_if(_info.transit_account_authorities.begin(), _info.transit_account_authorities.end(),
+                    [&](const auto& acc) {return acc.name == name;});
+            if (itr != _info.transit_account_authorities.end()) {
+                std::map<permission_name,perm_id_t> parents = {
+                        {config::owner_name, owner.id},
+                        {config::active_name, active.id}, 
+                        {posting_auth_name, posting.id}
+                };
+                parse_and_store_permissions(name, itr->permissions, usage_id, parents, _conf.initial_key);
+            }
         }
 
         // link posting permission with gls.publish and gls.social
