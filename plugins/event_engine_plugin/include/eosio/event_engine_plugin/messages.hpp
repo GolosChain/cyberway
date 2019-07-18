@@ -128,20 +128,42 @@ namespace eosio {
    struct BlockMessage : public BaseMessage {
        chain::block_id_type          id;
        chain::block_id_type          previous;
+       account_name                  producer;
+       uint32_t                      dpos_irreversible_blocknum;
+       uint32_t                      scheduled_shuffle_slot;
+       uint32_t                      scheduled_slot;
+       std::vector<account_name>     active_schedule;
+       std::vector<account_name>     next_schedule;
        uint32_t                      block_num;
-       chain::block_timestamp_type   block_time;
-       bool                          validated;
-       bool                          in_current_chain;
+       fc::time_point                block_time;
+       uint32_t                      block_slot;
+       fc::time_point                next_block_time;
 
        BlockMessage(MsgChannel msg_channel, MsgType msg_type, const chain::block_state_ptr& bstate)
        : BaseMessage(msg_channel, msg_type)
        , id(bstate->block->id())
        , previous(bstate->header.previous)
+       , producer(bstate->header.producer)
+       , dpos_irreversible_blocknum(bstate->dpos_irreversible_blocknum)
+       , scheduled_shuffle_slot(bstate->scheduled_shuffle_slot)
        , block_num(bstate->block->block_num())
-       , block_time(bstate->header.timestamp)
-       , validated(bstate->validated)
-       , in_current_chain(bstate->in_current_chain)
-       {}
+       , block_time(bstate->header.timestamp.to_time_point())
+       , block_slot(bstate->header.timestamp.slot)
+       , next_block_time(bstate->header.timestamp.to_time_point() + fc::microseconds(chain::config::block_interval_us))
+       {
+           auto fill_producer_names = [&](const auto& from, auto& to) {
+              to.reserve(from.producers.size());
+              for (const auto& producer : from.producers) {
+                 to.push_back(producer.producer_name);
+              }
+           };
+           fill_producer_names(bstate->active_schedule, active_schedule);
+           auto next_sched = bstate->generate_next(next_block_time);
+           next_sched.update_active_schedule();
+           fill_producer_names(next_sched.active_schedule, next_schedule);
+
+           scheduled_slot = (block_slot - (scheduled_shuffle_slot + 1)) % bstate->active_schedule.producers.size();
+       }
    };
 
    struct AcceptedBlockMessage : public BlockMessage {
@@ -181,7 +203,8 @@ FC_REFLECT_ENUM(eosio::MsgChannel, (Blocks)(Genesis))
 FC_REFLECT_ENUM(eosio::BaseMessage::MsgType, (Unknown)(GenesisData)(AcceptBlock)(CommitBlock)(AcceptTrx)(ApplyTrx))
 FC_REFLECT(eosio::BaseMessage, (msg_channel)(msg_type))
 FC_REFLECT_DERIVED(eosio::GenesisDataMessage, (eosio::BaseMessage), (id)(code)(name)(data))
-FC_REFLECT_DERIVED(eosio::BlockMessage, (eosio::BaseMessage), (id)(previous)(block_num)(block_time)(validated)(in_current_chain))
+FC_REFLECT_DERIVED(eosio::BlockMessage, (eosio::BaseMessage), (id)(previous)(producer)(dpos_irreversible_blocknum)
+   (scheduled_shuffle_slot)(scheduled_slot)(active_schedule)(next_schedule)(block_num)(block_time)(block_slot)(next_block_time))
 FC_REFLECT_DERIVED(eosio::AcceptedBlockMessage, (eosio::BlockMessage), (trxs)(events))
 FC_REFLECT_DERIVED(eosio::AcceptTrxMessage, (eosio::BaseMessage)(eosio::TrxMetadata), )
 FC_REFLECT_DERIVED(eosio::ApplyTrxMessage, (eosio::BaseMessage), (id)(block_num)(block_time)(prod_block_id)(actions))
