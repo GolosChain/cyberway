@@ -37,7 +37,7 @@ enum class stored_contract_tables: int {
     votes,
 
     stake_agents,   stake_cands,
-    stake_grants,
+    stake_grants,   stake_provisions,
     stake_stats,    stake_params,
     memo_key,       start_transaction,
 
