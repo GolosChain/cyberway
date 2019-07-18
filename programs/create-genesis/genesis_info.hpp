@@ -134,6 +134,13 @@ struct genesis_info {
     };
     std::vector<transit_account_authority> transit_account_authorities;
 
+    struct delegateuse_item {
+        std::string from;
+        std::string to;
+        std::string quantity;
+    };
+    std::vector<delegateuse_item> delegateuse;
+
     struct table {
         struct row {
             string scope;   // can be name/symbol/symbol_code
@@ -244,6 +251,7 @@ FC_REFLECT(cyberway::genesis::genesis_info::permission, (name)(threshold)(parent
 FC_REFLECT(cyberway::genesis::genesis_info::account, (name)(update)(privileged)(permissions)(abi)(code)(sys_balance)(sys_staked)(prod_key))
 FC_REFLECT(cyberway::genesis::genesis_info::auth_link, (permission)(links))
 FC_REFLECT(cyberway::genesis::genesis_info::transit_account_authority, (username)(permissions))
+FC_REFLECT(cyberway::genesis::genesis_info::delegateuse_item, (from)(to)(quantity))
 FC_REFLECT(cyberway::genesis::genesis_info::table::row, (scope)(payer)(pk)(data))
 FC_REFLECT(cyberway::genesis::genesis_info::table, (code)(table)(abi_type)(rows))
 FC_REFLECT(cyberway::genesis::genesis_info::golos_config::golos_names,
@@ -259,4 +267,4 @@ FC_REFLECT(cyberway::genesis::genesis_info::funds_share, (name)(numerator)(denom
 FC_REFLECT(cyberway::genesis::genesis_info::parameters, (stake)(posting_rules)(require_hardfork)(funds))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters::ee_history_days, (transfers)(withdraws)(rewards))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters, (history_days))
-FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(genesis_json)(accounts)(auth_links)(transit_account_authorities)(tables)(golos)(params)(ee_params))
+FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(genesis_json)(accounts)(auth_links)(transit_account_authorities)(delegateuse)(tables)(golos)(params)(ee_params))

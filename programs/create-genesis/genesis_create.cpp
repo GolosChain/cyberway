@@ -93,9 +93,16 @@ struct genesis_create::genesis_create_impl final {
     }
 #endif
     name name_by_username(const std::string& username) {
-        auto itr = std::find(_accs_map.begin(), _accs_map.end(), username);
-        EOS_ASSERT(itr != _accs_map.end(), genesis_exception, "User ${username} doesn't exist", ("username",username));
-        return name_by_idx(itr - _accs_map.begin());
+        if (username[0] == '~') {
+            auto itr = std::find(_accs_map.begin(), _accs_map.end(), username.substr(1,std::string::npos));
+            EOS_ASSERT(itr != _accs_map.end(), genesis_exception, "User ${username} doesn't exist", ("username",username));
+            return name_by_idx(itr - _accs_map.begin());
+        } else {
+            eosio::chain::name name{username};
+            auto itr = std::find_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& acc){return acc.name == name;});
+            EOS_ASSERT(itr != _info.accounts.end(), genesis_exception, "Account ${username} doesn't exist", ("username",username));
+            return name;
+        }
     }
     name name_by_acc(const golos::account_name_type& acc) {
         return name_by_idx(acc.id.value);
@@ -287,6 +294,7 @@ struct genesis_create::genesis_create_impl final {
         // fill auths
         uint64_t added_perms = 0;
         for (auto& a: _info.transit_account_authorities) {
+            EOS_ASSERT(a.username[0] == '~', genesis_exception, "Only transit users allowed");
             added_perms += a.permissions.size();
             a.name = name_by_username(a.username);
         }
@@ -579,9 +587,73 @@ struct genesis_create::genesis_create_impl final {
             });
         }
 
+        struct delegate {
+            bool used = false;
+            uint64_t provided = 0;
+            uint64_t received = 0;
+        };
+        std::map<name,delegate> delegatemap;
+        uint64_t delegateid = 0;
+        db.start_section(config::stake_account_name, N(provision), "provision_struct", _info.delegateuse.size());
+        for (const auto& item: _info.delegateuse) {
+            EOS_ASSERT(item.from != item.to, genesis_exception, "From and to can't be equal");
+            EOS_ASSERT(1 == std::count_if(_info.delegateuse.begin(), _info.delegateuse.end(), [&](const auto& dlg) {return dlg.from == item.from && dlg.to == item.to;}),
+                    genesis_exception, "Duplicate delegateuse item with ${from}:${to}", ("from", item.from)("to", item.to));
+            name from = name_by_username(item.from);
+            name to = name_by_username(item.to);
+            asset quantity;
+            if (item.quantity[item.quantity.length()-1] == '%') {
+                int64_t percent = boost::lexical_cast<float>(item.quantity.substr(0, item.quantity.length()-1))*100;
+                if (item.from[0] == '~') {
+                    bool found = false;
+                    for (const auto& abl: agents_by_level) {
+                        for (auto& ag: abl) {
+                            auto& acc = ag.second;
+                            if (acc.name != from) continue;
+                            auto total_funds = acc.balance + acc.proxied;
+                            if (total_funds != 0) {
+                                auto own_funds = int_arithmetic::safe_prop(total_funds, acc.own_share, acc.shares_sum);
+                                quantity += asset(int_arithmetic::safe_prop(own_funds, percent, 10000l));
+                            }
+                            found = true;
+                            break;
+                        }
+                        if (found) break;
+                    }
+                } else {
+                    auto acc = std::find_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& a){return a.name == from;});
+                    EOS_ASSERT(acc != _info.accounts.end(), genesis_exception, "Can't find account ${name}", ("name", from));
+                    EOS_ASSERT(acc->sys_staked, genesis_exception, "Account ${name} doesn't has staked funds", ("name", from));
+                    quantity += asset(int_arithmetic::safe_prop(acc->sys_staked->get_amount(), percent, 10000l));
+                }
+            } else {
+                quantity += asset::from_string(item.quantity);
+            }
+            EOS_ASSERT(quantity.get_amount() > 0, genesis_exception, "Delegateuse ${from}:${to} provide empty funds (${quantity})",
+                    ("from", item.from)("to", item.to)("quantity", item.quantity));
+            delegatemap[from].provided += quantity.get_amount();
+            delegatemap[to  ].received += quantity.get_amount();
+            db.insert(delegateid, config::stake_account_name, mvo()
+                ("id", delegateid)
+                ("token_code", sys_sym.to_symbol_code())
+                ("grantor_name", from)
+                ("recipient_name", to)
+                ("amount", (int64_t)quantity.get_amount()));
+            delegateid++;
+        }
+
+        uint64_t n_delegate_agents = delegatemap.size() - 
+                std::count_if(_visitor.vests.begin(), _visitor.vests.end(), [&](const auto& v){return delegatemap.count(name_by_idx(v.first));}) -
+                std::count_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& a){return a.sys_staked && delegatemap.count(a.name);});
+
+        auto get_delegated = [&](name n) {
+            auto itr = delegatemap.find(n);
+            return itr != delegatemap.end() ? (itr->second.used=true,itr->second) : delegate();
+        };
+
         int64_t total_votes = 0;
         auto n_acc_agents = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& acc){return acc.sys_staked;});
-        db.start_section(config::system_account_name, N(stake.agent), "stake_agent_object", _visitor.vests.size() + n_acc_agents);
+        db.start_section(config::system_account_name, N(stake.agent), "stake_agent_object", _visitor.vests.size() + n_acc_agents + n_delegate_agents);
         for (const auto& abl: agents_by_level) {
             for (auto& ag: abl) {
                 auto acc = ag.first;
@@ -589,7 +661,8 @@ struct genesis_create::genesis_create_impl final {
                 if (!x.level) {
                     total_votes += x.balance;
                 }
-                db.emplace<stake_agent_object>(x.name, [&](auto& a) {
+                auto delegated = get_delegated(x.name);
+                auto agent = db.emplace<stake_agent_object>(x.name, [&](auto& a) {
                     a.token_code = sys_sym.to_symbol_code();
                     a.account = x.name;
                     a.proxy_level = x.level;
@@ -600,15 +673,19 @@ struct genesis_create::genesis_create_impl final {
                     a.shares_sum = x.shares_sum;
                     a.fee = config::percent_100;
                     a.min_own_staked = 0;
-                    a.provided = 0;
-                    a.received = 0;
+                    a.provided = delegated.provided;
+                    a.received = delegated.received;
                 });
+                EOS_ASSERT(agent.get_own_funds() >= agent.provided, genesis_exception,
+                        "Agent ${account} provide more funds (${provided}) than has (${funds})",
+                        ("account", agent.account)("provided", agent.provided)("funds", agent.get_own_funds()));
             }
         }
         for (const auto& acc: _info.accounts) {
             if (acc.sys_staked) {
                 total_votes += acc.sys_staked->get_amount();
-                db.emplace<stake_agent_object>(acc.name, [&](auto& a) {
+                auto delegated = get_delegated(acc.name);
+                auto agent = db.emplace<stake_agent_object>(acc.name, [&](auto& a) {
                     a.token_code = sys_sym.to_symbol_code();
                     a.account = acc.name;
                     a.proxy_level = acc.prod_key ? 0 : 1;
@@ -619,9 +696,33 @@ struct genesis_create::genesis_create_impl final {
                     a.shares_sum = acc.sys_staked->get_amount();
                     a.fee = config::percent_100;
                     a.min_own_staked = 0;
-                    a.provided = 0;
-                    a.received = 0;
+                    a.provided = delegated.provided;
+                    a.received = delegated.received;
                 });
+                EOS_ASSERT(agent.get_own_funds() >= agent.provided, genesis_exception,
+                        "Agent ${account} provide more funds (${provided}) than has (${funds})",
+                        ("account", agent.account)("provided", agent.provided)("funds", agent.get_own_funds()));
+            }
+        }
+        for (const auto& v: delegatemap) {
+            if (v.second.used == false) {
+                auto agent = db.emplace<stake_agent_object>(v.first, [&](auto& a) {
+                    a.token_code = sys_sym.to_symbol_code();
+                    a.account = v.first;
+                    a.proxy_level = 1;
+                    a.last_proxied_update = _conf.initial_timestamp;
+                    a.balance = 0;
+                    a.proxied = 0;
+                    a.own_share = 0;
+                    a.shares_sum = 0;
+                    a.fee = config::percent_100;
+                    a.min_own_staked = 0;
+                    a.provided = v.second.provided;
+                    a.received = v.second.received;
+                });
+                EOS_ASSERT(agent.get_own_funds() >= agent.provided, genesis_exception,
+                        "Agent ${account} provide more funds (${provided}) than has (${funds})",
+                        ("account", agent.account)("provided", agent.provided)("funds", agent.get_own_funds()));
             }
         }
 
