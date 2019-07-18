@@ -91,6 +91,7 @@ void apply_cyber_newaccount(apply_context& context) {
    auto name_str = name(create.name).to_string();
 
    EOS_ASSERT( !create.name.empty(), action_validate_exception, "account name cannot be empty" );
+   EOS_ASSERT( name_str.front() != '.', action_validate_exception, "account name cannot start from '.'" );
    EOS_ASSERT( name_str.size() <= 12, action_validate_exception, "account names can only be 12 chars long" );
 
    // Check if the creator is privileged
@@ -235,8 +236,6 @@ void apply_cyber_setabi(apply_context& context) {
         act.abi = cyberway::chaindb::merge_abi_def(eosio::chain::eosio_contract_abi(), act.abi);
     } else if (act.account == eosio::chain::config::domain_account_name) {
         act.abi = cyberway::chaindb::merge_abi_def(eosio::chain::domain_contract_abi(), act.abi);
-    } else if (act.account == eosio::chain::config::history_account_name) {
-        act.abi = cyberway::chaindb::merge_abi_def(eosio::chain::history_contract_abi(), act.abi);
     }
 
    int64_t abi_size = act.abi.size();

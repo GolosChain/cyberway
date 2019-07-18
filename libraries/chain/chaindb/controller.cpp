@@ -146,6 +146,7 @@ namespace cyberway { namespace chaindb {
         std::unique_ptr<driver_interface> driver_ptr_;
         driver_interface& driver_;
         system_abi_info system_abi_info_;
+        account_abi_info history_abi_info_;
         cache_map cache_;
         undo_stack undo_;
 
@@ -153,12 +154,14 @@ namespace cyberway { namespace chaindb {
         : controller_(controller),
           driver_ptr_(_detail::create_driver(t, journal_, std::move(address), std::move(sys_name))),
           driver_(*driver_ptr_.get()),
-          system_abi_info_(driver_) {
+          system_abi_info_(driver_),
+          history_abi_info_(config::history_account_name, eosio::chain::history_contract_abi()) {
         }
 
         ~chaindb_controller_impl() = default;
 
         void restore_db() {
+            history_abi_info_.abi().verify_tables_structure(driver_);
             system_abi_info_.init_abi();
             undo_.restore();
         }
@@ -391,6 +394,10 @@ namespace cyberway { namespace chaindb {
         account_abi_info get_account_abi_info(const account_name_t code) {
             if (is_system_code(code)) {
                 return system_abi_info_.info();
+            }
+
+            if (config::history_account_name == code) {
+                return history_abi_info_;
             }
 
             auto cache_ptr = cache_.find(system_abi_info_.to_service(code));
