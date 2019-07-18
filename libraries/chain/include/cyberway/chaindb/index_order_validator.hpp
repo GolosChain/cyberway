@@ -12,17 +12,13 @@ namespace eosio { namespace chain {
 
 namespace cyberway { namespace chaindb {
 
-    class index_info;
-    class index_order_validator
-    {
+    struct index_info;
+    class index_order_validator final {
     public:
-
         index_order_validator(const index_info& index);
-
         void verify(const fc::variant& key) const;
 
     private:
-
         const index_info& index_;
     };
 
