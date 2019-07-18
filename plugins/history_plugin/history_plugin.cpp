@@ -80,10 +80,10 @@ CHAINDB_TAG(eosio::by_account_action_seq, accactionseq)
 CHAINDB_TAG(eosio::by_action_sequence_num, byactseqnum)
 
 CHAINDB_SET_TABLE_TYPE(eosio::account_history_object, eosio::account_history_table)
-CHAINDB_TABLE_TAG(eosio::account_history_object, acchistory, .history)
+CHAINDB_TABLE_TAG(eosio::account_history_object, .history, acchistory)
 
 CHAINDB_SET_TABLE_TYPE(eosio::action_history_object, eosio::action_history_table)
-CHAINDB_TABLE_TAG(eosio::action_history_object, acthistory, .history)
+CHAINDB_TABLE_TAG(eosio::action_history_object, .history, acthistory)
 
 FC_REFLECT(eosio::account_history_object, (id)(account)(action_sequence_num)(account_sequence_num))
 FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))

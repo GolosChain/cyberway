@@ -803,14 +803,14 @@ abi_def history_contract_abi(abi_def abi) {
        name("pubkeyhist"), "pubkeyhist", {
           { name("primary"), true, {{"id", "asc"}} },
           { name("bypubkey"), false, {
-                {"public_key", "asc"}
-//                {"id", "asc"}
+                {"public_key", "asc"},
+                {"id", "asc"}
             }
           },
           { name("byaccperm"), false, {
                 {"name", "asc"},
-                {"permission", "asc"}
-//                {"id", "asc"}
+                {"permission", "asc"},
+                {"id", "asc"}
             }
           }
        }
@@ -831,7 +831,7 @@ abi_def history_contract_abi(abi_def abi) {
           },
           { name("bycontrol"), false, {
                 {"controlling_account", "asc"},
-//                {"id", "asc"}
+                {"id", "asc"}
             }
           },
           { name("controlauth"), false, {
