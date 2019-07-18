@@ -618,7 +618,6 @@ namespace cyberway { namespace chaindb {
 
         void create_index(const index_info& info) const {
             document idx_doc;
-            bool was_pk = false;
             auto& index = *info.index;
 
             if (!is_noscope_table(info)) {
@@ -631,10 +630,9 @@ namespace cyberway { namespace chaindb {
                 } else {
                     idx_doc.append(kvp(field, -1));
                 }
-                was_pk |= (order.field == info.pk_order->field);
             }
 
-            if (!was_pk && !index.unique) {
+            if (!index.unique) {
                 // when index is not unique, we add unique pk for deterministic order of records
                 idx_doc.append(kvp(info.pk_order->field, 1));
             }
