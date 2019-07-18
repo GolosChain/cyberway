@@ -1171,7 +1171,7 @@ struct genesis_create::genesis_create_impl final {
 
     void schedule_start() {
         ilog("Scheduling Golos start...");
-        db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", 2);
+        db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", 1);
         auto store_tx = [&](name code, name act_name, uint64_t sender_id_low, const bytes& data = {}) {
             auto providebw = cyberway::chain::providebw(_info.golos.names.issuer, code);
             transaction tx{};
@@ -1191,7 +1191,6 @@ struct genesis_create::genesis_create_impl final {
             });
         };
         store_tx(_info.golos.names.emission, N(start), 1);
-        store_tx(_info.golos.names.vesting, N(timeout), 2, fc::raw::pack(symbol(VESTS)));
         ilog("Done.");
     }
 
