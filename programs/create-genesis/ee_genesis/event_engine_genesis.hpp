@@ -16,7 +16,7 @@ public:
     void start(const bfs::path& ee_directory, const fc::sha256& hash);
     void finalize();
 
-    enum ee_ser_type {messages, transfers, withdraws, delegations, rewards, pinblocks, accounts, witnesses, funds, balance_conversions};
+    enum ee_ser_type {contracts, messages, transfers, withdraws, delegations, rewards, pinblocks, accounts, witnesses, funds, balance_conversions};
     ee_genesis_serializer& get_serializer(ee_ser_type type) {
         return serializers.at(type);
     }
@@ -24,6 +24,13 @@ public:
 private:
     std::map<ee_ser_type, ee_genesis_serializer> serializers;
 
+};
+
+struct setabi_info {
+    OBJECT_CTOR(setabi_info);
+
+    name account;
+    bytes abi;
 };
 
 struct vote_info {
@@ -160,6 +167,7 @@ struct block_info {
 
 } } } // cyberway::genesis::ee
 
+FC_REFLECT(cyberway::genesis::ee::setabi_info, (account)(abi))
 FC_REFLECT(cyberway::genesis::ee::vote_info, (voter)(weight)(time)(rshares))
 FC_REFLECT(cyberway::genesis::ee::reblog_info, (account)(title)(body)(time))
 FC_REFLECT(cyberway::genesis::ee::comment_info, (parent_author)(parent_permlink)(author)(permlink)(created)(last_update)
