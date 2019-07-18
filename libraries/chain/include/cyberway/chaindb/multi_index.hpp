@@ -227,7 +227,6 @@ struct key_converter<boost::tuple<Indices...>> {
 }; // struct key_converter
 
 template<typename C> struct code_extractor;
-
 template<typename C> struct code_extractor<tag<C>> {
     constexpr static uint64_t get_code() {
         return tag<C>::get_code();
@@ -239,6 +238,19 @@ template<typename C> struct code_extractor: public code_extractor<tag<C>> {
         return tag<C>::get_code();
     }
 }; // struct code_extractor
+
+template<typename C> struct code_name_extractor;
+template<typename C> struct code_name_extractor<tag<C>> {
+    constexpr static uint64_t get_account() {
+        return tag<C>::get_account();
+    }
+}; // struct code_extractor
+
+template<typename C> struct code_name_extractor: public code_name_extractor<tag<C>> {
+    constexpr static uint64_t get_account() {
+        return tag<C>::get_account();
+    }
+}; // struct code_name_extractor
 
 template <typename T>
 struct multi_index_item_data final: public cache_data {
@@ -342,7 +354,7 @@ private:
 
         constexpr static table_name_t   table_name() { return code_extractor<TableName>::get_code(); }
         constexpr static index_name_t   index_name() { return code_extractor<IndexName>::get_code(); }
-        constexpr static account_name_t code_name()  { return 0; }
+        constexpr static account_name_t code_name()  { return code_name_extractor<TableName>::get_account(); }
         constexpr static scope_name_t   scope_name() { return 0; }
 
         const T& operator*() const {
@@ -539,7 +551,7 @@ public:
 
         constexpr static table_name_t   table_name() { return code_extractor<TableName>::get_code(); }
         constexpr static index_name_t   index_name() { return code_extractor<IndexName>::get_code(); }
-        constexpr static account_name_t code_name()  { return 0; }
+        constexpr static account_name_t code_name()  { return code_name_extractor<TableName>::get_account(); }
         constexpr static scope_name_t   scope_name() { return 0; }
 
         index(const chaindb_controller& ctrl)
@@ -588,6 +600,11 @@ public:
         template<typename Value>
         const_iterator lower_bound(const Value& value, const cursor_kind kind = cursor_kind::ManyRecords) const {
             return lower_bound(key_converter<key_type>::convert(value), kind);
+        }
+
+        template<typename Value>
+        const_iterator upper_bound(const Value& value, const cursor_kind kind = cursor_kind::ManyRecords) const {
+            return upper_bound(key_converter<key_type>::convert(value));
         }
 
         const_iterator upper_bound(const key_type& key) const {
@@ -720,7 +737,7 @@ public:
     }
 
     constexpr static table_name_t   table_name() { return code_extractor<TableName>::get_code(); }
-    constexpr static account_name_t code_name()  { return 0; }
+    constexpr static account_name_t code_name()  { return code_name_extractor<TableName>::get_account(); }
     constexpr static scope_name_t   scope_name() { return 0; }
 
     static const table_request& get_table_request() {

@@ -13,14 +13,31 @@
 #include <cyberway/chaindb/multi_index.hpp>
 #include <cyberway/chaindb/index_object.hpp>
 
-#define CHAINDB_TAG(_TYPE, _NAME)                   \
-    namespace cyberway { namespace chaindb {        \
-        template<> struct tag<_TYPE> {              \
-            using type = _TYPE;                     \
-            constexpr static uint64_t get_code() {  \
-                return N(_NAME);                    \
-            }                                       \
-        };                                          \
+#define CHAINDB_TABLE_TAG(_TYPE, _NAME, _ACCOUNT)       \
+    namespace cyberway { namespace chaindb {            \
+        template<> struct tag<_TYPE> {                  \
+            using type = _TYPE;                         \
+            constexpr static uint64_t get_code() {      \
+                return N(_NAME);                        \
+            };                                          \
+            constexpr static uint64_t get_account() {   \
+                return N(_ACCOUNT);                     \
+            };                                          \
+        };                                              \
+    } }
+
+
+#define CHAINDB_TAG(_TYPE, _NAME)                       \
+    namespace cyberway { namespace chaindb {            \
+        template<> struct tag<_TYPE> {                  \
+            using type = _TYPE;                         \
+            constexpr static uint64_t get_code() {      \
+                return N(_NAME);                        \
+            };                                          \
+            constexpr static uint64_t get_account() {   \
+                return N();                             \
+            };                                          \
+        };                                              \
     } }
 
 #define CHAINDB_SET_TABLE_TYPE(_OBJECT, _TABLE)     \
@@ -116,7 +133,7 @@ namespace cyberway { namespace chaindb {
     }; // struct object_id_extractor
 
     struct primary_index {
-        using tag = tag<by_id>;
+        using tag = cyberway::chaindb::tag<by_id>;
         using extractor = object_id_extractor;
     }; // struct primary_index
 

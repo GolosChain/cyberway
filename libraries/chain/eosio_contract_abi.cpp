@@ -737,4 +737,114 @@ abi_def domain_contract_abi(abi_def abi) {
     return abi;
 }
 
+abi_def history_contract_abi(abi_def abi) {
+    if( abi.version.size() == 0 ) {
+       abi.version = "cyberway::abi/1.0";
+    }
+
+    fc::move_append(abi.types, common_type_defs());
+
+    abi.structs.emplace_back(struct_def {"acchistory", "", {
+        {"id", "uint64"},
+        {"account", "account_name"},
+        {"action_sequence_num", "uint64"},
+        {"account_sequence_num", "int32"}}
+    });
+
+    abi.tables.emplace_back( eosio::chain::table_def {
+       name("acchistory"), "acchistory", {
+          { name("primary"), true, {
+                {"id", "asc"}
+            }
+          }, {
+            name("accactionseq"), false, {
+               {"account", "asc"},
+               {"account_sequence_num", "asc"},
+            }
+          },
+       }
+    });
+
+    abi.structs.emplace_back(struct_def {"acthistory", "", {
+        {"id", "uint64"},
+        {"action_sequence_num", "uint64"},
+        {"packed_action_trace", "string"},
+        {"block_num", "int32"},
+        {"block_time", "block_timestamp_type"},
+        {"trx_id", "transaction_id_type"}}
+    });
+
+    abi.tables.emplace_back( eosio::chain::table_def {
+       name("acthistory"), "acthistory", {
+          { name("primary"), true, {
+                {"id", "asc"}
+            }
+          }, {
+            name("byactseqnum"), false, {
+                {"action_sequence_num", "asc"}
+            }
+          }, {
+            name("trxid"), false, {
+                {"trx_id", "asc"},
+                {"action_sequence_num", "asc"}
+            }
+          }
+       }
+    });
+
+    abi.structs.emplace_back(struct_def {"pubkeyhist", "", {
+        {"id", "uint64"},
+        {"public_key", "public_key"},
+        {"name",       "account_name"},
+        {"permission", "permission_name"}}
+    });
+
+    abi.tables.emplace_back( eosio::chain::table_def {
+       name("pubkeyhist"), "pubkeyhist", {
+          { name("primary"), true, {{"id", "asc"}} },
+          { name("bypubkey"), false, {
+                {"public_key", "asc"}
+//                {"id", "asc"}
+            }
+          },
+          { name("byaccperm"), false, {
+                {"name", "asc"},
+                {"permission", "asc"}
+//                {"id", "asc"}
+            }
+          }
+       }
+    });
+
+    abi.structs.emplace_back(struct_def {"ctrlhistory", "", {
+        {"id", "uint64"},
+        {"controlled_account",    "account_name"},
+        {"controlled_permission", "permission_name"},
+        {"controlling_account",   "account_name"}}
+    });
+
+    abi.tables.emplace_back( eosio::chain::table_def {
+       name("ctrlhistory"), "ctrlhistory", {
+          { name("primary"), true, {
+                {"id", "asc"}
+            }
+          },
+          { name("bycontrol"), false, {
+                {"controlling_account", "asc"},
+//                {"id", "asc"}
+            }
+          },
+          { name("controlauth"), false, {
+                {"controlled_account", "asc"},
+                {"controlled_permission", "asc"},
+                {"controlling_account", "asc"}
+            }
+          }
+       }
+    });
+
+
+    return abi;
+}
+
 } } /// eosio::chain
