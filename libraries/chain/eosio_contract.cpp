@@ -139,8 +139,8 @@ void apply_cyber_newaccount(apply_context& context) {
 
 // system account and accounts with system prefix (cyber.*) are protected
 bool is_protected_account(name acc) {
-    // TODO: prefix can be checked without string using binary AND
-    return acc == config::system_account_name || name{acc}.to_string().find(system_prefix()) == 0;
+    auto mask = name_to_mask( config::system_account_name );
+    return (mask & acc.value) == config::system_account_name;
 }
 
 fc::sha256 bytes_hash(bytes data) {

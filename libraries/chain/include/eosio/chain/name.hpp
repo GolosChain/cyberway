@@ -37,6 +37,24 @@ namespace eosio { namespace chain {
       return name;
    }
 
+   static constexpr  uint64_t name_to_mask( uint64_t value ) {
+      uint64_t mask = (~0);
+
+      if( !(value & 0x0f) ) {
+         value >>= 4;
+         for( uint32_t i = 1; i <= 12 && !(value & 0x1f); ++i ){
+            if( i == 1 ){
+               mask <<= 4;
+            } else {
+               mask <<= 5;
+            }
+            value >>= 5;
+         }
+      }
+
+      return mask;
+   }
+
 #define N(X) eosio::chain::string_to_name(#X)
 
    struct name {
