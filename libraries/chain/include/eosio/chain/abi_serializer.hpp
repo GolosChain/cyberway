@@ -37,7 +37,7 @@ struct abi_serializer {
        PublicMode,
    }; // enum mode
 
-   abi_serializer( mode m = PublicMode ){ configure_built_in_types(m); }
+   abi_serializer( ){ configure_built_in_types(); }
    abi_serializer( const abi_def& abi, const fc::microseconds& max_serialization_time );
    bool is_check_field_name() const { return check_field_name_; }
    void set_check_field_name(bool);
@@ -64,6 +64,7 @@ struct abi_serializer {
 
    fc::variant binary_to_variant( const type_name& type, const bytes& binary, const fc::microseconds& max_serialization_time, bool short_path = false )const;
    fc::variant binary_to_variant( const type_name& type, fc::datastream<const char*>& binary, const fc::microseconds& max_serialization_time, bool short_path = false )const;
+   fc::variant binary_to_variant( const type_name& type, fc::datastream<const char*>& binary, const fc::microseconds& max_serialization_time, mode)const;
 
    bytes       variant_to_binary( const type_name& type, const fc::variant& var, const fc::microseconds& max_serialization_time, bool short_path = false )const;
    void        variant_to_binary( const type_name& type, const fc::variant& var, fc::datastream<char*>& ds, const fc::microseconds& max_serialization_time, bool short_path = false )const;
@@ -99,7 +100,7 @@ struct abi_serializer {
    static const size_t max_recursion_depth = 32; // arbitrary depth to prevent infinite recursion
 
 private:
-   bool check_field_name_ = true;
+   bool check_field_name_ = false;
 
    map<type_name, type_name>     typedefs;
    map<type_name, struct_def>    structs;
@@ -110,7 +111,8 @@ private:
    map<type_name, variant_def>   variants;
 
    map<type_name, pair<unpack_function, pack_function>> built_in_types;
-   void configure_built_in_types(mode);
+   map<type_name, pair<unpack_function, pack_function>> db_built_in_types;
+   void configure_built_in_types();
 
    fc::variant _binary_to_variant( const type_name& type, const bytes& binary, impl::binary_to_variant_context& ctx )const;
    fc::variant _binary_to_variant( const type_name& type, fc::datastream<const char*>& binary, impl::binary_to_variant_context& ctx )const;
@@ -137,8 +139,16 @@ namespace impl {
 
    struct abi_traverse_context {
       abi_traverse_context( fc::microseconds max_serialization_time )
-      : max_serialization_time( max_serialization_time ), deadline( fc::time_point::now() + max_serialization_time ), recursion_depth(0)
-      {}
+      : max_serialization_time( max_serialization_time ),
+        deadline( fc::time_point::now() ), // init to now, updated below
+        recursion_depth(0)
+      {
+         if( max_serialization_time > fc::microseconds::maximum() - deadline.time_since_epoch() ) {
+            deadline = fc::time_point::maximum();
+         } else {
+            deadline += max_serialization_time;
+         }
+      }
 
       abi_traverse_context( fc::microseconds max_serialization_time, fc::time_point deadline )
       : max_serialization_time( max_serialization_time ), deadline( deadline ), recursion_depth(0)
@@ -230,6 +240,7 @@ namespace impl {
 
    struct binary_to_variant_context : public abi_traverse_context_with_path {
       using abi_traverse_context_with_path::abi_traverse_context_with_path;
+      abi_serializer::mode mode = abi_serializer::PublicMode;
    };
 
    struct variant_to_binary_context : public abi_traverse_context_with_path {
@@ -726,7 +737,7 @@ namespace impl {
     * @tparam Reslover - callable with the signature (const name& code_account) -> optional<abi_def>
     */
    template<typename T, typename Resolver>
-   class abi_from_variant_visitor : reflector_init_visitor<T>
+   class abi_from_variant_visitor : public reflector_init_visitor<T>
    {
       public:
          abi_from_variant_visitor( const variant_object& _vo, T& v, Resolver _resolver, abi_traverse_context& _ctx )
@@ -781,7 +792,7 @@ void abi_serializer::to_variant( const T& o, variant& vo, Resolver resolver, con
    impl::abi_traverse_context ctx(max_serialization_time);
    impl::abi_to_variant::add(mvo, "_", o, resolver, ctx);
    vo = std::move(mvo["_"]);
-} FC_RETHROW_EXCEPTIONS(error, "Failed to serialize type", ("object",o))
+} FC_RETHROW_EXCEPTIONS(error, "Failed to serialize: ${type}", ("type", boost::core::demangle( typeid(o).name() ) ))
 
 template<typename T, typename Resolver>
 void abi_serializer::from_variant( const variant& v, T& o, Resolver resolver, const fc::microseconds& max_serialization_time ) try {

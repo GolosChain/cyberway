@@ -4,6 +4,7 @@
 namespace eosio { namespace chain { namespace stake {
 using stake_index_set = index_set<
    stake_agent_table,
+   stake_candidate_table,
    stake_grant_table,
    stake_param_table,
    stake_stat_table
@@ -28,5 +29,5 @@ const stake_agent_object* get_agent(symbol_code token_code, const AgentIndex& ag
 void update_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::chaindb::storage_payer_info&, int64_t now,
                     symbol_code token_code, const account_name& account, bool force);
 void recall_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::chaindb::storage_payer_info&, int64_t now,
-                    symbol_code token_code, account_name grantor_name, account_name agent_name, int16_t pct);
+                    symbol_code token_code, account_name grantor_name, account_name recipient_name, int16_t pct);
 } } }/// eosio::chain::stake

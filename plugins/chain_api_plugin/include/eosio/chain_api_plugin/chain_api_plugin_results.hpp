@@ -37,10 +37,11 @@ namespace eosio {
 
        account_resource_limit     net_limit;
        account_resource_limit     cpu_limit;
+       account_resource_limit     ram_limit;
+       account_resource_limit     storage_limit;
+
        int64_t                    ram_usage = 0;
-       int64_t                    ram_owned = 0;
-       int64_t                    storage_usage = 0;
-       int64_t                    storage_owned = 0;
+
        std::vector<permission>    permissions;
        fc::variant                total_resources;
        fc::variant                self_delegated_bandwidth;
@@ -139,6 +140,13 @@ namespace eosio {
         fc::variants transactions;
         std::string  more; ///< fill lower_bound with this to fetch next set of transactions
     };
+
+    struct get_proxy_status_result {
+        chain::account_name account;
+        chain::symbol symbol;
+        uint8_t proxylevel;
+        uint32_t proxies_count;
+    };
 }
 
 FC_REFLECT( eosio::get_table_rows_result, (rows)(more) )
@@ -152,7 +160,7 @@ FC_REFLECT( eosio::permission, (perm_name)(parent)(required_auth) )
 FC_REFLECT( eosio::account_resource_limit, (used)(available)(max) )
 FC_REFLECT( eosio::get_account_results,
             (account_name)(head_block_num)(head_block_time)(privileged)(last_code_update)(created)
-            (core_liquid_balance)(ram_quota)(net_weight)(cpu_weight)(net_limit)(cpu_limit)(ram_usage)(permissions)
+            (core_liquid_balance)(ram_quota)(net_weight)(cpu_weight)(net_limit)(cpu_limit)(ram_limit)(storage_limit)(ram_usage)(permissions)
             (total_resources)(self_delegated_bandwidth)(refund_request)(voter_info) )
 FC_REFLECT( eosio::get_code_results, (account_name)(code_hash)(wast)(wasm)(abi) )
 FC_REFLECT( eosio::get_code_hash_results, (account_name)(code_hash) )
@@ -163,3 +171,4 @@ FC_REFLECT( eosio::abi_json_to_bin_result, (binargs) )
 FC_REFLECT( eosio::abi_bin_to_json_result, (args) )
 FC_REFLECT( eosio::get_required_keys_result, (required_keys) )
 FC_REFLECT(eosio::resolve_names_item, (resolved_domain)(resolved_username))
+FC_REFLECT( eosio::get_proxy_status_result, (account)(symbol)(proxylevel)(proxies_count))

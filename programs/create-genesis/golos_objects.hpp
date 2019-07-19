@@ -109,11 +109,6 @@ struct account_bandwidth_object {
     share_type lifetime_bandwidth;
     time_point_sec last_bandwidth_update;
 };
-struct account_metadata_object {
-    id_type id;
-    account_name_type account;
-    shared_string json_metadata;
-};
 
 struct vesting_delegation_object {
     id_type id;
@@ -131,19 +126,6 @@ struct vesting_delegation_expiration_object {
     time_point_sec expiration;
 };
 
-struct owner_authority_history_object {
-    id_type id;
-    account_name_type account;
-    shared_authority previous_owner_authority;
-    time_point_sec last_valid_time;
-};
-
-struct account_recovery_request_object {
-    id_type id;
-    account_name_type account_to_recover;
-    shared_authority new_owner_authority;
-    time_point_sec expires;
-};
 struct change_recovery_account_request_object {
     id_type id;
     account_name_type account_to_recover;
@@ -197,20 +179,11 @@ struct witness_schedule_object {
 };
 
 
-//block_summary
-struct block_summary_object {
-    id_type id;
-    block_id_type block_id;
-};
-
-
 // comment
 // this part of comment object is absent in archived comments
 struct active_comment_data {
     time_point_sec created;
     time_point_sec last_payout;
-    uint16_t depth;
-    uint32_t children;
     uint128_t children_rshares2;
     share_type net_rshares;
     share_type abs_rshares;
@@ -239,7 +212,9 @@ struct comment_object {
     shared_permlink parent_permlink;
     account_name_type author;
     shared_permlink permlink;
-    comment_mode mode;
+    fc::unsigned_int depth;
+    fc::unsigned_int children;
+    uint8_t mode;                   // comment_mode
     active_comment_data active;
 };
 struct comment_vote_object {
@@ -273,14 +248,6 @@ struct convert_request_object {
     asset amount;
     time_point_sec conversion_date;
 };
-struct liquidity_reward_balance_object {
-    id_type id;
-    account_id_type owner;
-    int64_t steem_volume;
-    int64_t sbd_volume;
-    uint128_t weight;
-    time_point_sec last_update;
-};
 struct withdraw_vesting_route_object {
     id_type id;
     account_id_type from_account;
@@ -312,20 +279,27 @@ struct savings_withdraw_object {
     asset amount;
     time_point_sec complete;
 };
-struct decline_voting_rights_request_object {
-    id_type id;
-    account_id_type account;
-    time_point_sec effective_date;
-};
 
 
 // empty; unsupported, must not exist in serialized state
 struct transaction_object {};
+struct block_summary_object {};
 struct feed_history_object {};
+struct liquidity_reward_balance_object {};
 struct hardfork_property_object {};
+struct owner_authority_history_object {};
+struct account_recovery_request_object {};
+struct decline_voting_rights_request_object {};
 struct block_stats_object {};
+struct account_metadata_object {};
 struct proposal_object {};
 struct required_approval_object {};
+
+struct reputation_object {
+    id_type id;
+    account_name_type account;
+    share_type reputation;
+};
 
 } // golos
 
@@ -359,7 +333,10 @@ enum object_type {
     vesting_delegation_expiration_object_id,
     account_metadata_object_id,
     proposal_object_id,
-    required_approval_object_id
+    required_approval_object_id,
+    reputation_object_id,
+
+    follow_plugin_reputation_object_id = (8 << 8) + 2
 };
 
 // variant must be ordered the same way as enum (including not required objects):
@@ -392,7 +369,8 @@ using objects = fc::static_variant<
     golos::vesting_delegation_expiration_object,
     golos::account_metadata_object,
     golos::proposal_object,
-    golos::required_approval_object
+    golos::required_approval_object,
+    golos::reputation_object
 >;
 
 } // cyberway
@@ -425,12 +403,9 @@ FC_REFLECT(cyberway::golos::account_object,
 FC_REFLECT(cyberway::golos::account_authority_object, (id)(account)(owner)(active)(posting)(last_owner_update))
 FC_REFLECT(cyberway::golos::account_bandwidth_object,
     (id)(account)(type)(average_bandwidth)(lifetime_bandwidth)(last_bandwidth_update))
-FC_REFLECT(cyberway::golos::account_metadata_object, (id)(account)(json_metadata))
 FC_REFLECT(cyberway::golos::vesting_delegation_object,
     (id)(delegator)(delegatee)(vesting_shares)(interest_rate)(min_delegation_time))
 FC_REFLECT(cyberway::golos::vesting_delegation_expiration_object, (id)(delegator)(vesting_shares)(expiration))
-FC_REFLECT(cyberway::golos::owner_authority_history_object, (id)(account)(previous_owner_authority)(last_valid_time))
-FC_REFLECT(cyberway::golos::account_recovery_request_object, (id)(account_to_recover)(new_owner_authority)(expires))
 FC_REFLECT(cyberway::golos::change_recovery_account_request_object,
     (id)(account_to_recover)(recovery_account)(effective_on))
 
@@ -444,12 +419,10 @@ FC_REFLECT(cyberway::golos::witness_schedule_object,
     (median_props)(majority_version))
 FC_REFLECT(cyberway::golos::witness_vote_object, (id)(witness)(account))
 
-FC_REFLECT(cyberway::golos::block_summary_object, (id)(block_id))
-
 // comment must be unpacked manually
-// FC_REFLECT(cyberway::golos::comment_object, (id)(parent_author)(parent_permlink)(author)(permlink)(mode))
+// FC_REFLECT(cyberway::golos::comment_object, (id)(parent_author)(parent_permlink)(author)(permlink)(depth)(children)(mode))
 FC_REFLECT(cyberway::golos::active_comment_data,
-    (created)(last_payout)(depth)(children)
+    (created)(last_payout)
     (children_rshares2)(net_rshares)(abs_rshares)(vote_rshares)(children_abs_rshares)(cashout_time)(max_cashout_time)
     (reward_weight)(net_votes)(total_votes)(root_comment)
     (curation_reward_curve)(auction_window_reward_destination)(auction_window_size)(max_accepted_payout)
@@ -459,20 +432,25 @@ FC_REFLECT(cyberway::golos::comment_vote_object,
     (id)(voter)(comment)(orig_rshares)(rshares)(vote_percent)(auction_time)(last_update)(num_changes)
     (delegator_vote_interest_rates))
 
-
 FC_REFLECT(cyberway::golos::limit_order_object, (id)(created)(expiration)(seller)(orderid)(for_sale)(sell_price))
 FC_REFLECT(cyberway::golos::convert_request_object, (id)(owner)(requestid)(amount)(conversion_date))
-FC_REFLECT(cyberway::golos::liquidity_reward_balance_object, (id)(owner)(steem_volume)(sbd_volume)(weight)(last_update))
 FC_REFLECT(cyberway::golos::withdraw_vesting_route_object, (id)(from_account)(to_account)(percent)(auto_vest))
 FC_REFLECT(cyberway::golos::escrow_object,
     (id)(escrow_id)(from)(to)(agent)(ratification_deadline)(escrow_expiration)
     (sbd_balance)(steem_balance)(pending_fee)(to_approved)(agent_approved)(disputed))
 FC_REFLECT(cyberway::golos::savings_withdraw_object, (id)(from)(to)(memo)(request_id)(amount)(complete))
-FC_REFLECT(cyberway::golos::decline_voting_rights_request_object, (id)(account)(effective_date))
 
 FC_REFLECT(cyberway::golos::transaction_object,       BOOST_PP_SEQ_NIL)
+FC_REFLECT(cyberway::golos::block_summary_object,     BOOST_PP_SEQ_NIL)
 FC_REFLECT(cyberway::golos::feed_history_object,      BOOST_PP_SEQ_NIL)
 FC_REFLECT(cyberway::golos::hardfork_property_object, BOOST_PP_SEQ_NIL)
 FC_REFLECT(cyberway::golos::block_stats_object,       BOOST_PP_SEQ_NIL)
+FC_REFLECT(cyberway::golos::account_metadata_object,  BOOST_PP_SEQ_NIL)
 FC_REFLECT(cyberway::golos::proposal_object,          BOOST_PP_SEQ_NIL)
 FC_REFLECT(cyberway::golos::required_approval_object, BOOST_PP_SEQ_NIL)
+FC_REFLECT(cyberway::golos::liquidity_reward_balance_object,        BOOST_PP_SEQ_NIL)
+FC_REFLECT(cyberway::golos::owner_authority_history_object,         BOOST_PP_SEQ_NIL)
+FC_REFLECT(cyberway::golos::account_recovery_request_object,        BOOST_PP_SEQ_NIL)
+FC_REFLECT(cyberway::golos::decline_voting_rights_request_object,   BOOST_PP_SEQ_NIL)
+
+FC_REFLECT(cyberway::golos::reputation_object, (id)(account)(reputation))

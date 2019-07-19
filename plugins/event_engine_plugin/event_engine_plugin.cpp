@@ -9,11 +9,15 @@
 #include <eosio/event_engine_plugin/ee_genesis_container.hpp>
 #include <eosio/event_engine_plugin/messages.hpp>
 #include <eosio/chain_plugin/chain_plugin.hpp>
+#include <eosio/chain/generated_transaction_object.hpp>
 #include <fc/exception/exception.hpp>
 #include <fc/variant_object.hpp>
 #include <fc/io/json.hpp>
 
 #include <fstream>
+
+#include <cyberway/chaindb/controller.hpp>
+#include <cyberway/chaindb/account_abi_info.hpp>
 
 using namespace eosio::chain;
 
@@ -21,37 +25,6 @@ namespace eosio {
    FC_DECLARE_EXCEPTION(ee_extract_genesis_exception, 10000000, "event engine genesis extract exception");
 
    static appbase::abstract_plugin& _event_engine_plugin = app().register_plugin<event_engine_plugin>();
-
-class abi_info final {
-public:
-    abi_info() = default;
-    abi_info(const account_name& code, abi_def abi, const chain::microseconds& max_time)
-    : code_(code) {
-        serializer_.set_abi(abi, max_time);
-    }
-
-    std::string get_event_type(const chain::event_name& n) const {
-        return serializer_.get_event_type(n);
-    }
-
-    std::string get_action_type(const chain::event_name& n) const {
-        return serializer_.get_action_type(n);
-    }
-
-    fc::variant to_object(
-        const string& type, const void* data, const size_t size, const chain::microseconds& max_time
-    ) const {
-        if (nullptr == data || 0 == size) return fc::variant();
-
-        fc::datastream<const char*> ds(static_cast<const char*>(data), size);
-        auto value = serializer_.binary_to_variant(type, ds, max_time);
-
-        return value;
-    }
-private:
-    const account_name code_;
-    eosio::chain::abi_serializer serializer_;
-};
 
 class event_engine_plugin_impl {
 public:
@@ -66,53 +39,52 @@ public:
 
     std::fstream dumpstream;
     bool dumpstream_opened;
+    uint32_t genesis_msg_id = 0;
 
-    std::map<chain::name,abi_info> abi_map;
     controller &db;
     fc::microseconds abi_serializer_max_time;
     std::set<account_name> receiver_filter;
     std::vector<bfs::path> genesis_files;
+    cyberway::chaindb::account_abi_info account_abi;
 
-    void set_abi(name account, const abi_def& abi);
     void accepted_block( const chain::block_state_ptr& );
     void irreversible_block(const chain::block_state_ptr&);
     void accepted_transaction(const chain::transaction_metadata_ptr&);
     void applied_transaction(const chain::transaction_trace_ptr&);
 
+    void send_genesis_start();
+    void send_genesis_end();
     void send_genesis_file(const bfs::path& genesis_file);
 
     bool is_handled_contract(const account_name n) const;
 
+private:
     template<typename Msg>
     void send_message(const Msg& msg) {
         if(dumpstream_opened) {
             dumpstream << fc::json::to_string(fc::variant(msg)) << std::endl;
+            EOS_ASSERT(!dumpstream.bad(), chain::plugin_config_exception, "Writing to event-engine-dumpfile failed");
             dumpstream.flush();
         }
     }
 
-    const abi_info *get_account_abi(name account) {
-        auto itr = abi_map.find(account);
-        if(itr == abi_map.end()) {
-            try {
-                const auto& a = db.get_account(account);
-                if(a.abi.size() > 0) {
-                    abi_info info(account, a.get_abi(), abi_serializer_max_time);
-                    itr = abi_map.emplace(account, std::move(info)).first;
-                }
-            } catch(const fc::exception &err) {
-                ilog("Can't process ABI for ${account}: ${err}",
-                        ("account", account)("err", err.to_string()));
-                return nullptr;
-            }
+    void send_genesis_message(const chain::name code, const chain::name name, const fc::variant& data) {
+        GenesisDataMessage msg(MsgChannel::Genesis, BaseMessage::GenesisData, genesis_msg_id++, code, name, data);
+        send_message(msg);
+    }
+
+    const cyberway::chaindb::abi_info* get_account_abi(name code) {
+        if (account_abi.code() == code) {
+            return &account_abi.abi();
         }
 
-        if(itr == abi_map.end()) {
-            ilog("Missing ABI-description for ${account}", ("account", account));
-            return nullptr;
+        account_abi = db.chaindb().get_account_abi_info(code);
+        if (account_abi.has_abi_info()) {
+            return &account_abi.abi();
         }
 
-        return &itr->second;
+        ilog("Missing ABI-description for ${account}", ("account", code));
+        return nullptr;
     }
 
     fc::variant unpack_action_data(const chain::action &act) {
@@ -129,16 +101,39 @@ public:
         }
 
         try {
-            auto result = abi->to_object(action_type, act.data.data(), act.data.size(), abi_serializer_max_time);
+            auto result = abi->to_object(action_type, act.data.data(), act.data.size());
             return result;
         } catch (const fc::exception &err) {
             ilog("Can't unpack arguments for action ${account}:${action}: ${err}",
-                    ("account", act.account)("event", act.name)("err", err.to_string()));
+                    ("account", act.account)("action", act.name)("err", err.to_string()));
             return fc::variant();
         }
     }
 
     fc::variant unpack_event_data(const chain::event &evt) {
+        if(evt.account == name()) {
+            if(evt.name == name("senddeferred")) {
+                generated_transaction gtx;
+                fc::raw::unpack(evt.data, gtx);
+
+                fc::datastream<char*> packed_trx_stream(gtx.packed_trx.data(), gtx.packed_trx.size());
+                transaction trx;
+                fc::raw::unpack(packed_trx_stream, trx);
+                fc::variant trx_object = db.to_variant_with_abi(trx, abi_serializer_max_time);
+
+                fc::variant gtx_object;
+                fc::to_variant(gtx, gtx_object);
+
+                fc::mutable_variant_object result(std::move(gtx_object));
+                result["trx"] = trx_object;
+                return result;
+            } else if(evt.name == name("canceldefer")) {
+                std::pair<account_name, uint128_t> args;
+                fc::raw::unpack<std::pair<account_name, uint128_t>>(evt.data, args);
+                return fc::mutable_variant_object()("sender",args.first)("sender_id",args.second);
+            }
+        }
+
         const auto *abi = get_account_abi(evt.account);
         if(abi == nullptr) {
             return fc::variant();
@@ -152,7 +147,7 @@ public:
         }
 
         try {
-            auto result = abi->to_object(event_type, evt.data.data(), evt.data.size(), abi_serializer_max_time);
+            auto result = abi->to_object(event_type, evt.data.data(), evt.data.size());
             return result;
         } catch (const fc::exception &err) {
             ilog("Can't unpack arguments for event ${account}:${event}: ${err}",
@@ -170,44 +165,37 @@ event_engine_plugin_impl::event_engine_plugin_impl(controller &db, fc::microseco
 event_engine_plugin_impl::~event_engine_plugin_impl() {
 }
 
-void event_engine_plugin_impl::set_abi(name account, const abi_def& abi) {
-    auto itr = abi_map.find(account);
-    if(itr != abi_map.end()) {
-        try {
-            abi_map.erase(itr);
-            abi_info info(account, abi, abi_serializer_max_time);
-            abi_map.emplace(account, std::move(info));
-            ilog("ABI updated for ${account}", ("account", account));
-        } catch(const fc::exception &err) {
-            ilog("Can't process ABI for ${account}: ${err}",
-                    ("account", account)("err", err.to_string()));
-        }
-    }
-}
-
 void event_engine_plugin_impl::accepted_block( const chain::block_state_ptr& state) {
     ilog("Accepted block: ${block_num}", ("block_num", state->block_num));
 
-    AcceptedBlockMessage msg(BlockMessage::AcceptBlock, state);
+    AcceptedBlockMessage msg(MsgChannel::Blocks, BlockMessage::AcceptBlock, state);
     send_message(msg);
 }
 
 void event_engine_plugin_impl::irreversible_block(const chain::block_state_ptr& state) {
     ilog("Irreversible block: ${block_num}", ("block_num", state->block_num));
 
-    BlockMessage msg(BlockMessage::CommitBlock, state);
+    BlockMessage msg(MsgChannel::Blocks, BlockMessage::CommitBlock, state);
     send_message(msg);
 }
 
 void event_engine_plugin_impl::accepted_transaction(const chain::transaction_metadata_ptr& trx_meta) {
     ilog("Accepted trx: ${id}, ${signed_id}", ("id", trx_meta->id)("signed_id", trx_meta->signed_id));
 
-    AcceptTrxMessage msg(BaseMessage::AcceptTrx, trx_meta);
+    AcceptTrxMessage msg(MsgChannel::Blocks, BaseMessage::AcceptTrx, trx_meta);
     send_message(msg);
 }
 
 bool event_engine_plugin_impl::is_handled_contract(const account_name n) const {
     return receiver_filter.empty() || receiver_filter.find(n) != receiver_filter.end();
+}
+
+void event_engine_plugin_impl::send_genesis_start() {
+    send_genesis_message(core_genesis_code, N(datastart), fc::variant_object());
+}
+
+void event_engine_plugin_impl::send_genesis_end() {
+    send_genesis_message(core_genesis_code, N(dataend), fc::variant_object());
 }
 
 void event_engine_plugin_impl::send_genesis_file(const bfs::path& genesis_file) {
@@ -237,8 +225,7 @@ void event_engine_plugin_impl::send_genesis_file(const bfs::path& genesis_file) 
         std::cout << "Reading " << t.count << " record(s) with type: " << t.abi_type << std::endl;
         for (unsigned i = 0; i < t.count; ++i) {
             fc::variant args = serializer.binary_to_variant(t.abi_type, ds, abi_serializer_max_time);
-            GenesisDataMessage msg(BaseMessage::GenesisData, t.code, t.name, args);
-            send_message(msg);
+            send_genesis_message(t.code, t.name, args);
         }
     }
     std::cout << "Done reading Event Engine Genesis data from " << genesis_file << std::endl;
@@ -254,6 +241,7 @@ void event_engine_plugin_impl::applied_transaction(const chain::transaction_trac
             actData.receiver = trace.receipt.receiver;
             actData.code = trace.act.account;
             actData.action = trace.act.name;
+            actData.auth = trace.act.authorization;
             actData.args = unpack_action_data(trace.act);
             if(actData.args.is_null()) {
                 actData.data = trace.act.data;
@@ -263,7 +251,7 @@ void event_engine_plugin_impl::applied_transaction(const chain::transaction_trac
             for(auto &event: trace.events) {
                 events.push_back(event.name);
                 EventData evData;
-                evData.code = trace.act.account;
+                evData.code = event.account;
                 evData.event = event.name;
                 evData.args = unpack_event_data(event);
                 if(evData.args.is_null()) {
@@ -280,7 +268,7 @@ void event_engine_plugin_impl::applied_transaction(const chain::transaction_trac
         }
     };
 
-    ApplyTrxMessage msg(BaseMessage::ApplyTrx, trx_trace);
+    ApplyTrxMessage msg(MsgChannel::Blocks, BaseMessage::ApplyTrx, trx_trace);
     for(auto &trace: trx_trace->action_traces) {
         process_action_trace(msg, trace);
     }
@@ -324,6 +312,12 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
             my->dumpstream.open(dump_filename, std::ofstream::out | std::ofstream::app);
             EOS_ASSERT(!my->dumpstream.fail(), chain::plugin_config_exception, "Can't open event-engine-dumpfile");
             my->dumpstream_opened = true;
+
+            my->send_genesis_start();
+            for(const auto& file: my->genesis_files) {
+                my->send_genesis_file(file);
+            }
+            my->send_genesis_end();
         }
 
         my->accepted_block_connection.emplace( 
@@ -342,10 +336,6 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
                 chain.applied_transaction.connect( [&]( const chain::transaction_trace_ptr& t ) {
                     my->applied_transaction( t );
                 } ));
-        my->setabi_connection.emplace(
-                chain.setabi.connect( [&]( const std::tuple<chain::name,const chain::abi_def&> arg) {
-                    my->set_abi( std::get<0>(arg), std::get<1>(arg) );
-                } ));
 
         ilog("event_engine initialized");
     }
@@ -353,15 +343,6 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
 }
 
 void event_engine_plugin::plugin_startup() {
-   auto& chain = app().find_plugin<chain_plugin>()->chain();
-   // Make the magic happen
-   if (chain.head_block_num() == 1) {
-       for(const auto& file: my->genesis_files) {
-           my->send_genesis_file(file);
-       }
-       GenesisDataMessage msg(BaseMessage::GenesisData, core_genesis_code, N(dataend), fc::variant_object());
-       my->send_message(msg);
-   }
 }
 
 void event_engine_plugin::plugin_shutdown() {

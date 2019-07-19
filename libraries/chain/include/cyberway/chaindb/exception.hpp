@@ -88,8 +88,7 @@ namespace cyberway { namespace chaindb {
         FC_DECLARE_DERIVED_EXCEPTION(driver_duplicate_exception, chaindb_internal_exception,
                                      3710014, "ChainDB driver duplicate unique records")
 
-        FC_DECLARE_DERIVED_EXCEPTION(driver_open_exception, chaindb_internal_exception,
-                                     3710015, "ChainDB driver fail to open database")
+        using driver_open_exception = eosio::chain::database_guard_exception;
 
         FC_DECLARE_DERIVED_EXCEPTION(driver_opened_cursors_exception, chaindb_internal_exception,
                                      3710016, "ChainDB driver has opened cursors")
@@ -105,6 +104,9 @@ namespace cyberway { namespace chaindb {
 
         FC_DECLARE_DERIVED_EXCEPTION(driver_scope_exception, chaindb_internal_exception,
                                      3710020, "ChainDB driver returns bad scope")
+
+        FC_DECLARE_DERIVED_EXCEPTION(cache_primary_key_exception, chaindb_internal_exception,
+                                     3710021, "ChainDB cache return bad primary key")
 
     FC_DECLARE_DERIVED_EXCEPTION(chaindb_abi_exception, chaindb_exception,
                                  3720000, "ChainDB ABI exception")
@@ -171,5 +173,11 @@ namespace cyberway { namespace chaindb {
 
         FC_DECLARE_DERIVED_EXCEPTION(object_exception, chaindb_object_exception,
                                      3740003, "Object has reserved field name")
+
+        FC_DECLARE_DERIVED_EXCEPTION(index_size_exception, chaindb_object_exception,
+                                     3740004, "Object index size overflow")
+
+        FC_DECLARE_DERIVED_EXCEPTION(object_size_exception, chaindb_object_exception,
+                                     3740005, "Object size overflow")
 
 } } // namespace cyberway::chaindb

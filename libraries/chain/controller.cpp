@@ -9,7 +9,6 @@
 #include <eosio/chain/block_summary_object.hpp>
 #include <eosio/chain/eosio_contract.hpp>
 #include <eosio/chain/global_property_object.hpp>
-#include <eosio/chain/contract_table_objects.hpp>
 #include <eosio/chain/generated_transaction_object.hpp>
 #include <eosio/chain/transaction_object.hpp>
 #include <eosio/chain/reversible_block_object.hpp>
@@ -17,7 +16,6 @@
 #include <eosio/chain/authorization_manager.hpp>
 #include <eosio/chain/resource_limits.hpp>
 #include <eosio/chain/stake.hpp>
-#include <eosio/chain/chain_snapshot.hpp>
 #include <eosio/chain/thread_utils.hpp>
 
 #include <chainbase/chainbase.hpp>
@@ -25,15 +23,17 @@
 #include <fc/scoped_exit.hpp>
 #include <fc/variant_object.hpp>
 
-
 #include <cyberway/chaindb/controller.hpp>
+#include <cyberway/chaindb/account_abi_info.hpp>
 #include <cyberway/genesis/genesis_import.hpp>
 #include <cyberway/chain/cyberway_contract_types.hpp>
 #include <cyberway/chain/cyberway_contract.hpp>
 
 namespace eosio { namespace chain {
 
+
 using resource_limits::resource_limits_manager;
+using cyberway::chaindb::cursor_kind;
 
 using controller_index_set = index_set<
    account_table,
@@ -178,11 +178,7 @@ struct controller_impl {
     *  are removed from this list if they are re-applied in other blocks. Producers
     *  can query this list when scheduling new transactions into blocks.
     */
-   map<digest_type, transaction_metadata_ptr>     unapplied_transactions;
-
-   void set_abi(name account, const abi_def& abi) {
-       emit(self.setabi, std::make_tuple(account, std::ref(abi)));
-   }
+   unapplied_transactions_type     unapplied_transactions;
 
    void pop_block() {
       auto prev = fork_db.get_block( head->header.previous );
@@ -269,10 +265,6 @@ struct controller_impl {
    fork_db.irreversible.connect( [&]( auto b ) {
                                  on_irreversible(b);
                                  });
-
-   self.setabi.connect( [&]( auto b ) {
-       chaindb.add_abi( std::get<0>(b), std::get<1>(b) );
-   });
 
    }
 
@@ -385,22 +377,20 @@ struct controller_impl {
             set_revision( next->block_num() );
          }
          replay_push_block( next, controller::block_status::irreversible );
-         if( next->block_num() % 100 == 0 ) {
+         if( next->block_num() % 500 == 0 ) {
             if( next->block_num() % 10000 && skip_session ) {
                chaindb.apply_all_changes();
             }
-            std::cerr << std::setw(10) << next->block_num() << " of " << blog_head->block_num() <<"\r";
+            ilog( "${n} of ${head}", ("n", next->block_num())("head", blog_head->block_num()) );
             if( shutdown() ) break;
          }
       }
-      std::cerr<< "\n";
       ilog( "${n} blocks replayed", ("n", head->block_num - start_block_num) );
 
-      // if the irreverible log is played without undo sessions enabled, we need to sync the
+      // if the irreversible log is played without undo sessions enabled, we need to sync the
       // revision ordinal to the appropriate expected value here.
       if( skip_session ) {
          chaindb.apply_all_changes();
-         set_revision( head->block_num );
       }
 
       int rev = 0;
@@ -426,6 +416,7 @@ struct controller_impl {
    void init(std::function<bool()> shutdown, const snapshot_reader_ptr& snapshot) {
 
       bool report_integrity_hash = !!snapshot;
+      bool initialized = false;
 
       EOS_ASSERT( !snapshot, fork_database_exception, "Snapshot not supported");
       if (snapshot) {
@@ -446,6 +437,7 @@ struct controller_impl {
       } else {
          if( !head ) {
             initialize_fork_db(); // set head to genesis state
+            initialized = true;
          }
 
          auto end = blog.read_head();
@@ -488,9 +480,15 @@ struct controller_impl {
          chaindb.undo_last_revision();
       }
 
+      if( !initialized ) {
+         initialize_caches();
+      }
+
       if( report_integrity_hash ) {
-         const auto hash = calculate_integrity_hash();
-         ilog( "database initialized with hash: ${hash}", ("hash", hash) );
+// TODO: removed by CyberWay
+//         const auto hash = calculate_integrity_hash();
+//         ilog( "database initialized with hash: ${hash}", ("hash", hash) );
+          wlog( "integrity hash is disabled" );
       }
    }
 
@@ -499,13 +497,16 @@ struct controller_impl {
 
 // TODO: removed by CyberWay
 //      db.flush();
-      chaindb.apply_all_changes();
+
       reversible_blocks.flush();
+      try {
+         chaindb.apply_all_changes();
+      } catch ( const guard_exception& e ) {
+         dlog("Details: ${details}", ("details", e.to_detail_string()));
+      }
    }
 
    void add_indices() {
-      chaindb.add_abi(0, eosio_contract_abi());
-
       reversible_blocks.add_index<reversible_block_index>();
 
       controller_index_set::add_indices(chaindb);
@@ -518,16 +519,16 @@ struct controller_impl {
 // TODO: removed by CyberWay
 //   void clear_all_undo() {
 //      // Rewind the database to the last irreversible block
-//       db.with_write_lock([&] {
-//         db.undo_all();
-//         chaindb.undo_all_revisions();
-//         /*
-//         FC_ASSERT(db.revision() == self.head_block_num(),
-//                   "Chainbase revision does not match head block num",
-//                   ("rev", db.revision())("head_block", self.head_block_num()));
-//                   */
-//      });
+//      db.undo_all();
 //   }
+
+   void add_contract_tables_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
+       // TODO: Removed by CyberWay
+   }
+
+   void read_contract_tables_from_snapshot( const snapshot_reader_ptr& snapshot ) {
+       // TODO: Removed by CyberWay
+   }
 
    void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
       // TODO: Removed by CyberWay
@@ -584,13 +585,25 @@ struct controller_impl {
       fork_db.set( head );
       set_revision(head->block_num);
 
-      initialize_database();
+      bool need_native_accounts = !conf.read_genesis;
+      initialize_database(need_native_accounts);
       read_genesis();
    }
 
+   void initialize_caches() {
+       auto block_summary_table = chaindb.get_table<block_summary_object>();
+       for (auto& value: block_summary_table) {
+           // only load to RAM
+       }
+
+       auto transaction_table = chaindb.get_table<transaction_object>();
+       for (auto& value: transaction_table) {
+           // only load to RAM
+       }
+   }
+
    void create_native_account( account_name name, const authority& owner, const authority& active, bool is_privileged = false ) {
-      chaindb.emplace<account_object>([&](auto& a) {
-         a.name = name;
+      chaindb.emplace<account_object>(name.value, [&](auto& a) {
          a.creation_date = conf.genesis.initial_timestamp;
          a.privileged = is_privileged;
 
@@ -600,11 +613,7 @@ struct controller_impl {
             a.set_abi(domain_contract_abi());
          }
       });
-
-      chaindb.emplace<account_sequence_object>([&](auto & a) {
-        a.name = name;
-      });
-
+      chaindb.emplace<account_sequence_object>(name.value, [&](auto & a) { });
       const auto& owner_permission  = authorization.create_permission({}, name, config::owner_name, 0,
                                                                       owner, conf.genesis.initial_timestamp );
       const auto& active_permission = authorization.create_permission({}, name, config::active_name, owner_permission.id,
@@ -624,7 +633,7 @@ struct controller_impl {
 //      resource_limits.verify_account_ram_usage(name);
    }
 
-   void initialize_database() {
+   void initialize_database(bool need_native_accounts = true) {
       // Initialize block summary index
       auto blocksum_table = chaindb.get_table<block_summary_object>();
       for (int i = 0; i < 0x10000; i++)
@@ -635,21 +644,6 @@ struct controller_impl {
         bs.block_id = head->id;
       });
 
-      conf.genesis.initial_configuration.target_virtual_limits = 
-        std::vector<uint64_t>(config::default_target_virtual_limits.begin(), config::default_target_virtual_limits.end());
-      conf.genesis.initial_configuration.min_virtual_limits = 
-        std::vector<uint64_t>(config::default_min_virtual_limits.begin(), config::default_min_virtual_limits.end());
-      conf.genesis.initial_configuration.max_virtual_limits = 
-        std::vector<uint64_t>(config::default_max_virtual_limits.begin(), config::default_max_virtual_limits.end());
-      conf.genesis.initial_configuration.usage_windows = 
-        std::vector<uint32_t>(config::default_usage_windows.begin(), config::default_usage_windows.end());
-      conf.genesis.initial_configuration.virtual_limit_decrease_pct = 
-        std::vector<uint16_t>(config::default_virtual_limit_decrease_pct.begin(), config::default_virtual_limit_decrease_pct.end());
-      conf.genesis.initial_configuration.virtual_limit_increase_pct = 
-        std::vector<uint16_t>(config::default_virtual_limit_increase_pct.begin(), config::default_virtual_limit_increase_pct.end());
-      conf.genesis.initial_configuration.account_usage_windows = 
-        std::vector<uint32_t>(config::default_account_usage_windows.begin(), config::default_account_usage_windows.end());
-
       conf.genesis.initial_configuration.validate();
       chaindb.emplace<global_property_object>([&](auto& gpo ){
         gpo.configuration = conf.genesis.initial_configuration;
@@ -659,32 +653,40 @@ struct controller_impl {
       authorization.initialize_database();
       resource_limits.initialize_database();
 
-      authority system_auth(conf.genesis.initial_key);
-      create_native_account( config::system_account_name, system_auth, system_auth, true );
-      create_native_account(config::msig_account_name, system_auth, system_auth, true);
-      create_native_account(config::domain_account_name, system_auth, system_auth);
-      create_native_account(config::govern_account_name, system_auth, system_auth, true);
-      create_native_account(config::stake_account_name, system_auth, system_auth, true);
-
-      auto empty_authority = authority(1, {}, {});
-      auto active_producers_authority = authority(1, {}, {});
-      active_producers_authority.accounts.push_back({{config::system_account_name, config::active_name}, 1});
-
-      create_native_account( config::null_account_name, empty_authority, empty_authority );
-      create_native_account( config::producers_account_name, empty_authority, active_producers_authority );
-      const auto& active_permission       = authorization.get_permission({config::producers_account_name, config::active_name});
-      const auto& majority_permission     = authorization.create_permission( {},
-                                                                             config::producers_account_name,
-                                                                             config::majority_producers_permission_name,
-                                                                             active_permission.id,
-                                                                             active_producers_authority,
-                                                                             conf.genesis.initial_timestamp );
-      const auto& minority_permission     = authorization.create_permission( {},
-                                                                             config::producers_account_name,
-                                                                             config::minority_producers_permission_name,
-                                                                             majority_permission.id,
-                                                                             active_producers_authority,
-                                                                             conf.genesis.initial_timestamp );
+      if (need_native_accounts) {
+          authority system_auth(conf.genesis.initial_key);
+          create_native_account( config::system_account_name, system_auth, system_auth, true );
+          create_native_account(config::msig_account_name, system_auth, system_auth, true);
+          create_native_account(config::domain_account_name, system_auth, system_auth);
+          create_native_account(config::govern_account_name, system_auth, system_auth, true);
+          create_native_account(config::stake_account_name, system_auth, system_auth, true);
+    
+          auto empty_authority = authority(1, {}, {});
+          auto active_producers_authority = authority(1, {}, {});
+          active_producers_authority.accounts.push_back({{config::system_account_name, config::active_name}, 1});
+    
+          create_native_account( config::null_account_name, empty_authority, empty_authority );
+          create_native_account( config::producers_account_name, empty_authority, active_producers_authority );
+          const auto& active_permission       = authorization.get_permission({config::producers_account_name, config::active_name});
+          const auto& majority_permission     = authorization.create_permission( {},
+                                                                                 config::producers_account_name,
+                                                                                 config::majority_producers_permission_name,
+                                                                                 active_permission.id,
+                                                                                 active_producers_authority,
+                                                                                 conf.genesis.initial_timestamp );
+          const auto& minority_permission     = authorization.create_permission( {},
+                                                                                 config::producers_account_name,
+                                                                                 config::minority_producers_permission_name,
+                                                                                 majority_permission.id,
+                                                                                 active_producers_authority,
+                                                                                 conf.genesis.initial_timestamp );
+      } else {
+          chaindb.emplace<account_object>(config::system_account_name, [&](auto& a) {
+             a.creation_date = conf.genesis.initial_timestamp;
+             a.privileged = true;
+             a.set_abi(eosio_contract_abi());
+          });
+      }
    }
 
 
@@ -747,8 +749,8 @@ struct controller_impl {
    }
 
    transaction_trace_ptr apply_onerror( const generated_transaction& gtrx,
+                                        const transaction_context& src_ctx,
                                         fc::time_point deadline,
-                                        fc::time_point start,
                                         uint32_t& cpu_time_to_bill_us, // only set on failure
                                         uint64_t& ram_to_bill_bytes, // only set on failure
                                         const billed_bw_usage& billed
@@ -761,13 +763,19 @@ struct controller_impl {
       etrx.expiration = self.pending_block_time() + fc::microseconds(999'999); // Round up to avoid appearing expired
       etrx.set_reference_block( self.head_block_id() );
 
-      transaction_context trx_context( self, etrx, etrx.id(), start );
-      trx_context.deadline = deadline;
+      transaction_context trx_context( self, etrx, etrx.id(), src_ctx.pseudo_start );
+      trx_context.caller_set_deadline = deadline;
       trx_context.explicit_billed_cpu_time = billed.explicit_usage;
       trx_context.billed_cpu_time_us = billed.cpu_time_us;
       trx_context.explicit_billed_ram_bytes = billed.explicit_usage;
       trx_context.billed_ram_bytes = billed.ram_bytes;
       transaction_trace_ptr trace = trx_context.trace;
+
+      trx_context.storage_providers = src_ctx.storage_providers;
+      auto provider = src_ctx.storage_providers.find(gtrx.sender);
+      if (src_ctx.storage_providers.end() != provider) {
+         trx_context.bill_to_accounts.emplace(provider->second);
+      }
       try {
          trx_context.init_for_implicit_trx();
          trx_context.published = gtrx.published;
@@ -784,6 +792,8 @@ struct controller_impl {
          trx_context.squash();
          restore.cancel();
          return trace;
+      } catch( const guard_exception& e ) {
+         throw;
       } catch( const fc::exception& e ) {
          cpu_time_to_bill_us = trx_context.update_billed_cpu_time( fc::time_point::now() );
          ram_to_bill_bytes = trx_context.update_billed_ram_bytes();
@@ -803,24 +813,11 @@ struct controller_impl {
       chaindb.erase( gto, resource_limits.get_storage_payer(self.pending_block_slot(), account_name()));
    }
 
-   bool failure_is_subjective( const fc::exception& e ) const {
-      auto code = e.code();
-      return    (code == subjective_block_production_exception::code_value)
-             || (code == block_net_usage_exceeded::code_value)
-             || (code == block_cpu_usage_exceeded::code_value)
-             || (code == deadline_exception::code_value)
-             || (code == leeway_deadline_exception::code_value);
-   }
 
-   bool scheduled_failure_is_subjective( const fc::exception& e ) const {
-      auto code = e.code();
-      return    (code == tx_cpu_usage_exceeded::code_value)
-             || failure_is_subjective(e);
-   }
 
    transaction_trace_ptr push_scheduled_transaction( const transaction_id_type& trxid, fc::time_point deadline, const billed_bw_usage& billed ) {
       auto idx = chaindb.get_index<generated_transaction_object, by_trx_id>();
-      auto itr = idx.find( trxid );
+      auto itr = idx.find( trxid, cyberway::chaindb::cursor_kind::OneRecord );
       EOS_ASSERT( itr != idx.end(), unknown_transaction_exception, "unknown transaction" );
       return push_scheduled_transaction( *itr, deadline, billed );
    }
@@ -915,7 +912,7 @@ struct controller_impl {
 
       transaction_context trx_context( self, dtrx, gtrx.trx_id );
       trx_context.leeway =  fc::microseconds(0); // avoid stealing cpu resource
-      trx_context.deadline = deadline;
+      trx_context.caller_set_deadline = deadline;
       trx_context.explicit_billed_cpu_time = billed.explicit_usage;
       trx_context.billed_cpu_time_us = billed.cpu_time_us;
       trx_context.explicit_billed_ram_bytes = billed.explicit_usage;
@@ -952,6 +949,8 @@ struct controller_impl {
          restore.cancel();
 
          return trace;
+      } catch( const guard_exception& e ) {
+         throw;
       } catch( const fc::exception& e ) {
          cpu_time_to_bill_us = trx_context.update_billed_cpu_time( fc::time_point::now() );
          ram_to_bill_bytes = trx_context.update_billed_ram_bytes();
@@ -963,10 +962,10 @@ struct controller_impl {
 
       // Only subjective OR soft OR hard failure logic below:
 
-      if( gtrx.sender != account_name() && !failure_is_subjective(*trace->except)) {
+      if( gtrx.sender != account_name() && !controller::failure_is_subjective(*trace->except)) {
          // Attempt error handling for the generated transaction.
 
-         auto error_trace = apply_onerror( gtrx, deadline, trx_context.pseudo_start,
+         auto error_trace = apply_onerror( gtrx, trx_context, deadline,
                                            cpu_time_to_bill_us, ram_to_bill_bytes, billed);
          error_trace->failed_dtrx_trace = trace;
          trace = error_trace;
@@ -982,30 +981,19 @@ struct controller_impl {
       // Only subjective OR hard failure logic below:
 
       // subjectivity changes based on producing vs validating
-      bool subjective  = false;
-      if (billed.explicit_usage) {
-         subjective = failure_is_subjective(*trace->except);
-      } else {
-         subjective = scheduled_failure_is_subjective(*trace->except);
-      }
-
-      if ( !subjective ) {
+      if ( !controller::scheduled_failure_is_subjective((*trace->except), !billed.explicit_usage) ) {
          // hard failure logic
-
          if( !billed.explicit_usage ) {
             auto& rl = self.get_mutable_resource_limits_manager();
             rl.update_account_usage( trx_context.bill_to_accounts, self.pending_block_slot() );
-            int64_t account_cpu_limit = trx_context.get_min_cpu_limit();
 
-            cpu_time_to_bill_us = static_cast<uint32_t>( std::min( std::min( static_cast<int64_t>(cpu_time_to_bill_us),
-                                                                             account_cpu_limit                          ),
-                                                                   trx_context.initial_objective_duration_limit.count()    ) );
-
-             // TODO: CyberWay #616 should be here correction of ram_to_bill_bytes?
+            cpu_time_to_bill_us = static_cast<uint32_t>(std::min(
+                static_cast<uint64_t>(cpu_time_to_bill_us), trx_context.hard_limits[resource_limits::CPU].max));
+            ram_to_bill_bytes = std::min(ram_to_bill_bytes, trx_context.hard_limits[resource_limits::RAM].max);
          }
          
-         resource_limits.add_transaction_usage( trx_context.bill_to_accounts, cpu_time_to_bill_us, 0, ram_to_bill_bytes, self.pending_block_time() ); // Should never fail
-
+         resource_limits.add_transaction_usage( trx_context.bill_to_accounts, trx_context.pricelist,
+             cpu_time_to_bill_us, 0, ram_to_bill_bytes, self.pending_block_time(), false ); // Should never fail
          trace->receipt = push_receipt(gtrx.trx_id, transaction_receipt::hard_fail, cpu_time_to_bill_us, 0, ram_to_bill_bytes, 0);
 
          emit( self.accepted_transaction, trx );
@@ -1016,7 +1004,6 @@ struct controller_impl {
          emit( self.accepted_transaction, trx );
          emit( self.applied_transaction, trace );
       }
-
       return trace;
    } FC_CAPTURE_AND_RETHROW() /// push_scheduled_transaction
 
@@ -1054,8 +1041,12 @@ struct controller_impl {
       transaction_trace_ptr trace;
       try {
          auto start = fc::time_point::now();
+         const bool check_auth = !self.skip_auth_check() && !trx->implicit;
+         // call recover keys so that trx->sig_cpu_usage is set correctly
+         const fc::microseconds sig_cpu_usage = check_auth ? std::get<0>( trx->recover_keys( chain_id ) ) : fc::microseconds();
+         const flat_set<public_key_type>& recovered_keys = check_auth ? std::get<1>( trx->recover_keys( chain_id ) ) : flat_set<public_key_type>();
          if( !billed.explicit_usage ) {
-            fc::microseconds already_consumed_time( EOS_PERCENT(trx->sig_cpu_usage.count(), conf.sig_cpu_bill_pct) );
+            fc::microseconds already_consumed_time( EOS_PERCENT(sig_cpu_usage.count(), conf.sig_cpu_bill_pct) );
 
             if( start.time_since_epoch() <  already_consumed_time ) {
                start = fc::time_point();
@@ -1069,7 +1060,7 @@ struct controller_impl {
          if ((bool)subjective_cpu_leeway && pending->_block_status == controller::block_status::incomplete) {
             trx_context.leeway = *subjective_cpu_leeway;
          }
-         trx_context.deadline = deadline;
+         trx_context.caller_set_deadline = deadline;
          trx_context.explicit_billed_cpu_time = billed.explicit_usage;
          trx_context.billed_cpu_time_us = billed.cpu_time_us;
          trx_context.explicit_billed_ram_bytes = billed.explicit_usage;
@@ -1094,15 +1085,13 @@ struct controller_impl {
 
             trx_context.delay = fc::seconds(trn.delay_sec);
 
-            if( !self.skip_auth_check() && !trx->implicit ) {
+            if( check_auth ) {
                authorization.check_authorization(
                        trn.actions,
-                       trx->recover_keys( chain_id ),
+                       recovered_keys,
                        {},
                        trx_context.delay,
-                       [](){}
-                       /*std::bind(&transaction_context::add_cpu_usage_and_check_time, &trx_context,
-                                 std::placeholders::_1)*/,
+                       [&trx_context](){ trx_context.checktime(); },
                        false
                );
             }
@@ -1152,12 +1141,14 @@ struct controller_impl {
                unapplied_transactions.erase( trx->signed_id );
             }
             return trace;
+         } catch (const guard_exception& e) {
+            throw;
          } catch (const fc::exception& e) {
             trace->except = e;
             trace->except_ptr = std::current_exception();
          }
 
-         if (!failure_is_subjective(*trace->except)) {
+         if (!controller::failure_is_subjective(*trace->except)) {
             unapplied_transactions.erase( trx->signed_id );
          }
 
@@ -1222,13 +1213,6 @@ struct controller_impl {
             }
 
          push_sys_transaction(config::system_account_name, N(onblock), fc::raw::pack(self.head_block_header()));
-         if (was_pending_promoted) {
-             vector<account_name> producer_names;
-             for (auto& prod : pending->_pending_block_state->active_schedule.producers) {
-                producer_names.emplace_back(prod.producer_name);
-             }
-             push_sys_transaction(config::govern_account_name, N(setactprods), fc::raw::pack(producer_names));
-         }
          clear_expired_input_transactions();
          update_producers_authority();
       }
@@ -1259,7 +1243,7 @@ struct controller_impl {
                auto& pt = receipt.trx.get<packed_transaction>();
                auto mtrx = std::make_shared<transaction_metadata>( std::make_shared<packed_transaction>( pt ) );
                if( !self.skip_auth_check() ) {
-                  transaction_metadata::create_signing_keys_future( mtrx, thread_pool, chain_id, microseconds::maximum() );
+                  transaction_metadata::start_recover_keys( mtrx, thread_pool, chain_id, microseconds::maximum() );
                }
                packed_transactions.emplace_back( std::move( mtrx ) );
             }
@@ -1431,8 +1415,11 @@ struct controller_impl {
                head = *ritr;
                fork_db.mark_in_current_chain( *ritr, true );
                (*ritr)->validated = true;
+            } catch (const guard_exception& e ) {
+               throw;
+            } catch (const fc::exception& e) {
+               except = e;
             }
-            catch (const fc::exception& e) { except = e; }
             if (except) {
                elog("exception thrown while switching forks ${e}", ("e", except->to_detail_string()));
 
@@ -1652,6 +1639,9 @@ struct controller_impl {
         } catch( const boost::interprocess::bad_alloc& e  ) {
             elog( "system transaction failed due to a bad allocation" );
             throw;
+        } catch( const guard_exception& e ) {
+            elog( "system transaction failed due to a guard_exception" );
+            throw;
         } catch( const fc::exception& e ) {
             wlog( "system transaction failed, but shouldn't impact block generation, system contract needs update" );
             edump((e.to_detail_string()));
@@ -1699,10 +1689,26 @@ void controller::add_indices() {
 
 void controller::startup( std::function<bool()> shutdown, const snapshot_reader_ptr& snapshot ) {
    my->head = my->fork_db.head();
+// TODO: Removed by CyberWay
+//   if( snapshot ) {
+//      ilog( "Starting initialization from snapshot, this may take a significant amount of time" );
+//   }
+//   else
    if( !my->head ) {
       elog( "No head block in fork db, perhaps we need to replay" );
    }
-   my->init(shutdown, snapshot);
+
+   try {
+      my->init(shutdown, snapshot);
+   } catch (boost::interprocess::bad_alloc& e) {
+      if ( snapshot )
+         elog( "db storage not configured to have enough storage for the provided snapshot, please increase and retry snapshot" );
+      throw e;
+   }
+// TODO: Removed by CyberWay
+//   if( snapshot ) {
+//      ilog( "Finished initialization from snapshot" );
+//   }
 }
 
 const fork_database& controller::fork_db()const { return my->fork_db; }
@@ -2012,10 +2018,6 @@ validation_mode controller::get_validation_mode()const {
    return my->conf.block_validation_mode;
 }
 
-void controller::set_abi(name account, const abi_def &abi) {
-    my->set_abi(account, abi);
-}
-
 const apply_handler* controller::find_apply_handler( account_name receiver, account_name scope, action_name act ) const
 {
    auto native_handler_scope = my->apply_handlers.find( receiver );
@@ -2030,64 +2032,40 @@ wasm_interface& controller::get_wasm_interface() {
    return my->wasmif;
 }
 
+optional_ptr<abi_serializer> controller::get_abi_serializer( account_name n, const fc::microseconds& max_serialization_time )const {
+    if( n.good() ) {
+        auto a = my->chaindb.get_account_abi_info(n);
+        if( a.has_abi_info() ) {
+           return optional_ptr<abi_serializer>( a.abi().serializer() );
+        }
+    }
+    return optional_ptr<abi_serializer>();
+}
+
 const account_object& controller::get_account( account_name name )const
 { try {
-   return my->chaindb.get<account_object, by_name>(name);
+   return my->chaindb.get<account_object>(name);
 } FC_CAPTURE_AND_RETHROW( (name) ) }
 
 const domain_object& controller::get_domain(const domain_name& name) const { try {
-    const auto* d = my->chaindb.find<domain_object, by_name>(name);
+    const auto* d = my->chaindb.find<domain_object, by_name>(name, cursor_kind::OneRecord);
     EOS_ASSERT(d != nullptr, chain::domain_query_exception, "domain `${name}` not found", ("name", name));
     return *d;
 } FC_CAPTURE_AND_RETHROW((name)) }
 
 const username_object& controller::get_username(account_name scope, const username& name) const { try {
-    const auto* user = my->chaindb.find<username_object, by_scope_name>(boost::make_tuple(scope,name));
+    const auto* user = my->chaindb.find<username_object, by_scope_name>(boost::make_tuple(scope,name), cursor_kind::OneRecord);
     EOS_ASSERT(user != nullptr, username_query_exception,
         "username `${name}` not found in scope `${scope}`", ("name",name)("scope",scope));
     return *user;
 } FC_CAPTURE_AND_RETHROW((scope)(name)) }
 
-vector<transaction_metadata_ptr> controller::get_unapplied_transactions() const {
-   vector<transaction_metadata_ptr> result;
-   if ( my->read_mode == db_read_mode::SPECULATIVE ) {
-      result.reserve(my->unapplied_transactions.size());
-      for ( const auto& entry: my->unapplied_transactions ) {
-         result.emplace_back(entry.second);
-      }
-   } else {
-      EOS_ASSERT( my->unapplied_transactions.empty(), transaction_exception, "not empty unapplied_transactions in non-speculative mode" ); //should never happen
+unapplied_transactions_type& controller::get_unapplied_transactions() {
+   if ( my->read_mode != db_read_mode::SPECULATIVE ) {
+      EOS_ASSERT( my->unapplied_transactions.empty(), transaction_exception,
+                  "not empty unapplied_transactions in non-speculative mode" ); //should never happen
    }
-   return result;
-}
-
-void controller::drop_unapplied_transaction(const transaction_metadata_ptr& trx) {
-   my->unapplied_transactions.erase(trx->signed_id);
-}
-
-void controller::drop_all_unapplied_transactions() {
-   my->unapplied_transactions.clear();
-}
-
-vector<transaction_id_type> controller::get_scheduled_transactions() const {
-   auto delay_idx = chaindb().get_index<generated_transaction_object, by_delay>();
-
-   vector<transaction_id_type> result;
-
-   if( 1 == head_block_num() ) {
-      return result;
-   }
-
-   static const size_t max_reserve = 1024;
-   result.reserve(max_reserve);
-
-   auto itr = delay_idx.begin();
-   auto etr = delay_idx.end();
-   auto stop_time = pending_block_time();
-   for (; etr != itr && itr->delay_until <= stop_time; ++itr) {
-      result.emplace_back(itr->trx_id);
-   }
-   return result;
+   return my->unapplied_transactions;
 }
 
 void controller::check_actor_list( const flat_set<account_name>& actors )const {
@@ -2152,7 +2130,7 @@ void controller::validate_reversible_available_size() const {
 }
 
 bool controller::is_known_unexpired_transaction( const transaction_id_type& id) const {
-   return chaindb().find<transaction_object, by_trx_id>(id);
+   return chaindb().find<transaction_object, by_trx_id>(id, cyberway::chaindb::cursor_kind::InRAM);
 }
 
 void controller::set_subjective_cpu_leeway(fc::microseconds leeway) {

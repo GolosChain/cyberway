@@ -22,7 +22,6 @@ struct genesis_state {
 
    chain_config   initial_configuration = {
       .base_per_transaction_net_usage       = config::default_base_per_transaction_net_usage,
-      .net_usage_leeway                     = config::default_net_usage_leeway,
       .context_free_discount_net_usage_num  = config::default_context_free_discount_net_usage_num,
       .context_free_discount_net_usage_den  = config::default_context_free_discount_net_usage_den,
 
@@ -35,6 +34,9 @@ struct genesis_state {
       .max_inline_action_size               = config::default_max_inline_action_size,
       .max_inline_action_depth              = config::default_max_inline_action_depth,
       .max_authority_depth                  = config::default_max_auth_depth,
+
+      .ram_size                             = config::default_ram_size,
+      .reserved_ram_size                    = config::default_reserved_ram_size,
    };
 
    time_point                               initial_timestamp;

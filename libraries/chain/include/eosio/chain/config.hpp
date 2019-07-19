@@ -45,6 +45,7 @@ const static uint64_t null_account_name      = N(cyber.null);
 const static uint64_t producers_account_name = N(cyber.prods);
 const static uint64_t token_account_name     = N(cyber.token);
 const static uint64_t domain_account_name    = N(cyber.domain);
+const static uint64_t history_account_name   = N(.history);
 const static uint64_t govern_account_name    = N(cyber.govern);
 const static uint64_t stake_account_name     = N(cyber.stake);
 
@@ -86,14 +87,13 @@ static constexpr resource_pct_t     default_virtual_limit_increase_pct = {{10,  
                                                                 
 static constexpr resource_windows_t default_account_usage_windows      = {{_HOUR,         _HOUR,         _HOUR,          _MONTH}};
                                                                 
-static constexpr resource_limits_t  max_block_usage                    = {{1'400'000,     1*_MB,         128*_MB,         32*_MB}};
-static constexpr resource_limits_t  max_transaction_usage              = {{800'000,     512*_KB,       64*_MB,          16*_MB}};
+static constexpr resource_limits_t  default_max_block_usage            = {{1'400'000,     1*_MB,         128*_MB,         4*_MB}};
+static constexpr resource_limits_t  default_max_transaction_usage      = {{800'000,       512*_KB,       64*_MB,          4*_MB - 1}};
 
 static constexpr uint64_t ram_load_multiplier = 2;
 
 const static uint32_t   maximum_block_size                           = 2*_MB; // maximum block size for pack/unpack data in block_log
 const static uint32_t   default_base_per_transaction_net_usage       = 12;  // 12 bytes (11 bytes for worst case of transaction_receipt_header + 1 byte for static_variant tag)
-const static uint32_t   default_net_usage_leeway                     = 500; // TODO: is this reasonable?
 const static uint32_t   default_context_free_discount_net_usage_num  = 20; // TODO: is this reasonable?
 const static uint32_t   default_context_free_discount_net_usage_den  = 100;
 const static uint32_t   transaction_id_net_usage                     = 32; // 32 bytes for the size of a transaction id
@@ -104,7 +104,7 @@ const static uint64_t   default_min_transaction_ram_usage           = 1*_KB;
 const static uint32_t   default_max_trx_lifetime               = 60*60; // 1 hour
 const static uint32_t   default_deferred_trx_expiration_window = 10*60; // 10 minutes
 const static uint32_t   default_max_trx_delay                  = 45*24*3600; // 45 days
-const static uint32_t   default_max_inline_action_size         = 4*_KB;
+const static uint32_t   default_max_inline_action_size         = 32*_KB;
 const static uint16_t   default_max_inline_action_depth        = 4;
 const static uint16_t   default_max_auth_depth                 = 6;
 const static uint32_t   default_sig_cpu_bill_pct               = 50 * percent_1; // billable percentage of signature recovery
@@ -119,7 +119,7 @@ const static uint32_t   fixed_net_overhead_of_packed_trx = 16; // TODO: is this 
 const static uint32_t   fixed_overhead_shared_vector_ram_bytes = 16; ///< overhead accounts for fixed portion of size of shared_vector field
 const static uint32_t   overhead_per_row_per_index_ram_bytes = 32;    ///< overhead accounts for basic tracking structures in a row per index
 const static uint32_t   overhead_per_account_ram_bytes     = 2*_KB; ///< overhead accounts for basic account storage and pre-pays features like account recovery
-const static uint32_t   setcode_storage_bytes_multiplier   = 64;    ///< multiplier on contract size to account for multiple copies and cached compilation
+const static uint32_t   setcode_storage_bytes_multiplier   = 4;    ///< multiplier on contract size to account for multiple copies and cached compilation
 
 const static uint32_t   hashing_checktime_block_size       = 10*_KB;  /// call checktime from hashing intrinsic once per this number of bytes
 
@@ -131,6 +131,8 @@ const static uint32_t   default_abi_serializer_max_time_ms = 15*1000; ///< defau
  */
 const static int producer_repetitions = 1; //TODO: remove it
 const static int max_producers = 125;
+
+static const int32_t priority_precision = 1000000;
 
 const static size_t maximum_tracked_dpos_confirmations = 1024;     ///<
 static_assert(maximum_tracked_dpos_confirmations >= ((max_producers * 2 / 3) + 1) * producer_repetitions, "Settings never allow for DPOS irreversibility");

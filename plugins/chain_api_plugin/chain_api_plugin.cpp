@@ -8,6 +8,7 @@
 #include <eosio/chain/exceptions.hpp>
 #include <eosio/chain/authorization_manager.hpp>
 #include <eosio/chain/generated_transaction_object.hpp>
+#include <eosio/chain/stake.hpp>
 
 #include <eosio/plugins_common/http_request_handlers.hpp>
 #include <eosio/plugins_common/chain_utils.hpp>
@@ -15,11 +16,13 @@
 #include <cyberway/chaindb/controller.hpp>
 #include <cyberway/chaindb/names.hpp>
 #include <cyberway/chaindb/typed_name.hpp>
+#include <cyberway/chaindb/table_info.hpp>
 
 #include <fc/io/json.hpp>
 
 #include <eosio/chain_api_plugin/chain_api_plugin_params.hpp>
 #include <eosio/chain_api_plugin/chain_api_plugin_results.hpp>
+#include <eosio/chain/stake.hpp>
 
 namespace eosio {
 static appbase::abstract_plugin& _chain_api_plugin = app().register_plugin<chain_api_plugin>();
@@ -63,6 +66,9 @@ public:
     get_producers_result get_producers( const get_producers_params& params )const;
     get_producer_schedule_result get_producer_schedule( const get_producer_schedule_params& params )const;
     get_scheduled_transactions_result get_scheduled_transactions( const get_scheduled_transactions_params& params ) const;
+    std::string get_agent_public_key(const get_agent_public_key_params& params) const;
+    get_proxy_status_result get_proxy_status(const get_proxy_status_params& params) const;
+    std::vector<uint8_t> get_proxylevel_limits(const get_proxylevel_limits_params& params) const;
 
 private:
    get_table_rows_result walk_table_row_range(const get_table_rows_params& p,
@@ -70,9 +76,11 @@ private:
 
     fc::optional<eosio::chain::asset> get_account_core_liquid_balance(const get_account_params& params) const;
 
-    fc::variant get_refunds(chain::account_name account, const resource_calculator& resource_calc) const;
-    fc::variant get_payout(chain::account_name account) const;
-    std::string get_agent_public_key(chain::account_name account) const;
+    std::string get_agent_public_key(chain::account_name account, chain::symbol symbol) const;
+
+    uint32_t get_grantors_count(chain::account_name account, chain::symbol_code token_code) const;
+    uint8_t get_proxy_level(chain::account_name account, chain::symbol_code token_code) const;
+
 
 private:
 
@@ -92,7 +100,7 @@ get_abi_results chain_api_plugin_impl::get_abi( const get_abi_params& params )co
    get_abi_results result;
    result.account_name = params.account_name;
    auto& d = chain_controller_.chaindb();
-   const auto& accnt  = d.get<chain::account_object, chain::by_name>( params.account_name );
+   const auto& accnt  = d.get<chain::account_object>( params.account_name );
 
    chain::abi_def abi;
    if( chain::abi_serializer::to_abi(accnt.abi, abi) ) {
@@ -106,7 +114,7 @@ get_code_results chain_api_plugin_impl::get_code( const get_code_params& params 
    get_code_results result;
    result.account_name = params.account_name;
    auto& d = chain_controller_.chaindb();
-   const auto& accnt  = d.get<chain::account_object,chain::by_name>( params.account_name );
+   const auto& accnt  = d.get<chain::account_object>( params.account_name );
 
    EOS_ASSERT( params.code_as_wasm, chain::unsupported_feature, "Returning WAST from get_code is no longer supported" );
 
@@ -127,7 +135,7 @@ get_code_hash_results chain_api_plugin_impl::get_code_hash( const get_code_hash_
    get_code_hash_results result;
    result.account_name = params.account_name;
    auto& d = chain_controller_.chaindb();
-   const auto& accnt  = d.get<chain::account_object, chain::by_name>( params.account_name );
+   const auto& accnt  = d.get<chain::account_object>( params.account_name );
 
    if( accnt.code.size() ) {
       result.code_hash = fc::sha256::hash( accnt.code.data(), accnt.code.size() );
@@ -141,7 +149,7 @@ get_raw_code_and_abi_results chain_api_plugin_impl::get_raw_code_and_abi( const 
    result.account_name = params.account_name;
 
    auto& d = chain_controller_.chaindb();
-   const auto& accnt = d.get<chain::account_object, chain::by_name>(params.account_name);
+   const auto& accnt = d.get<chain::account_object>(params.account_name);
    result.wasm = fc::base64_encode({accnt.code.begin(), accnt.code.end()});
    result.abi = fc::base64_encode({accnt.abi.begin(), accnt.abi.end()});
 
@@ -153,7 +161,7 @@ get_raw_abi_results chain_api_plugin_impl::get_raw_abi( const get_raw_abi_params
    result.account_name = params.account_name;
 
    auto& d = chain_controller_.chaindb();
-   const auto& accnt = d.get<chain::account_object, chain::by_name>(params.account_name);
+   const auto& accnt = d.get<chain::account_object>(params.account_name);
    result.abi_hash = fc::sha256::hash( accnt.abi.data(), accnt.abi.size() );
    result.code_hash = fc::sha256::hash( accnt.code.data(), accnt.code.size() );
    if( !params.abi_hash || *params.abi_hash != result.abi_hash )
@@ -173,24 +181,27 @@ namespace {
 
     public:
 
-        resource_calculator(chain::resource_limits_manager& rm, chain::account_name name) 
-        : rm_(rm),
+        resource_calculator(chain::resource_limits_manager& rm, cyberway::chaindb::chaindb_controller& controller, chain::account_name name) :
+          rm_(rm),
+          controller_(controller),
           account_(name),
           prices_(rm.get_pricelist()),
-          total_stake_(rm.get_account_stake_ratio(fc::time_point::now(), account_, false).numerator),
-          //storage_usage_(rm.get_account_storage_usage(name)),
+          stake_agent_(controller_.find<eosio::chain::stake_agent_object, eosio::chain::stake_agent_object::by_key>
+                       (eosio::chain::stake::agent_key(chain::symbol(CORE_SYMBOL).to_symbol_code(), account_))),
+          total_stake_(stake_agent_ == nullptr ? 0 : stake_agent_->get_effective_stake()),
+          owned_stake_(stake_agent_ == nullptr ? 0 : (stake_agent_->get_own_funds() - stake_agent_->provided)),
           resources_usage_(rm.get_account_usage(name)),
           resources_info_(chain::resource_limits::resources_num),
           resource_limits_(chain::resource_limits::resources_num),
           resources_stake_parts_(chain::resource_limits::resources_num) {
             init_resources_info();
             init_account_resource_limits();
-            init_resources_available_stake_part();
-            //init_ram_qouta();
             try {
                 account_balance_ = rm.get_account_balance(fc::time_point::now(), account_,prices_, false);
             } catch(...) {
             }
+            init_resources_available_stake_part();
+
         }
 
         const account_resource_limit& get_net_limit() const {
@@ -200,23 +211,18 @@ namespace {
         const account_resource_limit& get_cpu_limit() const {
             return resource_limits_.at(chain::resource_limits::CPU);
         }
-/*
+
+        const account_resource_limit& get_ram_limit() const {
+            return resource_limits_.at(chain::resource_limits::RAM);
+        }
+
+        const account_resource_limit& get_storage_limit() const {
+            return resource_limits_.at(chain::resource_limits::STORAGE);
+        }
+
         int64_t get_ram_usage() const {
-            return storage_usage_.ram_usage;
+            return resources_usage_.at(chain::resource_limits::RAM);
         }
-
-        int64_t get_ram_owned() const {
-            return storage_usage_.ram_owned;
-        }
-
-        int64_t get_storage_usage() const {
-            return storage_usage_.storage_usage;
-        }
-
-        int64_t get_storage_owned() const {
-            return storage_usage_.storage_owned;
-        }
-*/
 
         int64_t get_net_weight() const {
             return resources_stake_parts_.at(chain::resource_limits::NET);
@@ -230,46 +236,46 @@ namespace {
             return get_resource_total_count(chain::resource_limits::STORAGE);
         }
 
-        int64_t get_resource_stake_part(uint64_t stake, chain::resource_limits::resource_id code) const {
-            const auto part = resources_info_.at(code).part;
-            return chain::int_arithmetic::safe_prop(stake, part.numerator, part.denominator);
-        }
-
         int64_t get_resource_total_stake_part(chain::resource_limits::resource_id code) const {
             return get_resource_stake_part(total_stake_, code);
+        }
+
+        int64_t get_resource_owned_stake_part(chain::resource_limits::resource_id code) const {
+            return get_resource_stake_part(owned_stake_, code);
         }
 
     private:
 
         void init_resources_info() {
-            init_resource_info(chain::resource_limits::NET);
-            init_resource_info(chain::resource_limits::CPU);
-            init_resource_info(chain::resource_limits::STORAGE);
+            for (int i = 0; i < chain::resource_limits::resources_num; ++i) {
+                init_resource_info(chain::resource_limits::resource_id(i));
+            }
         }
 
         void init_resource_info(chain::resource_limits::resource_id code) {
             const auto usage = resources_usage_.at(code);
             const auto price = prices_.at(code);
-            const auto weight = rm_.get_account_usage_ratio(account_, code);
-
+            const auto weight = rm_.get_resource_usage_by_account_cost_ratio(account_, code);
             resources_info_[code] = {usage, weight, price};
         }
 
         void init_account_resource_limits() {
-            init_account_resource_limit(chain::resource_limits::NET);
-            init_account_resource_limit(chain::resource_limits::CPU);
+            for (int i = 0; i < chain::resource_limits::resources_num; ++i) {
+                init_account_resource_limit(chain::resource_limits::resource_id(i));
+            }
         }
 
         void init_account_resource_limit(chain::resource_limits::resource_id code) {
             const int64_t max = get_resource_total_count(code);
             const int64_t usage = resources_usage_[code];
-            const int64_t available = max - usage;
+            const int64_t available = max== 0 ? 0 : max - usage;
             resource_limits_[code] = account_resource_limit{usage, available, max};
         }
 
         void init_resources_available_stake_part() {
-            init_resource_available_stake_part(chain::resource_limits::NET);
-            init_resource_available_stake_part(chain::resource_limits::CPU);
+            for (int i = 0; i < chain::resource_limits::resources_num; ++i) {
+                init_resource_available_stake_part(chain::resource_limits::resource_id(i));
+            }
         }
 
         void init_resource_available_stake_part(chain::resource_limits::resource_id code) {
@@ -291,14 +297,21 @@ namespace {
             return chain::int_arithmetic::safe_prop(stake_part, price.denominator, price.numerator);
         }
 
+        int64_t get_resource_stake_part(uint64_t stake, chain::resource_limits::resource_id code) const {
+            const auto part = resources_info_.at(code).part;
+            return chain::int_arithmetic::safe_prop(stake, part.numerator, part.denominator);
+        }
+
     private:
 
         const chain::resource_limits_manager& rm_;
+        cyberway::chaindb::chaindb_controller& controller_;
         chain::account_name account_;
         std::vector<chain::resource_limits::ratio> prices_;
+        const eosio::chain::stake_agent_object* stake_agent_;
         uint64_t total_stake_;
+        uint64_t owned_stake_;
         uint64_t account_balance_ = 0;
-        //chain::resource_limits::account_storage_usage storage_usage_;
         std::vector<uint64_t> resources_usage_;
         std::vector<resource_info> resources_info_;
         std::vector<account_resource_limit> resource_limits_;
@@ -344,65 +357,48 @@ get_account_results chain_api_plugin_impl::get_account(const get_account_params&
 
     result.core_liquid_balance = get_account_core_liquid_balance(params);
 
-    resource_calculator resource_calc(rm, params.account_name);
+    resource_calculator resource_calc(rm, db_controller, params.account_name);
 
     result.net_limit = resource_calc.get_net_limit();
     result.cpu_limit = resource_calc.get_cpu_limit();
+    result.ram_limit = resource_calc.get_ram_limit();
+    result.storage_limit = resource_calc.get_storage_limit();
     
-    //result.ram_usage = resource_calc.get_ram_usage();
-    //result.ram_owned = resource_calc.get_ram_owned();
-    //result.storage_usage = resource_calc.get_storage_usage();
-    //result.storage_owned = resource_calc.get_storage_owned();
+    result.ram_usage = resource_calc.get_ram_usage();
+    result.ram_quota = result.storage_limit.max;
 
     result.net_weight = resource_calc.get_net_weight();
-    result.cpu_weight = resource_calc.get_cpu_weight();
+                result.cpu_weight = resource_calc.get_cpu_weight();
 
     const std::string total_net_stake_part = chain::asset(resource_calc.get_resource_total_stake_part(chain::resource_limits::NET)).to_string();
     const std::string total_cpu_stake_part = chain::asset(resource_calc.get_resource_total_stake_part(chain::resource_limits::CPU)).to_string();
+    const std::string total_ram_stake_part = chain::asset(resource_calc.get_resource_total_stake_part(chain::resource_limits::RAM)).to_string();
+    const std::string total_store_stake_part = chain::asset(resource_calc.get_resource_total_stake_part(chain::resource_limits::STORAGE)).to_string();
+
+    const std::string owned_net_stake_part = chain::asset(resource_calc.get_resource_owned_stake_part(chain::resource_limits::NET)).to_string();
+    const std::string owned_cpu_stake_part = chain::asset(resource_calc.get_resource_owned_stake_part(chain::resource_limits::CPU)).to_string();
+    const std::string owned_ram_stake_part = chain::asset(resource_calc.get_resource_owned_stake_part(chain::resource_limits::RAM)).to_string();
+    const std::string owned_store_stake_part = chain::asset(resource_calc.get_resource_owned_stake_part(chain::resource_limits::STORAGE)).to_string();
 
     result.total_resources = fc::mutable_variant_object() ("owner", params.account_name)
                                                           ("ram_bytes", resource_calc.get_ram_total_count())
                                                           ("net_weight", total_net_stake_part)
-                                                          ("cpu_weight", total_cpu_stake_part);
+                                                          ("cpu_weight", total_cpu_stake_part)
+                                                          ("ram_weight", total_ram_stake_part)
+                                                          ("storage_weight", total_store_stake_part);
 
     result.self_delegated_bandwidth = fc::mutable_variant_object() ("from", params.account_name)
                                                                    ("to", params.account_name)
-                                                                   ("net_weight", total_net_stake_part)
-                                                                   ("cpu_weight", total_cpu_stake_part);
+                                                                   ("net_weight", owned_net_stake_part)
+                                                                   ("cpu_weight", owned_cpu_stake_part)
+                                                                   ("ram_weight", owned_ram_stake_part)
+                                                                   ("storage_weight", owned_store_stake_part);
 
-    result.refund_request = get_refunds(params.account_name, resource_calc);
+
 
 //    result.voter_info = get_account_voter_info(params);
     return result;
 }
-
-fc::variant chain_api_plugin_impl::get_refunds(chain::account_name account, const resource_calculator& resource_calc) const {
-    const auto payout = get_payout(account);
-
-    if (!payout.is_null()) {
-        const auto balance = payout["balance"].as_uint64();
-        return fc::mutable_variant_object() ("owner", account)
-                                            ("request_time", payout["last_step"].as_string())
-                                            ("net_amount", chain::asset(resource_calc.get_resource_stake_part(balance, chain::resource_limits::NET)).to_string())
-                                            ("cpu_amount", chain::asset(resource_calc.get_resource_stake_part(balance, chain::resource_limits::CPU)).to_string());
-    }
-    return {};
-}
-
-fc::variant chain_api_plugin_impl::get_payout(chain::account_name account) const {
-    auto& chain_db = chain_controller_.chaindb();
-
-    const cyberway::chaindb::index_request request{N(cyber.stake), N(cyber.stake), N(payout), N(payoutacc)};
-
-    auto payouts_it = chain_db.lower_bound(request, fc::mutable_variant_object() ("token_code", chain::symbol(CORE_SYMBOL).to_symbol_code())
-                                                                                 ("account", account));
-
-    if (payouts_it.pk != cyberway::chaindb::primary_key::End) {
-        return chain_db.value_at_cursor({N(cyber.stake), payouts_it.cursor});
-    }
-    return fc::variant();
-}
-
 
 fc::optional<eosio::chain::asset> chain_api_plugin_impl::get_account_core_liquid_balance(const get_account_params& params) const {
     static const auto token_code = N(cyber.token);
@@ -414,10 +410,9 @@ fc::optional<eosio::chain::asset> chain_api_plugin_impl::get_account_core_liquid
     auto& db_controller = chain_controller_.chaindb();
 
     auto accounts_it = db_controller.begin(request);
-    const auto end_it = db_controller.end(request);
 
-    for (; accounts_it.pk != end_it.pk; accounts_it.pk = db_controller.next({token_code, accounts_it.cursor})) {
-        const auto value = db_controller.value_at_cursor({token_code, accounts_it.cursor});
+    for (; accounts_it.pk != cyberway::chaindb::primary_key::End; ++accounts_it) {
+        const auto value = db_controller.object_at_cursor({token_code, accounts_it.cursor}).value;
         const auto balance_object = value["balance"];
         eosio::chain::asset asset_value;
 
@@ -490,7 +485,7 @@ static fc::variant action_abi_to_variant( const chain::abi_def& abi, chain::type
 
 abi_json_to_bin_result chain_api_plugin_impl::abi_json_to_bin( const abi_json_to_bin_params& params )const try {
    abi_json_to_bin_result result;
-   const auto code_account = chain_controller_.chaindb().find<chain::account_object, chain::by_name>( params.code );
+   const auto code_account = chain_controller_.chaindb().find<chain::account_object>( params.code );
    EOS_ASSERT(code_account != nullptr, chain::contract_query_exception, "Contract can't be found ${contract}", ("contract", params.code));
 
    chain::abi_def abi;
@@ -512,7 +507,7 @@ abi_json_to_bin_result chain_api_plugin_impl::abi_json_to_bin( const abi_json_to
 
 abi_bin_to_json_result chain_api_plugin_impl::abi_bin_to_json( const abi_bin_to_json_params& params )const {
    abi_bin_to_json_result result;
-   const auto& code_account = chain_controller_.chaindb().get<chain::account_object, chain::by_name>( params.code );
+   const auto& code_account = chain_controller_.chaindb().get<chain::account_object>( params.code );
    chain::abi_def abi;
    if( chain::abi_serializer::to_abi(code_account.abi, abi) ) {
       chain::abi_serializer abis( abi, abi_serializer_max_time_);
@@ -576,7 +571,7 @@ get_table_rows_result chain_api_plugin_impl::walk_table_row_range(const get_tabl
 
     for(unsigned int count = 0;
         cur_time <= end_time && count < p.limit && itr.pk != end_pk;
-        itr.pk = chaindb.next(cursor), ++count, cur_time = fc::time_point::now()
+        ++itr, ++count, cur_time = fc::time_point::now()
     ) {
         if (p.show_payer && *p.show_payer) {
             const auto object = chaindb.object_at_cursor(cursor);
@@ -589,7 +584,7 @@ get_table_rows_result chain_api_plugin_impl::walk_table_row_range(const get_tabl
                 ("in_ram",  object.service.in_ram);
             result.rows.push_back(std::move(value));
         } else {
-            result.rows.push_back(chaindb.value_at_cursor(cursor));
+            result.rows.push_back(chaindb.object_at_cursor(cursor).value);
         }
     }
 
@@ -655,11 +650,9 @@ std::vector<chain::asset> chain_api_plugin_impl::get_currency_balance( const get
 
     auto accounts_it = chaindb.begin(request);
 
-    const auto next_request = cyberway::chaindb::cursor_request{p.code, accounts_it.cursor};
+    for (; accounts_it.pk != cyberway::chaindb::primary_key::End; ++accounts_it) {
 
-    for (; accounts_it.pk != cyberway::chaindb::primary_key::End; accounts_it.pk = chaindb.next(next_request)) {
-
-        const auto value = chaindb.value_at_cursor({p.code, accounts_it.cursor});
+        const auto value = chaindb.object_at_cursor({p.code, accounts_it.cursor}).value;
 
         const auto balance_object = value["balance"];
         eosio::chain::asset asset_value;
@@ -688,7 +681,7 @@ fc::variant chain_api_plugin_impl::get_currency_stats( const get_currency_stats_
         return {};
     }
 
-    const auto currency_stat_object = chaindb.value_at_cursor({p.code, itr.cursor});
+    const auto currency_stat_object = chaindb.object_at_cursor({p.code, itr.cursor}).value;
 
     chain::asset supply;
     fc::from_variant(currency_stat_object["supply"], supply);
@@ -706,69 +699,62 @@ static float64_t to_softfloat64( double d ) {
 }
 
 get_producers_result chain_api_plugin_impl::get_producers( const get_producers_params& p ) const {
-    auto& chaindb = chain_controller_.chaindb();
-
-    const cyberway::chaindb::index_request request{N(cyber.govern), N(cyber.govern), N(producer), cyberway::chaindb::names::primary_index};
-
-    auto producers_it = chaindb.begin(request);
-    cyberway::chaindb::cursor_request cursor_req{N(cyber.govern), producers_it.cursor};
+    
+    static const auto token_code = chain::symbol(CORE_SYMBOL).to_symbol_code();
+    
+    std::set<chain::account_name> active_producers;
+    for (auto& p : chain_controller_.active_producers().producers) {
+        active_producers.insert(p.producer_name);
+    }
+    
     std::vector<fc::variant> rows;
     std::string next_producer;
-    uint64_t total_votes = 0;
-
-    for (size_t count = 0; producers_it.pk != cyberway::chaindb::primary_key::End; producers_it.pk = chaindb.next(cursor_req)) {
-
-        const auto value = chaindb.value_at_cursor(cursor_req);
-        const auto account = value["account"].as_string();
-        const auto votes = value["votes"].as_int64();
-
-        if (votes >= 0) {
-            total_votes += votes;
+    
+    auto& db = chain_controller_.chaindb();
+    auto cands_table = db.get_table<chain::stake_candidate_object>();
+    auto cands_idx = cands_table.get_index<chain::stake_candidate_object::by_key>();
+    
+    auto cand_itr = cands_idx.lower_bound(chain::stake::agent_key(token_code, chain::string_to_name(p.lower_bound.c_str())));
+    auto count = 0;
+    while ((cand_itr != cands_idx.end()) && (cand_itr->token_code == token_code)) {
+        if (count == p.limit) {
+            next_producer = cand_itr->account.to_string();
+            break;
         }
-
-        if (account < p.lower_bound || count >= p.limit) {
-            if (count == p.limit) {
-                next_producer = account;
-            }
-            continue;
-        }
-
-        const auto key = get_agent_public_key(account);
-        const bool is_active = value["commencement_block"].as_uint64() != 0;
-
-        auto producer_info = fc::mutable_variant_object()("owner", account)
-                                                         ("total_votes", votes)
-                                                         ("producer_key", key)
+        auto producer_info = fc::mutable_variant_object()("owner", cand_itr->account)
+                                                         ("total_votes", cand_itr->votes)
+                                                         ("producer_key", cand_itr->signing_key)
                                                          ("url", "");
-
-        if (is_active) {
+        if (active_producers.find(cand_itr->account) != active_producers.end()) {
             producer_info["is_active"] = 1;
             producer_info["last_claim_time"] = fc::time_point();
         }
         rows.emplace_back(producer_info);
+        
         ++count;
+        ++cand_itr;
     }
-
+    
+    const chain::stake_stat_object* stat = db.find<chain::stake_stat_object, by_id>(token_code.value);
+    uint64_t total_votes = (stat && (stat->total_votes > 0)) ? stat->total_votes : 0;
     return {rows, total_votes, next_producer};
-
-
-    if (p.lower_bound.empty()) {
-    } else {
-        chaindb.lower_bound(request, fc::mutable_variant_object()("name", p.lower_bound));
-    }
 }
 
-std::string chain_api_plugin_impl::get_agent_public_key(chain::account_name account) const {
+std::string chain_api_plugin_impl::get_agent_public_key(chain::account_name account, chain::symbol symbol) const {
     auto& chaindb = chain_controller_.chaindb();
 
     const cyberway::chaindb::index_request request{N(), N(), N(stake.agent), N(bykey)};
 
-    const auto it = chaindb.lower_bound(request, fc::mutable_variant_object()("token_code", chain::symbol(CORE_SYMBOL).to_symbol_code())("account", account));
+    const auto it = chaindb.lower_bound(request, fc::mutable_variant_object()("token_code", symbol.to_symbol_code())("account", account));
 
     if (it.pk != cyberway::chaindb::primary_key::End) {
-        return chaindb.value_at_cursor({N(), it.cursor})["signing_key"].as_string();
+        return chaindb.object_at_cursor({N(), it.cursor}).value["signing_key"].as_string();
     }
     return "";
+}
+
+std::string chain_api_plugin_impl::get_agent_public_key(const get_agent_public_key_params& params) const {
+    return get_agent_public_key(params.account, params.symbol);
 }
 
 get_producer_schedule_result chain_api_plugin_impl::get_producer_schedule( const get_producer_schedule_params& p ) const {
@@ -780,6 +766,49 @@ get_producer_schedule_result chain_api_plugin_impl::get_producer_schedule( const
    if(proposed && !proposed->producers.empty())
       to_variant(*proposed, result.proposed);
    return result;
+}
+
+get_proxy_status_result chain_api_plugin_impl::get_proxy_status(const get_proxy_status_params& params) const {
+    const auto token_code = params.symbol.to_symbol_code();
+
+    const auto grantors_count = get_grantors_count(params.account, token_code);
+    const auto proxy_level = get_proxy_level(params.account, token_code);
+
+    return {params.account, params.symbol, proxy_level, grantors_count};
+}
+
+uint32_t chain_api_plugin_impl::get_grantors_count(chain::account_name account, chain::symbol_code token_code) const {
+    auto& chaindb = chain_controller_.chaindb();
+
+    auto grants_table = chaindb.get_table<eosio::chain::stake_grant_object>();
+    auto grants_idx = grants_table.get_index<eosio::chain::stake_grant_object::by_key>();
+
+    auto grant_itr = grants_idx.lower_bound(eosio::chain::stake::grant_key(token_code, account));
+
+    uint32_t count = 0;
+    for (;grant_itr != grants_idx.end() && grant_itr->token_code == token_code && grant_itr->grantor_name == account; ++grant_itr, ++count);
+    return count;
+}
+
+uint8_t chain_api_plugin_impl::get_proxy_level(chain::account_name account, chain::symbol_code token_code) const {
+    auto& chaindb = chain_controller_.chaindb();
+
+    auto agents_table = chaindb.get_table<eosio::chain::stake_agent_object>();
+    auto agents_idx = agents_table.get_index<eosio::chain::stake_agent_object::by_key>();
+
+    auto agents_itr = agents_idx.lower_bound(eosio::chain::stake::agent_key(token_code, account));
+
+    EOS_ASSERT(agents_itr != agents_idx.end(), chain::action_validate_exception, "Account ${account} is not an agent", ("account", account));
+
+    return agents_itr->proxy_level;
+}
+
+std::vector<uint8_t> chain_api_plugin_impl::get_proxylevel_limits(const get_proxylevel_limits_params& params) const {
+    auto& chaindb = chain_controller_.chaindb();
+
+    auto params_table = chaindb.get_table<eosio::chain::stake_param_object>();
+    auto stake_param = params_table.get(params.symbol.to_symbol_code());
+    return stake_param.max_proxies;
 }
 
 auto find_scheduled_transacions_begin(cyberway::chaindb::chaindb_controller& chaindb, const get_scheduled_transactions_params& p) {
@@ -875,7 +904,10 @@ void chain_api_plugin::plugin_startup() {
       CREATE_READ_HANDLER((*my), abi_bin_to_json, 200),
       CREATE_READ_HANDLER((*my), get_required_keys, 200),
       CREATE_READ_HANDLER((*my), get_transaction_id, 200),
-      CREATE_READ_HANDLER((*my), resolve_names, 200)
+      CREATE_READ_HANDLER((*my), get_agent_public_key, 200),
+      CREATE_READ_HANDLER((*my), resolve_names, 200),
+      CREATE_READ_HANDLER((*my), get_proxy_status, 200),
+      CREATE_READ_HANDLER((*my), get_proxylevel_limits, 200)
     });
 }
 

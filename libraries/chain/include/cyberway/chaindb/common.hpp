@@ -4,10 +4,15 @@
 
 #include <eosio/chain/types.hpp>
 #include <eosio/chain/abi_def.hpp>
+#include <eosio/chain/config.hpp>
+
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
 #include <cyberway/chaindb/typed_name.hpp>
 
 namespace cyberway { namespace chaindb {
+
+    namespace config = eosio::chain::config;
 
     using revision_t = int64_t;
     static constexpr revision_t impossible_revision = (-1);
@@ -16,8 +21,14 @@ namespace cyberway { namespace chaindb {
 
     using cursor_t = int32_t;
     static constexpr cursor_t invalid_cursor = (0);
+    static constexpr cursor_t end_cursor     = (-1);
+    static constexpr cursor_t begin_cursor   = (-2);
+    static constexpr cursor_t ram_cursor     = (-3);
 
     using std::string;
+
+    using fc::blob;
+    using fc::variant;
 
     using eosio::chain::account_name;
     using eosio::chain::table_name;
@@ -27,6 +38,8 @@ namespace cyberway { namespace chaindb {
     using eosio::chain::order_def;
     using eosio::chain::field_name;
     using eosio::chain::type_name;
+    using eosio::chain::event_name;
+    using eosio::chain::bytes;
 
     using primary_key_t  = primary_key::value_type;
     using table_name_t   = table_name::value_type;
@@ -34,10 +47,14 @@ namespace cyberway { namespace chaindb {
     using account_name_t = account_name::value_type;
     using scope_name_t   = scope_name::value_type;
 
+    struct service_state;
+
     struct table_request final {
         const account_name_t code  = 0;
         const scope_name_t   scope = 0;
         const table_name_t   table = 0;
+
+        service_state to_service(primary_key_t pk = primary_key::Unset) const;
     }; // struct table_request
 
     struct index_request final {
@@ -49,6 +66,8 @@ namespace cyberway { namespace chaindb {
         operator table_request() const {
             return {code, scope, table};
         }
+
+        service_state to_service(primary_key_t pk = primary_key::Unset) const;
     }; // struct index_request
 
     struct cursor_request final {
@@ -61,36 +80,44 @@ namespace cyberway { namespace chaindb {
         // TODO: RocksDB
     };
 
-    class chaindb_controller;
-    class abi_info;
+    class  chaindb_controller;
+    class  cache_map;
+    class  driver_interface;
+    class  journal;
+    class  value_verifier;
+    class  undo_stack;
+    struct cache_object;
+    struct table_info;
+    struct index_info;
+    struct undo_stack_impl;
+    struct account_abi_info;
+    struct system_abi_info;
+    struct system_abi_info_impl;
 
-    using abi_map = std::map<account_name /* code */, abi_info>;
-
-    struct table_info {
-        const account_name_t code     = 0;
-        const scope_name_t   scope    = 0;
-        const table_def*     table    = nullptr;
-        const order_def*     pk_order = nullptr;
-        const abi_info*      abi      = nullptr;
-
-        table_info(account_name_t c, scope_name_t s)
-        : code(c), scope(s) {
-        }
-    }; // struct table_info
-
-    struct index_info: public table_info {
-        const index_def* index = nullptr;
-
-        using table_info::table_info;
-
-        index_info(const table_info& src)
-        : table_info(src) {
-        }
-    }; // struct index_info
+    using cache_object_ptr = boost::intrusive_ptr<cache_object>;
 
     struct find_info final {
-        cursor_t      cursor = invalid_cursor;
-        primary_key_t pk     = primary_key::End;
+        find_info(cursor_t cursor, primary_key_t pk, cache_object_ptr object_ptr, const chaindb_controller& controller, account_name_t code);
+        find_info(const chaindb_controller& controller, account_name_t code);
+
+        find_info(find_info&& other) noexcept;
+
+        bool operator == (cursor_t cursor) const;
+        find_info& operator = (find_info&& other) noexcept;
+        find_info& operator ++ ();
+        find_info& operator -- ();
+
+        find_info clone() const;
+        bool is_cursor_initialized() const;
+
+        ~find_info();
+
+        cursor_t cursor = cyberway::chaindb::invalid_cursor;
+        primary_key_t pk = cyberway::chaindb::primary_key::End;
+        cache_object_ptr object_ptr;
+        const chaindb_controller& controller;
+        const account_name_t code;
+
     }; // struct find_info
 
     class chaindb_session final {
@@ -118,7 +145,7 @@ namespace cyberway { namespace chaindb {
         }
 
     private:
-        friend class chaindb_controller;
+        friend struct chaindb_controller_impl;
 
         chaindb_session(chaindb_controller&, revision_t);
 

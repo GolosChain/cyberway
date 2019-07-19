@@ -2,7 +2,6 @@
 #include "genesis_create.hpp"
 #include "state_reader.hpp"
 #include "golos_objects.hpp"
-#include "supply_distributor.hpp"
 #include "serializer.hpp"
 #include "genesis_generate_name.hpp"
 #include <eosio/chain/config.hpp>
@@ -10,6 +9,7 @@
 #include <eosio/chain/resource_limits.hpp>
 #include <eosio/chain/stake_object.hpp>
 #include <eosio/chain/int_arithmetic.hpp>
+#include <cyberway/chain/cyberway_contract_types.hpp>
 #include <fc/io/raw.hpp>
 #include <fc/variant.hpp>
 #include <boost/filesystem/path.hpp>
@@ -20,7 +20,6 @@
 // suppose name generation is slower than flat_map access by idx
 #define CACHE_GENERATED_NAMES
 
-
 namespace fc { namespace raw {
 
 template<typename T> void unpack(T& s, cyberway::golos::comment_object& c) {
@@ -29,6 +28,8 @@ template<typename T> void unpack(T& s, cyberway::golos::comment_object& c) {
     fc::raw::unpack(s, c.parent_permlink);
     fc::raw::unpack(s, c.author);
     fc::raw::unpack(s, c.permlink);
+    fc::raw::unpack(s, c.depth);
+    fc::raw::unpack(s, c.children);
     fc::raw::unpack(s, c.mode);
     if (c.mode != cyberway::golos::comment_mode::archived) {
         fc::raw::unpack(s, c.active);
@@ -45,7 +46,6 @@ using namespace cyberway::chaindb;
 using perm_id_t = authorization_manager::permission_id_type;
 
 
-constexpr uint64_t accounts_tbl_start_id = 7;           // some accounts created natively by node, this value is starting autoincrement for tables
 constexpr uint64_t permissions_tbl_start_id = 17;       // Note: usage_id is id-1
 
 
@@ -56,9 +56,12 @@ uint128_t to_fwide(uint128_t value) { return value << fixp_fract_digits; }
 // Golos state holds uint128 as pair of uint64 values in Big Endian order: high, then low, incompatible with __int128
 uint128_t fix_fc128(uint128_t x)    { return (x << 64) | (x >> 64); }
 
-string pubkey_string(const golos::public_key_type& k, bool prefix = true);
+string pubkey_string(const golos::public_key_type& k);
+public_key_type pubkey_from_golos(const golos::public_key_type& k) {
+    // can't construct public key directly, constructor is private. transform to string first:
+    return public_key_type(pubkey_string(k));
+}
 asset golos2sys(const asset& golos);
-
 
 struct genesis_create::genesis_create_impl final {
     genesis_info _info;
@@ -71,7 +74,8 @@ struct genesis_create::genesis_create_impl final {
     vector<string> _plnk_map;
 
     state_object_visitor _visitor;
-    asset _total_staked;
+    asset _total_staked = asset();
+    asset _sys_supply = asset();
 
     export_info _exp_info;
 
@@ -88,6 +92,18 @@ struct genesis_create::genesis_create_impl final {
         return generate_name(_accs_map[idx]);
     }
 #endif
+    name name_by_username(const std::string& username) {
+        if (username[0] == '~') {
+            auto itr = std::find(_accs_map.begin(), _accs_map.end(), username.substr(1,std::string::npos));
+            EOS_ASSERT(itr != _accs_map.end(), genesis_exception, "User ${username} doesn't exist", ("username",username));
+            return name_by_idx(itr - _accs_map.begin());
+        } else {
+            eosio::chain::name name{username};
+            auto itr = std::find_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& acc){return acc.name == name;});
+            EOS_ASSERT(itr != _info.accounts.end(), genesis_exception, "Account ${username} doesn't exist", ("username",username));
+            return name;
+        }
+    }
     name name_by_acc(const golos::account_name_type& acc) {
         return name_by_idx(acc.id.value);
     }
@@ -95,14 +111,22 @@ struct genesis_create::genesis_create_impl final {
         return name_by_idx(_visitor.acc_id2idx[id]);
     }
 
+    supply_distributor get_gbg_to_golos_converter() {
+        const auto& gp = _visitor.gpo;
+        golos::price price;
+        if (gp.is_forced_min_price) {
+            // This price limits SBD to 10% market cap
+            price = golos::price{asset(9 * gp.current_sbd_supply.get_amount(), symbol(GBG)), gp.current_supply};
+        } else {
+            EOS_ASSERT(false, genesis_exception, "Not implemented");
+        }
+        supply_distributor to_gls(price.quote, price.base);
+        return to_gls;
+    }
 
     genesis_create_impl() {
         db.set_autoincrement<permission_object>(permissions_tbl_start_id);
         db.set_autoincrement<permission_usage_object>(permissions_tbl_start_id-1);
-
-        db.set_autoincrement<account_object>(accounts_tbl_start_id);
-        db.set_autoincrement<account_sequence_object>(accounts_tbl_start_id);
-        db.set_autoincrement<resource_usage_object>(accounts_tbl_start_id);
     }
 
     template<typename T, typename Lambda>
@@ -114,14 +138,15 @@ struct genesis_create::genesis_create_impl final {
         db.start_section(config::system_account_name, N(account), "account_object", l);
         for (const auto& acc: accounts) {
             auto n = get_name(acc);
-            db.emplace<account_object>(n, [&](auto& a) {
-                a.name = n;
+            db.emplace<account_object>(n, n, [&](auto& a) {
                 a.creation_date = ts;
                 if (_contracts.count(n) > 0) {
                     const auto& abicode = _contracts[n];
                     if (abicode.update) {
-                        a.id = -1;
                         updated_accs.insert(n);
+                    }
+                    if (abicode.privileged) {
+                        a.privileged = abicode.privileged;
                     }
                     if (abicode.abi.size()) {
                         a.abi = abicode.abi;
@@ -143,9 +168,7 @@ struct genesis_create::genesis_create_impl final {
         for (const auto& acc: accounts) {
             auto n = get_name(acc);
             if (updated_accs.count(n) == 0) {
-                db.emplace<account_sequence_object>(n, [&](auto& a) {
-                    a.name = n;
-                });
+                db.emplace<account_sequence_object>(n, n, [&](auto& a) {});
             }
         }
 
@@ -153,8 +176,7 @@ struct genesis_create::genesis_create_impl final {
         for (const auto& acc: accounts) {
             auto n = get_name(acc);
             if (updated_accs.count(n) == 0) {
-                db.emplace<resource_usage_object>(n, [&](auto& u) {
-                    u.owner = n;
+                db.emplace<resource_usage_object>(n, n, [&](auto& u) {
                     u.accumulators.resize(resource_limits::resources_num);
                 });
             }
@@ -173,6 +195,21 @@ struct genesis_create::genesis_create_impl final {
             p.auth         = std::move(auth);
         });
         return perm;
+    }
+
+    void parse_and_store_permissions(account_name n, const std::vector<genesis_info::permission>& permissions, uint64_t& id, std::map<permission_name,perm_id_t>& parents, const public_key_type& initial_key) {
+        const uint64_t max_custom_parent_id = 100;            // this should be enough to cover build-in permissions
+        for (const auto& p: permissions) {
+            const auto& auth = p.make_authority(initial_key, n);
+            auto parent = p.get_parent();
+            bool root = parent == eosio::chain::name();
+            bool custom_parent = !root && parent.value < max_custom_parent_id;
+            EOS_ASSERT(root || custom_parent || parents.count(parent) > 0, genesis_exception,
+                    "Parent ${pa} not found for permission ${p} of account ${a}", ("a",n)("p",p.name)("pa",p.parent));
+            perm_id_t parent_id = root ? perm_id_t(0) : custom_parent ? perm_id_t(parent.value) : parents[parent];
+            const auto& perm = store_permission(n, p.name, parent_id, auth, id++);
+            parents[p.name] = perm.id;
+        }
     }
 
     void store_contracts() {
@@ -200,18 +237,7 @@ struct genesis_create::genesis_create_impl final {
         public_key_type system_key(_conf.initial_key);
         for (const auto& acc: _info.accounts) {
             std::map<permission_name,perm_id_t> parents;
-            for (const auto& p: acc.permissions) {
-                const auto n = acc.name;
-                const auto& auth = p.make_authority(system_key, n);
-                auto parent = p.get_parent();
-                bool root = parent == name();
-                bool custom_parent = !root && parent.value < max_custom_parent_id;
-                EOS_ASSERT(root || custom_parent || parents.count(parent) > 0, genesis_exception,
-                    "Parent ${pa} not found for permission ${p} of account ${a}", ("a",n)("p",p.name)("pa",p.parent));
-                perm_id_t parent_id = root ? 0 : custom_parent ? parent.value : parents[parent];
-                const auto& perm = store_permission(n, p.name, parent_id, auth, usage_id++);
-                parents[p.name] = perm.id;
-            }
+            parse_and_store_permissions(acc.name, acc.permissions, usage_id, parents, _conf.initial_key);
         }
         ilog("Done.");
     }
@@ -266,13 +292,26 @@ struct genesis_create::genesis_create_impl final {
         });
 
         // fill auths
+        uint64_t added_perms = 0;
+        for (auto& a: _info.transit_account_authorities) {
+            EOS_ASSERT(a.username[0] == '~', genesis_exception, "Only transit users allowed");
+            added_perms += a.permissions.size();
+            a.name = name_by_username(a.username);
+        }
+
         uint64_t usage_id = db.get_autoincrement<permission_usage_object>();
         const int permissions_per_account = 3;          // owner+active+posting
-        const auto perms_l = _visitor.auths.size() * permissions_per_account;
+        const auto perms_l = _visitor.auths.size() * permissions_per_account + added_perms;
         db.start_section(config::system_account_name, N(permusage), "permission_usage_object", perms_l);
         for (const auto a: _visitor.auths) {
             const auto n = name_by_acc(a.account);
-            for (int i = 0; i < permissions_per_account; i++) {
+            uint64_t added = 0;
+            auto itr = std::find_if(_info.transit_account_authorities.begin(), _info.transit_account_authorities.end(),
+                    [&](const auto& acc) {return acc.name == n;});
+            if (itr != _info.transit_account_authorities.end()) {
+                added = itr->permissions.size();
+            }
+            for (int i = 0; i < permissions_per_account + added; i++) {
                 db.emplace<permission_usage_object>(n, [&](auto& p) {
                     p.last_used = _conf.initial_timestamp;
                 });
@@ -284,12 +323,10 @@ struct genesis_create::genesis_create_impl final {
             const auto n = a.account.str(_accs_map);
             auto convert_authority = [&](permission_name perm, const golos::shared_authority& a, name recovery = {}) {
                 bool recoverable = recovery != name() && a.weight_threshold == 1 && a.account_auths.size() == 0;
-                uint32_t threshold = recoverable ? 2 : a.weight_threshold;
+                uint32_t threshold = recoverable ? 3 : n == "temp" ? 1 : a.weight_threshold;
                 vector<key_weight> keys;
                 for (const auto& k: a.key_auths) {
-                    // can't construct public key directly, constructor is private. transform to string first:
-                    const auto key = pubkey_string(k.first);
-                    keys.emplace_back(key_weight{public_key_type(key), k.second});
+                    keys.emplace_back(key_weight{pubkey_from_golos(k.first), recoverable ? weight_type{2} : k.second});
                 }
                 vector<permission_level_weight> accounts;
                 for (const auto& p: a.account_auths) {
@@ -318,7 +355,16 @@ struct genesis_create::genesis_create_impl final {
             const auto& active = store_permission(name, config::active_name, owner.id, act, usage_id++);
             const auto& posting= store_permission(name, posting_auth_name, active.id, post, usage_id++);
 
-            // TODO: do we need memo key ? #651
+            auto itr = std::find_if(_info.transit_account_authorities.begin(), _info.transit_account_authorities.end(),
+                    [&](const auto& acc) {return acc.name == name;});
+            if (itr != _info.transit_account_authorities.end()) {
+                std::map<permission_name,perm_id_t> parents = {
+                        {config::owner_name, owner.id},
+                        {config::active_name, active.id}, 
+                        {posting_auth_name, posting.id}
+                };
+                parse_and_store_permissions(name, itr->permissions, usage_id, parents, _conf.initial_key);
+            }
         }
 
         // link posting permission with gls.publish and gls.social
@@ -362,7 +408,8 @@ struct genesis_create::genesis_create_impl final {
                 ("owner", n)
                 ("name", s)
                 ("created", acc.created)
-                ("last_update", acc.last_account_update);
+                ("last_update", acc.last_account_update)
+                ("reputation", _visitor.reputations[auth.account.id]);
         }
 
         _visitor.auths.clear();
@@ -371,33 +418,25 @@ struct genesis_create::genesis_create_impl final {
 
     void store_stakes() {
         ilog("Creating staking agents and grants...");
-        _total_staked = golos2sys(_visitor.gpo.total_vesting_fund_steem);
+        EOS_ASSERT(_total_staked != asset(), genesis_exception, "SYSTEM: _total_staked not initialized");
+        EOS_ASSERT(_sys_supply != asset(), genesis_exception, "SYSTEM: _sys_supply not initialized");
         const auto sys_sym = asset().get_symbol();
+        const auto inf = _info.params.stake;
 
-        db.start_section(config::system_account_name, N(stake.stat), "stake_stat_object", 1);
-        db.emplace<stake_stat_object>(config::system_account_name, [&](auto& s) {
-            s.id = sys_sym.to_symbol_code().value;
-            s.token_code = sys_sym.to_symbol_code();
-            s.total_staked = _total_staked.get_amount();
-            s.last_reward = time_point_sec();
-            s.enabled = false;      // ?
-        });
         db.start_section(config::system_account_name, N(stake.param), "stake_param_object", 1);
         db.emplace<stake_param_object>(config::system_account_name, [&](auto& p) {
-            const auto inf = _info.params.stake;
             p.id = sys_sym.to_symbol_code().value;
             p.token_symbol = sys_sym;
             p.max_proxies = inf.max_proxies;
-            p.payout_step_length = inf.payout_step_length;
-            p.payout_steps_num = inf.payout_steps_num;
             p.min_own_staked_for_election = inf.min_own_staked_for_election;
+            p.depriving_window = inf.depriving_window;
         });
 
         // first prepare staking balances and sort agents by level. keys and proxy info required to do this
         fc::flat_map<acc_idx,public_key_type> keys;         // agent:key
         auto hf = _info.params.require_hardfork;
         for (const auto& w: _visitor.witnesses) {
-            auto key = public_key_type(pubkey_string(w.signing_key));
+            auto key = pubkey_from_golos(w.signing_key);
             if (hf && key != public_key_type()) {
                 // the following cases exist:
                 //  1. running version == required
@@ -440,7 +479,7 @@ struct genesis_create::genesis_create_impl final {
             }
         };
         using agents_map = fc::flat_map<acc_idx,agent>;
-        std::vector<agents_map> agents_by_level{5};
+        std::vector<agents_map> agents_by_level{_info.params.stake.max_proxies.size() + 1};
         auto find_proxy_level = [&](acc_idx a) {
             uint8_t l = 0;
             if (keys.count(a)) {
@@ -540,7 +579,7 @@ struct genesis_create::genesis_create_impl final {
             db.emplace<stake_grant_object>(g.from, [&](auto& o) {
                 o.token_code = sys_sym.to_symbol_code(),
                 o.grantor_name = g.from,
-                o.agent_name = g.to,
+                o.recipient_name = g.to,
                 o.pct = g.pct,
                 o.share = g.granted;
                 o.break_fee = config::percent_100;
@@ -548,16 +587,85 @@ struct genesis_create::genesis_create_impl final {
             });
         }
 
-        db.start_section(config::system_account_name, N(stake.agent), "stake_agent_object", _visitor.vests.size());
+        struct delegate {
+            bool used = false;
+            uint64_t provided = 0;
+            uint64_t received = 0;
+        };
+        std::map<name,delegate> delegatemap;
+        uint64_t delegateid = 0;
+        db.start_section(config::stake_account_name, N(provision), "provision_struct", _info.delegateuse.size());
+        for (const auto& item: _info.delegateuse) {
+            EOS_ASSERT(item.from != item.to, genesis_exception, "From and to can't be equal");
+            EOS_ASSERT(1 == std::count_if(_info.delegateuse.begin(), _info.delegateuse.end(), [&](const auto& dlg) {return dlg.from == item.from && dlg.to == item.to;}),
+                    genesis_exception, "Duplicate delegateuse item with ${from}:${to}", ("from", item.from)("to", item.to));
+            name from = name_by_username(item.from);
+            name to = name_by_username(item.to);
+            asset quantity;
+            if (item.quantity[item.quantity.length()-1] == '%') {
+                int64_t percent = boost::lexical_cast<float>(item.quantity.substr(0, item.quantity.length()-1))*100;
+                if (item.from[0] == '~') {
+                    bool found = false;
+                    for (const auto& abl: agents_by_level) {
+                        for (auto& ag: abl) {
+                            auto& acc = ag.second;
+                            if (acc.name != from) continue;
+                            auto total_funds = acc.balance + acc.proxied;
+                            if (total_funds != 0) {
+                                auto own_funds = int_arithmetic::safe_prop(total_funds, acc.own_share, acc.shares_sum);
+                                quantity += asset(int_arithmetic::safe_prop(own_funds, percent, 10000l));
+                            }
+                            found = true;
+                            break;
+                        }
+                        if (found) break;
+                    }
+                } else {
+                    auto acc = std::find_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& a){return a.name == from;});
+                    EOS_ASSERT(acc != _info.accounts.end(), genesis_exception, "Can't find account ${name}", ("name", from));
+                    EOS_ASSERT(acc->sys_staked, genesis_exception, "Account ${name} doesn't has staked funds", ("name", from));
+                    quantity += asset(int_arithmetic::safe_prop(acc->sys_staked->get_amount(), percent, 10000l));
+                }
+            } else {
+                quantity += asset::from_string(item.quantity);
+            }
+            EOS_ASSERT(quantity.get_amount() > 0, genesis_exception, "Delegateuse ${from}:${to} provide empty funds (${quantity})",
+                    ("from", item.from)("to", item.to)("quantity", item.quantity));
+            delegatemap[from].provided += quantity.get_amount();
+            delegatemap[to  ].received += quantity.get_amount();
+            db.insert(delegateid, config::stake_account_name, mvo()
+                ("id", delegateid)
+                ("token_code", sys_sym.to_symbol_code())
+                ("grantor_name", from)
+                ("recipient_name", to)
+                ("amount", (int64_t)quantity.get_amount()));
+            delegateid++;
+        }
+
+        uint64_t n_delegate_agents = delegatemap.size() - 
+                std::count_if(_visitor.vests.begin(), _visitor.vests.end(), [&](const auto& v){return delegatemap.count(name_by_idx(v.first));}) -
+                std::count_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& a){return a.sys_staked && delegatemap.count(a.name);});
+
+        auto get_delegated = [&](name n) {
+            auto itr = delegatemap.find(n);
+            return itr != delegatemap.end() ? (itr->second.used=true,itr->second) : delegate();
+        };
+
+        int64_t total_votes = 0;
+        auto n_acc_agents = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& acc){return acc.sys_staked;});
+        db.start_section(config::system_account_name, N(stake.agent), "stake_agent_object", _visitor.vests.size() + n_acc_agents + n_delegate_agents);
         for (const auto& abl: agents_by_level) {
             for (auto& ag: abl) {
                 auto acc = ag.first;
                 auto& x = ag.second;
-                db.emplace<stake_agent_object>(x.name, [&](auto& a) {
+                if (!x.level) {
+                    total_votes += x.balance;
+                }
+                auto delegated = get_delegated(x.name);
+                auto agent = db.emplace<stake_agent_object>(x.name, [&](auto& a) {
                     a.token_code = sys_sym.to_symbol_code();
                     a.account = x.name;
                     a.proxy_level = x.level;
-                    a.votes = x.level ? -1 : x.balance;
                     a.last_proxied_update = _conf.initial_timestamp;
                     a.balance = x.balance;
                     a.proxied = x.proxied;
@@ -565,12 +673,101 @@ struct genesis_create::genesis_create_impl final {
                     a.shares_sum = x.shares_sum;
                     a.fee = config::percent_100;
                     a.min_own_staked = 0;
-                    a.signing_key =
-                        (x.own_staked() >= _info.params.stake.min_own_staked_for_election && keys.count(acc)) ?
-                            keys[acc] : public_key_type();
+                    a.provided = delegated.provided;
+                    a.received = delegated.received;
+                });
+                EOS_ASSERT(agent.get_own_funds() >= agent.provided, genesis_exception,
+                        "Agent ${account} provide more funds (${provided}) than has (${funds})",
+                        ("account", agent.account)("provided", agent.provided)("funds", agent.get_own_funds()));
+            }
+        }
+        for (const auto& acc: _info.accounts) {
+            if (acc.sys_staked) {
+                total_votes += acc.sys_staked->get_amount();
+                auto delegated = get_delegated(acc.name);
+                auto agent = db.emplace<stake_agent_object>(acc.name, [&](auto& a) {
+                    a.token_code = sys_sym.to_symbol_code();
+                    a.account = acc.name;
+                    a.proxy_level = acc.prod_key ? 0 : 1;
+                    a.last_proxied_update = _conf.initial_timestamp;
+                    a.balance = acc.sys_staked->get_amount();
+                    a.proxied = 0;
+                    a.own_share = acc.sys_staked->get_amount();
+                    a.shares_sum = acc.sys_staked->get_amount();
+                    a.fee = config::percent_100;
+                    a.min_own_staked = 0;
+                    a.provided = delegated.provided;
+                    a.received = delegated.received;
+                });
+                EOS_ASSERT(agent.get_own_funds() >= agent.provided, genesis_exception,
+                        "Agent ${account} provide more funds (${provided}) than has (${funds})",
+                        ("account", agent.account)("provided", agent.provided)("funds", agent.get_own_funds()));
+            }
+        }
+        for (const auto& v: delegatemap) {
+            if (v.second.used == false) {
+                auto agent = db.emplace<stake_agent_object>(v.first, [&](auto& a) {
+                    a.token_code = sys_sym.to_symbol_code();
+                    a.account = v.first;
+                    a.proxy_level = 1;
+                    a.last_proxied_update = _conf.initial_timestamp;
+                    a.balance = 0;
+                    a.proxied = 0;
+                    a.own_share = 0;
+                    a.shares_sum = 0;
+                    a.fee = config::percent_100;
+                    a.min_own_staked = 0;
+                    a.provided = v.second.provided;
+                    a.received = v.second.received;
+                });
+                EOS_ASSERT(agent.get_own_funds() >= agent.provided, genesis_exception,
+                        "Agent ${account} provide more funds (${provided}) than has (${funds})",
+                        ("account", agent.account)("provided", agent.provided)("funds", agent.get_own_funds()));
+            }
+        }
+
+        auto n_acc_cand = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& acc){return acc.prod_key;});
+        db.start_section(config::system_account_name, N(stake.cand), "stake_candidate_object", agents_by_level[0].size() + n_acc_cand);
+        const auto sys_supply = _sys_supply.get_amount();
+        for (auto& ag: agents_by_level[0]) {
+            auto acc = ag.first;
+            auto& x = ag.second;
+
+            bool enabled = (x.own_staked() >= _info.params.stake.min_own_staked_for_election && keys.count(acc));
+            db.emplace<stake_candidate_object>(x.name, [&](auto& a) {
+                a.token_code = sys_sym.to_symbol_code();
+                a.account = x.name;
+                a.latest_pick = _conf.initial_timestamp;
+                a.signing_key = enabled ? keys[acc] : public_key_type();
+                a.enabled = enabled;
+                a.set_votes(x.balance, sys_supply);
+            });
+        }
+        public_key_type system_key(_conf.initial_key);
+        for (const auto& acc: _info.accounts) {
+            if (acc.prod_key) {
+                auto balance = acc.sys_staked ? acc.sys_staked->get_amount() : 0;
+                db.emplace<stake_candidate_object>(acc.name, [&](auto& a) {
+                    a.token_code = sys_sym.to_symbol_code();
+                    a.account = acc.name;
+                    a.latest_pick = _conf.initial_timestamp;
+                    a.signing_key = *acc.prod_key == "INITIAL" ? system_key : public_key_type(*acc.prod_key);
+                    a.enabled = true;
+                    a.set_votes(balance, sys_supply);
                 });
             }
         }
+
+        db.start_section(config::system_account_name, N(stake.stat), "stake_stat_object", 1);
+        db.emplace<stake_stat_object>(config::system_account_name, [&](auto& s) {
+            s.id = sys_sym.to_symbol_code().value;
+            s.token_code = sys_sym.to_symbol_code();
+            s.total_staked = _total_staked.get_amount();
+            s.total_votes = total_votes;
+            s.last_reward = time_point_sec();
+            s.enabled = inf.enabled;
+        });
+
         ilog("Done.");
     }
 
@@ -612,23 +809,14 @@ struct genesis_create::genesis_create_impl final {
 
         auto& data = _visitor;
         const auto& gp = data.gpo;
-        golos::price price;
-        if (gp.is_forced_min_price) {
-            // This price limits SBD to 10% market cap
-            price = golos::price{asset(9 * gp.current_sbd_supply.get_amount(), symbol(GBG)), gp.current_supply};
-        } else {
-            EOS_ASSERT(false, genesis_exception, "Not implemented");
-        }
-        supply_distributor to_gls(price.quote, price.base);     // flip price to convert GBG to GOLOS
+        auto to_gls = get_gbg_to_golos_converter();
         auto golos_from_gbg = to_gls.convert(gp.current_sbd_supply);
-        std::cout << "GBG 2 GOLOS = " << golos_from_gbg << std::endl;
+        std::cout << "GBG to GOLOS = " << golos_from_gbg << std::endl;
         to_gls.reset();
 
         // token stats
         const auto n_stats = 2;
         db.start_section(config::token_account_name, N(stat), "currency_stats", n_stats);
-
-        auto supply = gp.current_supply + golos_from_gbg;
         auto insert_stat_record = [&](const asset& supply, int64_t max_supply, name issuer) {
             const symbol& sym = supply.get_symbol();
             primary_key_t pk = sym.to_symbol_code();
@@ -641,22 +829,45 @@ struct genesis_create::genesis_create_impl final {
             return pk;
         };
 
-        auto sys_supply = golos2sys(supply - gp.total_reward_fund_steem);
-        auto sys_pk = insert_stat_record(sys_supply, _info.golos.sys_max_supply, config::system_account_name);
+        auto total_acc_balances = asset();
+        auto total_acc_staked = asset();
+        for (const auto& acc: _info.accounts) {
+            if (acc.sys_balance) {
+                total_acc_balances += *acc.sys_balance;
+            }
+            if (acc.sys_staked) {
+                total_acc_staked += *acc.sys_staked;
+            }
+        }
+
+        _total_staked = golos2sys(gp.total_vesting_fund_steem);
+        auto supply = gp.current_supply + golos_from_gbg;
+        auto base = golos2sys(supply - gp.total_reward_fund_steem) + total_acc_balances + total_acc_staked;
+        auto sys_supply = base.get_amount();
+        for (const auto& fund: _info.params.funds) {
+            sys_supply += int_arithmetic::safe_prop(base.get_amount(), fund.numerator, fund.denominator);
+        }
+        _sys_supply = asset(sys_supply, base.get_symbol());
+        auto sys_pk = insert_stat_record(_sys_supply, _info.golos.sys_max_supply, config::system_account_name);
         auto gls_pk = insert_stat_record(supply, _info.golos.max_supply, _info.golos.names.issuer);
 
         // vesting info
         db.start_section(_info.golos.names.vesting, N(stat), "vesting_stats", 1);
         primary_key_t vests_pk = VESTS >> 8;
-        db.insert(vests_pk, _info.golos.names.vesting, mvo
-            ("supply", asset(data.total_gests.get_amount(), symbol(VESTS)))
+        auto vesting_stat = mvo
+            ("supply", asset(data.total_gests.get_amount(), symbol(VESTS)));
+        db.insert(vests_pk, _info.golos.names.vesting, vesting_stat
             ("notify_acc", _info.golos.names.control)
         );
+        _exp_info.vesting_supply = vesting_stat;
 
         // funds
-        const auto n_balances = 3 + 2*data.gbg.size();
+        const auto n_acc_balances = std::count_if(_info.accounts.begin(), _info.accounts.end(), [](const auto& a) {return a.sys_balance;}); //
+        const auto n_balances = 3 + 2*data.gbg.size() + n_acc_balances + _info.params.funds.size();
         db.start_section(config::token_account_name, N(accounts), "account", n_balances);
-        auto insert_balance_record = [&](name account, const asset& balance, primary_key_t pk, fc::optional<acc_idx> acc_id = fc::optional<acc_idx>()) {
+        auto insert_balance_record = [&](name account, const asset& balance, primary_key_t pk,
+            fc::optional<acc_idx> acc_id = {}
+        ) {
             auto record = mvo
                 ("balance", balance)
                 ("payments", asset(0, balance.get_symbol()));
@@ -665,29 +876,40 @@ struct genesis_create::genesis_create_impl final {
                 _exp_info.balance_events.push_back(record("account", account));
             } else {
                 auto& acc_info = _exp_info.account_infos[*acc_id];
-                if (pk == gls_pk) {
-                    acc_info["balance"] = balance;
-                } else {
-                    acc_info["balance_in_sys"] = balance;
-                }
+                acc_info[pk == gls_pk ? "balance" : "balance_in_sys"] = balance;
             }
         };
-        insert_balance_record(config::stake_account_name, _total_staked, sys_pk);
+        insert_balance_record(config::stake_account_name, _total_staked + total_acc_staked, sys_pk);
         insert_balance_record(_info.golos.names.vesting, gp.total_vesting_fund_steem, gls_pk);
         insert_balance_record(_info.golos.names.posting, gp.total_reward_fund_steem, gls_pk);
+
+        for (const auto& fund: _info.params.funds) {
+            auto value = int_arithmetic::safe_prop(base.get_amount(), fund.numerator, fund.denominator);
+            insert_balance_record(fund.name, asset(value, base.get_symbol()), sys_pk);
+        }
+
+        for (const auto& acc: _info.accounts) {
+            if (acc.sys_balance) {
+                insert_balance_record(acc.name, *acc.sys_balance, sys_pk);
+            }
+        }
 
         // accounts GOLOS
         asset total_gls = asset(0, symbol(GLS));
         for (const auto& balance: data.gbg) {
             auto acc = balance.first;
             auto gbg = balance.second;
-            auto gls = data.gls[acc] + to_gls.convert(gbg);
+            auto gls = to_gls.convert(gbg);
+            _visitor.conv_gbg[acc].converted(gls);
+            _visitor.conv_gls[acc].finish();
+            gls += data.gls[acc];
             total_gls += gls;
             auto n = name_by_idx(acc);
             insert_balance_record(n, gls, gls_pk, acc);
             insert_balance_record(n, golos2sys(gls), sys_pk, acc);
             auto& acc_info = _exp_info.account_infos[acc];
             acc_info["vesting_shares"] = asset(data.vests[acc].vesting, symbol(VESTS));
+            acc_info["received_vesting_shares"] = asset(data.vests[acc].received, symbol(VESTS));
         }
         const auto liquid_supply = supply - (gp.total_vesting_fund_steem + gp.total_reward_fund_steem); // no funds
         std::cout << " Total sum of GOLOS + converted GBG = " << total_gls
@@ -710,6 +932,7 @@ struct genesis_create::genesis_create_impl final {
                 ("delegated", asset(vests.delegated, symbol(VESTS)))
                 ("received", asset(vests.received, symbol(VESTS)))
                 ("unlocked_limit", asset(0, symbol(VESTS)))
+                ("delegators", data.delegators[acc])
             );
         }
         ilog("Done.");
@@ -722,16 +945,15 @@ struct genesis_create::genesis_create_impl final {
         primary_key_t pk = 0;
         for (const auto& d: _visitor.delegations) {
             auto delegator = name_by_acc(d.delegator);
-            db.insert(pk, VESTS >> 8, delegator, mvo
-                ("id", pk)
+            auto delegation = mvo
                 ("delegator", delegator)
                 ("delegatee", name_by_acc(d.delegatee))
                 ("quantity", asset(d.vesting_shares.get_amount(), symbol(VESTS)))
                 ("interest_rate", d.interest_rate)
-                ("payout_strategy", int(d.payout_strategy))
-                ("min_delegation_time", d.min_delegation_time)
-            );
+                ("min_delegation_time", d.min_delegation_time);
+            db.insert(pk, VESTS >> 8, delegator, delegation("id", pk));
             pk++;
+            _exp_info.delegations.push_back(delegation);
         }
 
         db.start_section(_info.golos.names.vesting, N(rdelegation), "return_delegation",
@@ -822,6 +1044,7 @@ struct genesis_create::genesis_create_impl final {
         db.start_section(_info.golos.names.control, N(witnessvote), "witness_voter", _visitor.witness_votes.size());
         for (const auto& v: _visitor.witness_votes) {
             const auto& acc = v.first;
+            const auto n = name_by_idx(acc);
             const auto& votes = v.second;
             EOS_ASSERT(votes.size() <= 30, genesis_exception,
                 "Account `${a}` have ${n} witness votes, but max 30 allowed", ("a",_accs_map[acc])("n",votes.size()));
@@ -832,8 +1055,8 @@ struct genesis_create::genesis_create_impl final {
                 witnesses.emplace_back(name_by_idx(w));
                 weights[w] += vests;
                 vote_counts[w]++;
+                _exp_info.witness_votes[w].insert(n);
             }
-            const auto n = name_by_idx(acc);
             db.insert(n.value, _info.golos.names.control, n, mvo
                 ("voter", n)
                 ("witnesses", witnesses)
@@ -844,13 +1067,16 @@ struct genesis_create::genesis_create_impl final {
         for (const auto& w : _visitor.witnesses) {
             const auto n = name_by_acc(w.owner);
             primary_key_t pk = n.value;
-            db.insert(pk, _info.golos.names.control, n, mvo
+            auto witness = mvo
                 ("name", n)
                 ("url", w.url)
                 ("active", true)
-                ("total_weight", w.votes)
+                ("total_weight", w.votes);
+            db.insert(pk, _info.golos.names.control, n, witness
                 ("counter_votes", vote_counts[w.owner.id])
             );
+            _exp_info.witnesses[w.owner.id] = witness;
+
             if (weights[w.owner.id] != w.votes) {
                 wlog("Witness `${a}` .votes value ${w} ≠ ${c}",
                     ("a",w.owner.str(_accs_map))("w",w.votes)("c",weights[w.owner.id]));
@@ -866,6 +1092,8 @@ struct genesis_create::genesis_create_impl final {
 
     void store_posts() {
         ilog("Creating reward pool, posts & votes...");
+
+        primary_key_t pool_date = 0;
 
         // first create lookup table to find author by post id
         fc::flat_map<uint64_t, name> authors;           // post_id:name
@@ -883,7 +1111,6 @@ struct genesis_create::genesis_create_impl final {
                 delegators.emplace_back(mvo
                     ("delegator", name_by_acc(d.account))
                     ("interest_rate", d.interest_rate)
-                    ("payout_strategy", int(d.payout_strategy))
                 );
             }
             auto cid = v.comment;
@@ -908,36 +1135,12 @@ struct genesis_create::genesis_create_impl final {
                 ("delegators", delegators)
                 ("curatorsw", w)
                 ("rshares", v.rshares)
+                ("paid_amount", 0)
             );
             pk++;
         }
         // store messages
         const int n = _visitor.comments.size();     // messages count
-        db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", n);
-        transaction tx{};
-        tx.actions.emplace_back(action{
-            {{_info.golos.names.posting, config::active_name}},
-            _info.golos.names.posting,
-            N(closemssg),
-            {}
-        });
-        const auto expiration_time = fc::hours(48);
-        for (const auto& cp : _visitor.comments) {
-            const auto& c = cp.second;
-            const auto n = name_by_acc(c.author);
-            db.emplace<generated_transaction_object>(n, [&](auto& t){
-                std::pair<name,string> data{n, c.permlink.str(_plnk_map)};
-                tx.actions[0].data = fc::raw::pack(data);
-                t.set(tx);
-                t.trx_id = tx.id();
-                t.sender = _info.golos.names.posting;
-                t.sender_id = (uint128_t(c.id) << 64) | n.value;
-                t.delay_until = std::max(time_point(c.active.cashout_time), _conf.initial_timestamp);
-                t.expiration = t.delay_until + expiration_time;
-                t.published = c.active.created;
-            });
-        }
-
         db.start_section(_info.golos.names.posting, N(permlink), "permlink", _visitor.permlinks.size());
         auto key = [](acc_idx a, plk_idx p) { return uint64_t(a) << 32 | p; };
         std::unordered_map<uint64_t, uint64_t> post_ids;
@@ -958,6 +1161,7 @@ struct genesis_create::genesis_create_impl final {
         post_ids.clear();
         _visitor.permlinks.clear();
 
+        auto to_gls = get_gbg_to_golos_converter();
         db.start_section(_info.golos.names.posting, N(message), "message", n);
         uint128_t sum_net_rshares = 0;
         uint128_t sum_net_positive = 0;
@@ -973,9 +1177,11 @@ struct genesis_create::genesis_create_impl final {
                 }
             }
             pk = c.id;
-            db.insert(pk, name_by_acc(c.author), mvo
+            db.insert(pk, _info.golos.names.posting, mvo
+                ("author", name_by_acc(c.author))
                 ("id", pk)
                 ("date", time_point(c.active.created).time_since_epoch().count())
+                ("pool_date", pool_date)
                 ("tokenprop", c.active.percent_steem_dollars / 2)
                 ("beneficiaries", beneficiaries)
                 ("rewardweight", c.active.reward_weight)
@@ -984,11 +1190,18 @@ struct genesis_create::genesis_create_impl final {
                     ("voteshares", c.active.vote_rshares)
                     ("sumcuratorsw", vote_weights_sum[c.id]))
                 ("curators_prcnt", c.active.curation_rewards_percent)
-                ("closed", false)
+                ("cashout_time", std::max(time_point(c.active.cashout_time), _conf.initial_timestamp).time_since_epoch().count())
                 ("mssg_reward", asset(0, symbol(GLS)))
+                ("max_payout", to_gls.convert(c.active.max_accepted_payout))
+                ("paid_amount", 0)
             );
             sum_net_rshares += c.active.net_rshares;
             sum_net_positive += (c.active.net_rshares > 0) ? c.active.net_rshares : 0;
+            if (c.mode != cyberway::golos::comment_mode::archived) {
+                auto id = std::string(_accs_map[c.author.id]) + "/" + _plnk_map[c.permlink.id];
+                auto hash = fc::hash64(id.c_str(), id.length());
+                _exp_info.active_comments[hash] = c.active;
+            }
         }
         // invariant
         const auto& gp = _visitor.gpo;
@@ -997,7 +1210,7 @@ struct genesis_create::genesis_create_impl final {
             "GPO total rshares ${t} do not match to sum from posts ${s}", ("t", total_rshares)("s", sum_net_positive));
 
         // store pool
-        pk = 0;
+        pk = pool_date;
         db.start_section(_info.golos.names.posting, N(rewardpools), "rewardpool", 1);
         db.insert(pk, _info.golos.names.posting, mvo
             ("created", pk)
@@ -1017,34 +1230,8 @@ struct genesis_create::genesis_create_impl final {
 
     void store_bandwidth() {
         ilog("Creating bandwidth (charge) balances and posting limits...");
-
-        enum charge_id_t: uint8_t {vote, post, comm, postbw};   // vote should have id=0
-        enum act_t: uint8_t {POST, COMM, VOTE, POSTBW};         // copied from posting contract
-
-        db.start_section(_info.golos.names.posting, N(limit), "limitparams", 4);
-        auto insert_limit = [&](uint8_t charge_id, int64_t price, int64_t cutoff) {
-            primary_key_t pk =
-                charge_id == charge_id_t::vote ? act_t::VOTE :
-                charge_id == charge_id_t::comm ? act_t::COMM :
-                charge_id == charge_id_t::post ? act_t::POST : act_t::POSTBW;
-            db.insert(pk, _info.golos.names.posting, mvo
-                ("act", pk)
-                ("charge_id", charge_id)
-                ("price", price)
-                ("cutoff", cutoff)
-                ("vesting_price", 0)
-                ("min_vesting", 0)
-            );
-        };
-        insert_limit(charge_id_t::vote, 50, config::percent_100);
-        insert_limit(charge_id_t::postbw, config::percent_100, 4*config::percent_100);
-        insert_limit(charge_id_t::post, 300/1, 300);    // 1 post per 300 seconds;      TODO: use actual median values #607
-        insert_limit(charge_id_t::comm, 200/10, 200);   // 10 comments per 200 seconds
-        // insert_limit(charge_id_t::vote_op, 15/5, 15);   // 5 votes per 15 seconds
-
-        // TODO: restorers #608
-
         // store charge balances
+        enum charge_id_t: uint8_t {vote, post, comm, postbw};   // vote should have id=0
         const auto& accs = _visitor.accounts;
         db.start_section(_info.golos.names.charge, N(balances), "balance", accs.size()*2);
         const auto sym = symbol(GLS).to_symbol_code();
@@ -1068,8 +1255,48 @@ struct genesis_create::genesis_create_impl final {
         ilog("Done.");
     }
 
+    void store_memo_keys() {
+        ilog("Creating memo keys...");
+        const auto& accs = _visitor.accounts;
+        db.start_section(_info.golos.names.memo, N(memo), "memo_key", accs.size());
+        for (const auto& ac : accs) {
+            const auto& a = ac.second;
+            const auto n = name_by_acc(a.name);
+            db.insert(n.value, n, mvo
+                ("name", n)
+                ("key", pubkey_from_golos(a.memo_key))
+            );
+        }
+        ilog("Done.");
+    }
+
+    void schedule_start() {
+        ilog("Scheduling Golos start...");
+        db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", 1);
+        auto store_tx = [&](name code, name act_name, uint64_t sender_id_low, const bytes& data = {}) {
+            auto providebw = cyberway::chain::providebw(_info.golos.names.issuer, code);
+            transaction tx{};
+            tx.actions.emplace_back(action{{{code, config::active_name}}, code, act_name, data});
+            tx.actions.emplace_back(action{{{providebw.provider, N(providebw)}},
+                providebw.get_account(), providebw.get_name(),
+                fc::raw::pack(providebw)});
+            auto actor = code;
+            db.emplace<generated_transaction_object>(actor, [&](auto& t){
+                t.set(tx);
+                t.trx_id = tx.id();
+                t.sender = actor;
+                t.sender_id = (uint128_t(actor.value) << 64) | sender_id_low;
+                t.delay_until = _conf.initial_timestamp + fc::minutes(_info.golos.start_trx.delay_minutes);
+                t.expiration = t.delay_until + fc::hours(_info.golos.start_trx.expiration_hours);
+                t.published = _conf.initial_timestamp;
+            });
+        };
+        store_tx(_info.golos.names.emission, N(start), 1);
+        ilog("Done.");
+    }
+
     void prepare_writer(const bfs::path& out_file) {
-        const int n_sections = 5*2 + static_cast<int>(stored_contract_tables::_max) + _info.tables.size();  // there are 5 duplicating account tables (system+golos)
+        const int n_sections = static_cast<int>(stored_contract_tables::_max) + _info.tables.size();
         db.start(out_file, n_sections);
         db.prepare_serializers(_contracts);
     };
@@ -1086,7 +1313,7 @@ void genesis_create::read_state(const bfs::path& state_file) {
 }
 
 void genesis_create::write_genesis(
-    const bfs::path& out_file, export_info& exp_info, const genesis_info& info, const genesis_state& conf, const contracts_map& accs
+    const bfs::path& out_file, const genesis_info& info, const genesis_state& conf, const contracts_map& accs
 ) {
     _impl->_info = info;
     _impl->_conf = conf;
@@ -1100,26 +1327,49 @@ void genesis_create::write_genesis(
     _impl->store_accounts();
     _impl->store_bandwidth();
     _impl->store_posts();   // also pool and votes
-    _impl->store_stakes();
     _impl->store_balances();
+    _impl->store_stakes();
     _impl->store_delegation_records();
     _impl->store_withdrawals();
     _impl->store_witnesses();
+    _impl->store_memo_keys();
+    _impl->schedule_start();
 
     _impl->db.finalize();
 
-    exp_info = _impl->_exp_info;
+    _impl->_exp_info.conv_gbg = &_impl->_visitor.conv_gbg;
+    _impl->_exp_info.conv_gls = &_impl->_visitor.conv_gls;
 }
 
+const genesis_info& genesis_create::get_info() const {
+    return _impl->_info;
+}
+const genesis_state& genesis_create::get_conf() const {
+    return _impl->_conf;
+}
+const contracts_map& genesis_create::get_contracts() const {
+    return _impl->_contracts;
+}
+const export_info& genesis_create::get_exp_info() const {
+    return _impl->_exp_info;
+}
 
-string pubkey_string(const golos::public_key_type& k, bool prefix/* = true*/) {
+name genesis_create::name_by_idx(acc_idx idx) const {
+    return _impl->name_by_idx(idx);
+}
+
+supply_distributor genesis_create::get_gbg_to_golos_converter() const {
+    return _impl->get_gbg_to_golos_converter();
+}
+
+string pubkey_string(const golos::public_key_type& k) {
     using checksummer = fc::crypto::checksummed_data<golos::public_key_type>;
     checksummer wrapper;
     wrapper.data = k;
     wrapper.check = checksummer::calculate_checksum(wrapper.data);
     auto packed = raw::pack(wrapper);
     auto tail = fc::to_base58(packed.data(), packed.size());
-    return prefix ? string(fc::crypto::config::public_key_legacy_prefix) + tail : tail;
+    return string(fc::crypto::config::public_key_legacy_prefix) + tail;
 }
 
 asset golos2sys(const asset& golos) {
@@ -1127,6 +1377,5 @@ asset golos2sys(const asset& golos) {
     return asset(int_arithmetic::safe_prop(
         golos.get_amount(), sys_precision, static_cast<int64_t>(golos.get_symbol().precision())));
 }
-
 
 }} // cyberway::genesis

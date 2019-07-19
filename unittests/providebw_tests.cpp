@@ -93,7 +93,7 @@ public:
         set_code(account, wast, signer);
         set_abi(account, abi, signer);
         if (account == config::system_account_name) {
-           const auto& accnt = control->chaindb().get<account_object,by_name>( account );
+           const auto& accnt = control->chaindb().get<account_object>( account );
            abi_def abi_definition;
            BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(accnt.abi, abi_definition), true);
            abi_ser.set_abi(abi_definition, abi_serializer_max_time);
@@ -124,9 +124,9 @@ BOOST_FIXTURE_TEST_CASE( providebw_test, system_contract_tester ) {
       //   set_privileged(token_account_name);
 
         // Verify eosio.msig and eosio.token is privileged
-        const auto& eosio_msig_acc = get<account_object, by_name>(msig_account_name);
+        const auto& eosio_msig_acc = get<account_object>(msig_account_name);
         BOOST_TEST(eosio_msig_acc.privileged == true);
-        const auto& eosio_token_acc = get<account_object, by_name>(token_account_name);
+        const auto& eosio_token_acc = get<account_object>(token_account_name);
       //   BOOST_TEST(eosio_token_acc.privileged == true);
 
 
@@ -180,7 +180,7 @@ BOOST_FIXTURE_TEST_CASE( providebw_test, system_contract_tester ) {
                mvo()("from","user")));
         set_transaction_headers(trx);
         trx.sign( get_private_key("user", "active"), control->get_chain_id() );
-        BOOST_REQUIRE_EXCEPTION( push_transaction(trx), tx_net_usage_exceeded, [](auto&){return true;});
+        BOOST_REQUIRE_EXCEPTION( push_transaction(trx), tx_usage_exceeded, [](auto&){return true;});
 
         trx.actions.emplace_back( vector<permission_level>{{"provider", config::active_name}},
                                   cyberway::chain::providebw(N(provider), N(user)));
@@ -213,7 +213,7 @@ BOOST_FIXTURE_TEST_CASE( providebw_test, system_contract_tester ) {
         trx.sign( get_private_key("user", "active"), control->get_chain_id() );
         trx.sign( get_private_key("user2", "active"), control->get_chain_id() );
         trx.sign( get_private_key("provider", "active"), control->get_chain_id() );
-        BOOST_REQUIRE_EXCEPTION(push_transaction( trx ), tx_net_usage_exceeded, [](auto&){return true;});
+        BOOST_REQUIRE_EXCEPTION(push_transaction( trx ), tx_usage_exceeded, [](auto&){return true;});
 
         // Check operation success with 2 providebw
         trx.actions.emplace_back( vector<permission_level>{{"provider", config::active_name}},

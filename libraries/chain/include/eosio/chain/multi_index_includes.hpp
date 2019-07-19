@@ -13,14 +13,31 @@
 #include <cyberway/chaindb/multi_index.hpp>
 #include <cyberway/chaindb/index_object.hpp>
 
-#define CHAINDB_TAG(_TYPE, _NAME)                   \
-    namespace cyberway { namespace chaindb {        \
-        template<> struct tag<_TYPE> {              \
-            using type = _TYPE;                     \
-            constexpr static uint64_t get_code() {  \
-                return N(_NAME);                    \
-            }                                       \
-        };                                          \
+#define CHAINDB_TABLE_TAG(_TYPE, _ACCOUNT, _NAME)       \
+    namespace cyberway { namespace chaindb {            \
+        template<> struct tag<_TYPE> {                  \
+            using type = _TYPE;                         \
+            constexpr static uint64_t get_code() {      \
+                return N(_NAME);                        \
+            };                                          \
+            constexpr static uint64_t get_account() {   \
+                return N(_ACCOUNT);                     \
+            };                                          \
+        };                                              \
+    } }
+
+
+#define CHAINDB_TAG(_TYPE, _NAME)                       \
+    namespace cyberway { namespace chaindb {            \
+        template<> struct tag<_TYPE> {                  \
+            using type = _TYPE;                         \
+            constexpr static uint64_t get_code() {      \
+                return N(_NAME);                        \
+            };                                          \
+            constexpr static uint64_t get_account() {   \
+                return N();                             \
+            };                                          \
+        };                                              \
     } }
 
 #define CHAINDB_SET_TABLE_TYPE(_OBJECT, _TABLE)     \
@@ -40,21 +57,20 @@ using bmi::const_mem_fun;
 using bmi::tag;
 using bmi::composite_key_compare;
 
-struct by_id {};
+struct by_id;
 
 namespace eosio { namespace chain {
 
-    struct by_parent {};
-    struct by_owner {};
-    struct by_name {};
-    struct by_action_name {};
-    struct by_permission_name {};
-    struct by_trx_id {};
-    struct by_expiration {};
-    struct by_delay {};
-    struct by_status {};
-    struct by_sender_id {};
-    struct by_scope_name {};
+    struct by_parent;
+    struct by_owner;
+    struct by_name;
+    struct by_action_name;
+    struct by_permission_name;
+    struct by_trx_id;
+    struct by_expiration;
+    struct by_delay;
+    struct by_sender_id;
+    struct by_scope_name;
 
 } } // namespace eosio::chain
 
@@ -111,13 +127,13 @@ namespace cyberway { namespace chaindb {
     struct table_container_impl;
 
     struct object_id_extractor {
-        template<typename T> uint64_t operator()(const T& o) const {
-            return o.id._id;
+        template<typename T> primary_key_t operator()(const T& o) const {
+            return o.pk();
         }
     }; // struct object_id_extractor
 
     struct primary_index {
-        using tag = tag<by_id>;
+        using tag = cyberway::chaindb::tag<by_id>;
         using extractor = object_id_extractor;
     }; // struct primary_index
 

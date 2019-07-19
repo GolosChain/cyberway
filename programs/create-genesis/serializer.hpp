@@ -22,6 +22,8 @@ const fc::microseconds abi_serializer_max_time = fc::seconds(10);
 
 
 enum class stored_contract_tables: int {
+    system_account, system_acc_seq, system_res_usage, system_permission, system_perm_usage,
+    import_account, import_acc_seq, import_res_usage, import_permission, import_perm_usage,
     domains,        usernames,
     permissionlink, sys_permissionlink,
     token_stats,    vesting_stats,
@@ -29,13 +31,15 @@ enum class stored_contract_tables: int {
     delegation,     rdelegation,
     withdrawal,
     witness_vote,   witness_info,
-    reward_pool,    post_limits,
-    gtransaction,   bandwidths,
+    reward_pool,
+    bandwidths,
     messages,       permlinks,
     votes,
-    // the following are system tables, but it's simpler to have them here
-    stake_agents,   stake_grants,
+
+    stake_agents,   stake_cands,
+    stake_grants,   stake_provisions,
     stake_stats,    stake_params,
+    memo_key,       start_transaction,
 
     _max                // to simplify setting tables_count of genesis container
 };
@@ -115,11 +119,29 @@ public:
     }
 
     template<typename T, typename Lambda>
+    const T emplace(const uint64_t pk, const name ram_payer, Lambda&& constructor) {
+        T obj(pk, constructor);
+#ifndef IGNORE_SYSTEM_ABI
+        static abi_serializer& ser = abis[name()];
+        variant v;
+        to_variant(obj, v);
+        fc::datastream<char*> ds(_buffer.data(), _buffer.size());
+        ser.variant_to_binary(_section.abi_type, v, ds, abi_serializer_max_time);
+        sys_table_row record{ram_payer, {_buffer.begin(), _buffer.begin() + ds.tellp()}};
+#else
+        sys_table_row record{ram_payer, fc::raw::pack(obj)};
+#endif
+        fc::raw::pack(out, record);
+        _row_count--;
+        return obj;
+    }
+
+    template<typename T, typename Lambda>
     const T emplace(const name ram_payer, Lambda&& constructor) {
-        T obj(constructor, 0);
+        T obj(0, constructor);
         constexpr auto tid = T::type_id;
         auto& id = autoincrement[tid];
-        if (obj.id == 0) {
+        if (obj.id._id == 0) {
             obj.id = id++;
         }
 #ifndef IGNORE_SYSTEM_ABI
@@ -138,7 +160,7 @@ public:
     }
 
     void insert(primary_key_t pk, uint64_t scope, const variant& v) {   // common case where scope is owner account
-        insert (pk, scope, scope, v);
+        insert(pk, scope, scope, v);
     }
 
     void insert(primary_key_t pk, uint64_t scope, name ram_payer, const variant& v) {

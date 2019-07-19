@@ -1,0 +1,48 @@
+{
+    "version": "cyberway::abi/1.1",
+    "types": [],
+    "variants": [],
+    "structs": [
+        {
+            "name": "dummy",
+            "base": "",
+            "fields": [
+                {"name": "arg", "type": "int64"}
+            ]
+        },
+        {
+            "name": "check",
+            "base": "",
+            "fields": [
+                {"name": "arg", "type": "int64"}
+            ]
+        },
+        {
+            "name": "senddeferred",
+            "base": "",
+            "fields": [
+                {"name": "action", "type": "name"},
+                {"name": "arg", "type": "int64"},
+                {"name": "senderid", "type": "uint128"},
+                {"name": "delay", "type": "uint32"},
+                {"name": "replace", "type": "bool"},
+                {"name": "expiration", "type": "uint32"}
+            ]
+        },
+        {
+            "name": "canceldeferred",
+            "base": "",
+            "fields": [
+                {"name": "senderid",   "type": "uint128"}
+            ]
+        }
+    ],
+    "actions": [
+        {"name": "dummy",         "type": "dummy"},
+        {"name": "check",         "type": "check"},
+        {"name": "senddeferred",  "type": "senddeferred"},
+        {"name": "canceldefer",   "type": "canceldeferred"}
+    ],
+    "tables": [],
+    "abi_extensions": []
+}

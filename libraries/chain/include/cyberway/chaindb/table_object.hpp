@@ -12,17 +12,11 @@
 namespace cyberway { namespace chaindb { namespace table_object {
 
     class object {
-        const table_def table_def_;  // <- copy to replace pointer in info_
-        const order_def pk_order_;   // <- copy to replace pointer in info_
-        table_info      info_;       // <- for const reference
+        table_info info_;
 
     public:
         object(const table_info& src)
-        : table_def_(*src.table),    // <- one copy per X - it is not very critical
-          pk_order_(*src.pk_order),  // <- one copy per X - it is not very critical
-          info_(src) {
-            info_.table = &table_def_;
-            info_.pk_order = &pk_order_;
+        : info_(src) {
         }
 
         const table_info& info() const {
@@ -30,7 +24,7 @@ namespace cyberway { namespace chaindb { namespace table_object {
         }
 
         table_name_t table() const {
-            return table_def_.name;
+            return info_.table_name();
         }
 
         account_name_t code() const {
@@ -62,22 +56,22 @@ namespace cyberway { namespace chaindb { namespace table_object {
 
     template <typename Object>
     typename index<Object>::iterator find(index<Object>& idx, const table_info& table) {
-        return idx.find(std::make_tuple(table.code, table.table->name, table.scope));
+        return idx.find(std::make_tuple(table.code, table.table_name(), table.scope));
     }
 
     template <typename Object>
     typename index<Object>::iterator find(const index<Object>& idx, const table_info& table) {
-        return idx.find(std::make_tuple(table.code, table.table->name, table.scope));
+        return idx.find(std::make_tuple(table.code, table.table_name(), table.scope));
     }
 
     template <typename Object>
     typename index<Object>::iterator find_without_scope(index<Object>& idx, const table_info& table) {
-        return idx.find(std::make_tuple(table.code, table.table->name, 0));
+        return idx.find(std::make_tuple(table.code, table.table_name(), 0));
     }
 
     template <typename Object>
     typename index<Object>::iterator find_without_scope(const index<Object>& idx, const table_info& table) {
-        return idx.find(std::make_tuple(table.code, table.table->name, 0));
+        return idx.find(std::make_tuple(table.code, table.table_name(), 0));
     }
 
     template <typename Object, typename... Args>

@@ -9,7 +9,7 @@
 #include <fc/variant.hpp>
 #include <fc/filesystem.hpp>
 
-// #include <boost/exception/diagnostic_information.hpp>
+#include <boost/exception/diagnostic_information.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem/path.hpp>
 
@@ -114,6 +114,7 @@ fc::sha256 check_hash(const genesis_info::file_hash& fh) {
 
 void read_contract(const genesis_info::account& acc, contract_abicode& abicode) {
     abicode.update = acc.update && *acc.update;
+    abicode.privileged = acc.privileged && *acc.privileged;
     if (acc.abi) {
         auto fh = *acc.abi;
         abicode.abi_hash = check_hash(fh);
@@ -144,7 +145,7 @@ void config_reader::read_config(const variables_map& options) {
     if (create_ee_genesis) {
         make_dir_absolute(ee_directory, "Events", false);
         if (!op_dump_dir.empty()) {
-           make_dir_absolute(op_dump_dir, "Operation dump", true);
+            make_dir_absolute(op_dump_dir, "Operation dump", true);
         }
     }
 
@@ -153,16 +154,15 @@ void config_reader::read_config(const variables_map& options) {
     make_absolute(info.genesis_json, "Genesis json");
     genesis = fc::json::from_file(info.genesis_json).as<genesis_state>();
 
+    std::cout << "Initial configuration = {" << std::endl << genesis.initial_configuration << "}" << std::endl;
+
     // base validation and init
-    for (auto& a: info.accounts) {
-        for (auto& p: a.permissions) {
-            EOS_ASSERT(p.key.length() == 0 || p.keys.size() == 0, genesis_exception,
-                "Account ${a} permission can't contain both `key` and `keys` fields at the same time", ("a",a.name));
-            p.init();
-        }
-    }
+    info.init();
     EOS_ASSERT(info.golos.max_supply >= 0, genesis_exception, "max_supply can't be negative");
     EOS_ASSERT(info.golos.sys_max_supply >= 0, genesis_exception, "sys_max_supply can't be negative");
+    for (const auto& f: info.params.funds) {
+        EOS_ASSERT(f.numerator * f.denominator != 0, genesis_exception, "funds numerator & denominator must not be 0");
+    }
 }
 
 void config_reader::read_contracts() {
@@ -194,22 +194,22 @@ int main(int argc, char** argv) {
         cr.read_config(vmap);
         cr.read_contracts();
 
-        export_info exp_info;
 
         genesis_create builder{};
         builder.read_state(cr.info.state_file);
-        builder.write_genesis(cr.out_file, exp_info, cr.info, cr.genesis, cr.contracts);
+        builder.write_genesis(cr.out_file, cr.info, cr.genesis, cr.contracts);
 
+        const auto ee_shared_name = "shared_memory";
         if (cr.create_ee_genesis) {
-            bfs::remove_all("shared_memory");
+            bfs::remove_all(ee_shared_name);
 
-            genesis_ee_builder ee_builder(cr.info, exp_info, "shared_memory", cr.last_block);
+            genesis_ee_builder ee_builder{builder, ee_shared_name, cr.last_block};
             if (!cr.op_dump_dir.empty()) {
                 ee_builder.read_operation_dump(cr.op_dump_dir);
             }
             ee_builder.build(cr.ee_directory);
 
-            bfs::remove_all("shared_memory");
+            bfs::remove_all(ee_shared_name);
         }
     } catch (const fc::exception& e) {
         elog("${e}", ("e", e.to_detail_string()));

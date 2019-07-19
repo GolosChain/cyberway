@@ -1,25 +1,36 @@
 #include <cyberway/chaindb/storage_calculator.hpp>
+#include <cyberway/chaindb/table_info.hpp>
 
 #include <eosio/chain/abi_def.hpp>
 
 #include <fc/variant.hpp>
 #include <fc/variant_object.hpp>
 
+#include <fc/io/json.hpp>
+
+#include <eosio/chain/account_object.hpp>
+#include <eosio/chain/block_summary_object.hpp>
+#include <eosio/chain/resource_limits.hpp>
+#include <eosio/chain/resource_limits_private.hpp>
+#include <eosio/chain/global_property_object.hpp>
+#include <eosio/chain/permission_link_object.hpp>
+#include <eosio/chain/permission_object.hpp>
+
 namespace cyberway { namespace chaindb {
 
     using eosio::chain::table_def;
 
-    using std::string;
-
-    using fc::variant;
     using fc::variants;
     using fc::variant_object;
 
     struct path_info final {
         const table_def& table;
         string path;
+        fc::flat_map<index_name, int> index_sizes;
 
-        path_info(const table_def& table) : table(table) { }
+        path_info(const table_def& table) : table(table) {
+            index_sizes.reserve(table.indexes.size() + 16);
+        }
     }; // struct path_info
 
     struct stack_path final {
@@ -39,10 +50,16 @@ namespace cyberway { namespace chaindb {
         int adjust_elem_size(const int size) const {
             if (!info_) return size;
 
-            auto itr = info_->table.field_index_map.find(info_->path);
-            if (info_->table.field_index_map.end() == itr) return size;
+            auto itr = info_->table.field_indexes.find(info_->path);
+            if (info_->table.field_indexes.end() == itr) return size;
 
-            return size * itr->second;
+            for (auto& n: itr->second) {
+                auto res = info_->index_sizes.emplace(n, 12 + 8);
+                res.first->second += size;
+                CYBERWAY_ASSERT(res.first->second < abi_info::MaxIndexSize, index_size_exception, "Object index size overflow");
+            }
+
+            return size * itr->second.size();
         }
 
     private:
@@ -95,7 +112,7 @@ namespace cyberway { namespace chaindb {
                 return base_size + 32;
 
             case variant::type_id::string_type: {
-                auto size = base_size + var.get_string().size();
+                auto size = var.get_string().size();
                 return ((size >> 4) + 1) << 4;
             }
 
@@ -111,17 +128,61 @@ namespace cyberway { namespace chaindb {
         return base_size;
     }
 
-    int calc_storage_usage(const eosio::chain::table_def& table, const variant& var) {
+    int get_fixed_storage_usage(const table_info& info, const variant& var) {
+        if (is_system_code(info.code)) switch (info.table->name.value) {
+            case tag<eosio::chain::account_object>::get_code(): {
+                return 736 + var["code"].get_string().size() + var["abi"].get_blob().data.size();
+            }
+
+            case tag<eosio::chain::account_sequence_object>::get_code():
+                return 460;
+
+            case tag<eosio::chain::permission_link_object>::get_code():
+                return 576;
+
+            case tag<eosio::chain::permission_usage_object>::get_code():
+                return 360;
+
+            case tag<eosio::chain::block_summary_object>::get_code():
+                return 416;
+
+            case tag<eosio::chain::global_property_object>::get_code():
+                return 1400;
+
+            case tag<eosio::chain::dynamic_global_property_object>::get_code():
+                return 360;
+
+            case tag<eosio::chain::resource_limits::resource_usage_object>::get_code():
+                return 796;
+
+            case tag<eosio::chain::resource_limits::resource_limits_config_object>::get_code():
+                return 1768;
+
+            case tag<eosio::chain::resource_limits::resource_limits_state_object>::get_code():
+                return 1016;
+        }
+        return 0;
+    }
+
+    int calc_storage_usage(const table_info& info, const variant& var) {
+        int size = get_fixed_storage_usage(info, var);
+        if (size) {
+            return size;
+        }
+
         constexpr static int base_size  = 256; /* memory usage of structures in RAM */
         constexpr static int index_size = 12 + 8 /* scope:pk */ + 8; /* pk */
 
-        int size = base_size + index_size * table.indexes.size();
+        auto& table = *info.table;
+
+        size = base_size + index_size * table.indexes.size();
         if (table.indexes.size() > 1) {
             auto path = path_info(table);
             size += calc_storage_usage(var, &path);
         } else {
             size += calc_storage_usage(var, nullptr);
         }
+        CYBERWAY_ASSERT(size < abi_info::MaxObjectSize, object_size_exception, "Object size overflow");
         return size;
     }
 

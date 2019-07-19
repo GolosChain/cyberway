@@ -43,12 +43,12 @@ public:
       set_abi(N(identitytest), identity_test_abi);
       produce_blocks(1);
 
-      const auto& accnt = control->chaindb().get<account_object,by_name>( N(identity) );
+      const auto& accnt = control->chaindb().get<account_object>( N(identity) );
       abi_def abi;
       BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(accnt.abi, abi), true);
       abi_ser.set_abi(abi, abi_serializer_max_time);
 
-      const auto& acnt_test = control->chaindb().get<account_object,by_name>( N(identitytest) );
+      const auto& acnt_test = control->chaindb().get<account_object>( N(identitytest) );
       abi_def abi_test;
       BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(acnt_test.abi, abi_test), true);
       abi_ser_test.set_abi(abi_test, abi_serializer_max_time);
@@ -60,7 +60,7 @@ public:
 
    uint64_t get_result_uint64() {
       auto& chaindb = control->chaindb();
-      auto value = chaindb.value_by_pk({N(identitytest), 0, N(result)}, N(result));
+      auto value = chaindb.object_by_pk({N(identitytest), 0, N(result)}, N(result)).value;
       return value["identity"].as_uint64();
    }
 
@@ -104,7 +104,7 @@ public:
 
    fc::variant get_identity(uint64_t idnt) {
       auto& chaindb = control->chaindb();
-      auto value = chaindb.value_by_pk({N(identity), N(identity), N(idents)}, idnt);
+      auto value = chaindb.object_by_pk({N(identity), N(identity), N(idents)}, idnt).value;
       return value;
    }
 
@@ -127,11 +127,12 @@ public:
       auto find = cyberway::chaindb::lower_bound<false>()(
          chaindb,
          {N(identity), identity, N( certs ), N(bytuple)},
+         cyberway::chaindb::cursor_kind::OneRecord,
          boost::make_tuple(string_to_name(property.c_str()), trusted, string_to_name(certifier.c_str())));
       if (find.pk != cyberway::chaindb::primary_key::End) {
-         auto val = chaindb.value_at_cursor({N(identity), find.cursor});
-         auto& obj = val.get_object();
-         if (obj["property"].as_string() == property && obj["trusted"].as_uint64() == trusted && obj["certifier"].as_string() == certifier) {
+         auto cache = chaindb.get_cache_object({N(identity), identity, N(certs)}, find.pk, true);
+         auto val = cache->object().value;
+         if (val["property"].as_string() == property && val["trusted"].as_uint64() == trusted && val["certifier"].as_string() == certifier) {
              return val;
          }
       }
@@ -141,7 +142,7 @@ public:
    fc::variant get_accountrow(const string& account) {
       auto& chaindb = control->chaindb();
       auto acnt = string_to_name(account.c_str());
-      return chaindb.value_by_pk({N(identity), acnt, N(account)}, N(account));
+      return chaindb.object_by_pk({N(identity), acnt, N(account)}, N(account)).value;
    }
 
    action_result settrust(const string& trustor, const string& trusting, uint64_t trust, bool auth = true)
@@ -163,7 +164,7 @@ public:
    bool get_trust(const string& trustor, const string& trusting) {
       auto& chaindb = control->chaindb();
       uint64_t tng = string_to_name(trusting.c_str());
-      return !chaindb.value_by_pk({N(identity), string_to_name(trustor.c_str()), N(trust)}, tng).is_null();
+      return !chaindb.object_by_pk({N(identity), string_to_name(trustor.c_str()), N(trust)}, tng).value.is_null();
    }
 
 public:

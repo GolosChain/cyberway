@@ -72,7 +72,7 @@ BOOST_FIXTURE_TEST_CASE( delay_error_create_account, validating_tester) { try {
 
    produce_blocks(1);
 
-   auto scheduled_trxs = control->get_scheduled_transactions();
+   auto scheduled_trxs = get_scheduled_transactions();
    BOOST_REQUIRE_EQUAL(scheduled_trxs.size(), 1);
    auto dtrace = control->push_scheduled_transaction(scheduled_trxs.front(), fc::time_point::maximum());
    BOOST_REQUIRE_EQUAL(dtrace->except.valid(), true);
@@ -1683,10 +1683,10 @@ BOOST_AUTO_TEST_CASE( mindelay_test ) { try {
    BOOST_REQUIRE_EQUAL(asset::from_string("1.0000 CUR"), liquid_balance);
 
    // send transfer with delay_sec set to 10
-   const auto& acnt = chain.control->chaindb().get<account_object,by_name>(config::token_account_name);
+   const auto& acnt = chain.control->chaindb().get<account_object>(config::token_account_name);
    const auto abi = acnt.get_abi();
    chain::abi_serializer abis(abi, chain.abi_serializer_max_time);
-   const auto a = chain.control->chaindb().get<account_object,by_name>(config::token_account_name).get_abi();
+   const auto a = chain.control->chaindb().get<account_object>(config::token_account_name).get_abi();
 
    string action_type_name = abis.get_action_type(name("transfer"));
 

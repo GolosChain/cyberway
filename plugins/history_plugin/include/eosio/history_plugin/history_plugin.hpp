@@ -4,7 +4,6 @@
  */
 #pragma once
 #include <appbase/application.hpp>
-
 #include <eosio/chain_plugin/chain_plugin.hpp>
 
 namespace fc { class variant; }
@@ -128,6 +127,8 @@ class history_plugin : public plugin<history_plugin> {
       void plugin_initialize(const variables_map& options);
       void plugin_startup();
       void plugin_shutdown();
+
+      void add_indices();
 
       history_apis::read_only  get_read_only_api()const { return history_apis::read_only(history_const_ptr(my)); }
 

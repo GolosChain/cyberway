@@ -35,9 +35,9 @@ struct state_object_visitor {
     enum balance_type {
         account, savings, order, conversion, escrow, escrow_fee, savings_withdraw, _size
     };
-    static string balance_name(balance_type t) {
+    static string balance_name(balance_type t, bool memo = false) {
         switch (t) {
-            case account:       return "accounts";
+            case account:       return memo ? "balance" : "accounts";
             case savings:       return "savings";
             case order:         return "orders";
             case conversion:    return "conversions";
@@ -57,7 +57,6 @@ struct state_object_visitor {
         total_gests = asset(0, symbol(GESTS));
     }
 
-    bool early_exit = false;
     golos::dynamic_global_property_object   gpo;
     fc::flat_map<acc_idx,golos::account_object> accounts;
     vector<golos::account_authority_object>     auths;
@@ -74,11 +73,14 @@ struct state_object_visitor {
     asset total_gests;
     fc::flat_map<balance_type, asset> gbg_by_type;
     fc::flat_map<balance_type, asset> gls_by_type;
+    fc::flat_map<acc_idx, converted_info> conv_gbg;
+    fc::flat_map<acc_idx, converted_info> conv_gls;
 
     std::vector<golos::vesting_delegation_object> delegations;
     std::vector<golos::vesting_delegation_expiration_object> delegation_expirations;
     fc::flat_map<acc_idx, share_type> delegated_vests;
     fc::flat_map<acc_idx, share_type> received_vests;
+    fc::flat_map<acc_idx, uint32_t> delegators;
 
     fc::flat_map<acc_idx,acc_idx> withdraw_routes;  // from:to
 
@@ -87,6 +89,8 @@ struct state_object_visitor {
     fc::flat_map<uint64_t,golos::comment_object> comments;  // id:comment
     fc::flat_map<uint64_t,post_permlink> permlinks;         // id:permlink
     std::vector<golos::comment_vote_object> votes;
+
+    fc::flat_map<acc_idx, share_type> reputations;
 
     template<typename T>
     void operator()(const T& x) {}
@@ -104,51 +108,44 @@ struct state_object_visitor {
         auto idx = acc.name.id;
         acc_id2idx[acc.id] = idx;
         accounts[idx]   = acc;
-        gls[idx]        = acc.balance + acc.savings_balance;
-        gbg[idx]        = acc.sbd_balance + acc.savings_sbd_balance;
+        // GOLOS balance is not part of genesis conversions, but GBG balance is
+        gls[idx]        = acc.balance;
+        gbg[idx]        = asset(0, symbol(GBG));
         vests[idx]      = vesting_balance{
             acc.vesting_shares.get_amount(),
             acc.delegated_vesting_shares.get_amount(),
             acc.received_vesting_shares.get_amount()};
         total_gests          += acc.vesting_shares;
         gls_by_type[account] += acc.balance;
-        gbg_by_type[account] += acc.sbd_balance;
-        gls_by_type[savings] += acc.savings_balance;
-        gbg_by_type[savings] += acc.savings_sbd_balance;
+        add_asset_balance(acc.name, acc.sbd_balance, account);
+        add_asset_balance(acc.name, acc.savings_balance, savings);
+        add_asset_balance(acc.name, acc.savings_sbd_balance, savings);
     }
 
     void operator()(const golos::limit_order_object& o) {
-        switch (o.sell_price.base.get_symbol().value()) {
-        case GBG: {auto a = asset(o.for_sale, symbol(GBG)); gbg[o.seller.id] += a; gbg_by_type[order] += a;} break;
-        case GLS: {auto a = asset(o.for_sale, symbol(GLS)); gls[o.seller.id] += a; gls_by_type[order] += a;} break;
-        default:
-            EOS_ASSERT(false, genesis_exception, "Unknown asset ${a} in limit order", ("a", o.sell_price.base));
-        }
+        add_asset_balance(o.seller, asset(o.for_sale, o.sell_price.base.get_symbol()), order);
     }
 
     void operator()(const golos::convert_request_object& obj) {
-        add_asset_balance(obj, &golos::convert_request_object::owner, &golos::convert_request_object::amount, conversion);
+        add_asset_balance(obj.owner, obj.amount, conversion);
     }
 
     void operator()(const golos::escrow_object& e) {
-        gls[e.from.id] += e.steem_balance;
-        gbg[e.from.id] += e.sbd_balance;
-        gls_by_type[escrow] += e.steem_balance;
-        gbg_by_type[escrow] += e.sbd_balance;
-        add_asset_balance(e, &golos::escrow_object::from, &golos::escrow_object::pending_fee, escrow_fee);
+        add_asset_balance(e.from, e.steem_balance, escrow);
+        add_asset_balance(e.from, e.sbd_balance, escrow);
+        add_asset_balance(e.from, e.pending_fee, escrow_fee);
     }
 
     void operator()(const golos::savings_withdraw_object& sw) {
-        add_asset_balance(sw, &golos::savings_withdraw_object::to, &golos::savings_withdraw_object::amount, savings_withdraw);
+        ilog("swo: ${o}", ("o", sw));
+        add_asset_balance(sw.to, sw.amount, savings_withdraw);
     }
 
-    template<typename T, typename A, typename F>
-    void add_asset_balance(const T& item, A account, F field, balance_type type) {
-        const auto acc = (item.*account).id;
-        const auto val = item.*field;
+    void add_asset_balance(golos::account_name_type account, const asset& val, balance_type type) {
+        const auto acc = account.id;
         switch (val.get_symbol().value()) {
-        case GBG: gbg[acc] += val; gbg_by_type[type] += val; break;
-        case GLS: gls[acc] += val; gls_by_type[type] += val; break;
+        case GBG: gbg[acc] += val; gbg_by_type[type] += val; conv_gbg[acc].add(val, balance_name(type, true)); break;
+        case GLS: gls[acc] += val; gls_by_type[type] += val; conv_gls[acc].add(val, balance_name(type, true)); break;
         default:
             EOS_ASSERT(false, genesis_exception, string("Unknown asset ${a} in ") + balance_name(type), ("a", val));
         }
@@ -158,18 +155,23 @@ struct state_object_visitor {
         delegations.emplace_back(d);
         delegated_vests[d.delegator.id] += d.vesting_shares.get_amount();
         received_vests[d.delegatee.id] += d.vesting_shares.get_amount();
+        delegators[d.delegatee.id]++;
     }
 
     void operator()(const golos::vesting_delegation_expiration_object& d) {
         delegation_expirations.emplace_back(d);
         delegated_vests[d.delegator.id] += d.vesting_shares.get_amount();
-        early_exit = true;
     }
 
     void operator()(const golos::withdraw_vesting_route_object& w) {
         if (w.from_account != w.to_account && w.percent == config::percent_100) {
             withdraw_routes[acc_id2idx[w.from_account]] = acc_id2idx[w.to_account];
         }
+    }
+
+    void operator()(const golos::change_recovery_account_request_object& r) {
+        // instant apply new recovery
+        accounts[r.account_to_recover.id].recovery_account = r.recovery_account;
     }
 
     // witnesses
@@ -206,8 +208,8 @@ struct state_object_visitor {
                 .permlink = c.permlink.id,
                 .parent_author = c.parent_author.id,
                 .parent_permlink = c.parent_permlink.id,
-                .depth = c.active.depth,      // TODO: should be in consensus part of golos state GolosChain/golos#1302
-                .children = c.active.children
+                .depth = static_cast<uint16_t>(c.depth.value),
+                .children = c.children.value
             });
         }
     }
@@ -222,20 +224,25 @@ struct state_object_visitor {
         }
     }
 
+// EE-genesis
+
+    void operator()(const golos::reputation_object& rep) {
+        reputations[rep.account.id] = rep.reputation;
+    }
 };
 
 class state_reader {
-    const bfs::path& _state_file;
+    const bfs::path& _main_state_file;
     vector<string>& _accs_map;
     vector<string>& _plnk_map;
 
 public:
-    state_reader(const bfs::path& state_file, vector<string>& accs, vector<string>& permlinks)
-    : _state_file(state_file), _accs_map(accs), _plnk_map(permlinks) {
+    state_reader(const bfs::path& main_state_file, vector<string>& accs, vector<string>& permlinks)
+    : _main_state_file(main_state_file), _accs_map(accs), _plnk_map(permlinks) {
     }
 
     void read_maps() {
-        auto map_file = _state_file;
+        auto map_file = _main_state_file;
         map_file += ".map";
         EOS_ASSERT(fc::is_regular_file(map_file), genesis_exception,
             "Genesis state map file '${f}' does not exist.", ("f", map_file.generic_string()));
@@ -265,20 +272,34 @@ public:
         im.close();
     }
 
-    void read_state(state_object_visitor& visitor) {
-        // TODO: checksum
-        EOS_ASSERT(fc::is_regular_file(_state_file), genesis_exception,
-            "Genesis state file '${f}' does not exist.", ("f", _state_file.generic_string()));
-        ilog("Reading state from ${f}...", ("f", _state_file.generic_string()));
-        read_maps();
+    uint32_t object_type_by_id(uint32_t type) {
+        if (type == object_type::reputation_object_id) {
+            wlog("warning, deprecated type used for reputaion");
+        }
+        if (type <= object_type::reputation_object_id) {
+            return type;
+        }
+        if (type == object_type::follow_plugin_reputation_object_id)
+            return object_type::reputation_object_id;
+        EOS_ASSERT(false, genesis_exception, "Unknown object type ${t} in serialized state, can't read.", ("t", type));
+    }
 
-        bfs::ifstream in(_state_file);
-        golos_state_header h{"", 0};
+    void read_state_file(const bfs::path& state_file, state_object_visitor& visitor) {
+        if (!bfs::exists(state_file)) {
+            return;
+        }
+        ilog("Reading state from ${f}...", ("f", state_file.generic_string()));
+
+        bfs::ifstream in(state_file);
+        golos_state_header h{"", 0, 0};
         in.read((char*)&h, sizeof(h));
-        EOS_ASSERT(string(h.magic) == golos_state_header::expected_magic && h.version == 1, genesis_exception,
-            "Unknown format of the Genesis state file.");
+        EOS_ASSERT(string(h.magic) == golos_state_header::expected_magic, genesis_exception,
+            "Unknown format of the Golos state file.");
+        EOS_ASSERT(h.version == 2, genesis_exception,
+            "Can only open Golos state file version 2, but version ${v} provided.", ("v", h.version));
+        EOS_ASSERT(h.block_num > 0, genesis_exception, "Golos state file block_num should be greater than 0.");
 
-        while (in && !visitor.early_exit) {
+        while (in) {
             golos_table_header t;
             fc::raw::unpack(in, t);
             if (!in)
@@ -286,7 +307,7 @@ public:
             auto type = t.type_id;
             std::cout << "Reading " << t.records_count << " record(s) from table with id=" << type << "." << std::flush;
             objects o;
-            o.set_which(type);
+            o.set_which(object_type_by_id(type));
             auto unpacker = fc::raw::unpack_static_variant<decltype(in)>(in);
             int i = 0;
             for (; in && i < t.records_count; i++) {
@@ -295,8 +316,23 @@ public:
             }
             std::cout << "  Done, " << i << " record(s) read." << std::endl;
         }
-        ilog("Done reading Genesis state.");
+
         in.close();
+    }
+
+    void read_state(state_object_visitor& visitor) {
+        // TODO: checksum
+        EOS_ASSERT(fc::is_regular_file(_main_state_file), genesis_exception,
+            "Genesis state file '${f}' does not exist.", ("f", _main_state_file.generic_string()));
+        read_maps();
+
+        read_state_file(_main_state_file, visitor);
+
+        auto rep_state = _main_state_file;
+        rep_state += ".reputation";
+        read_state_file(rep_state, visitor);
+
+        ilog("Done reading Genesis state.");
     }
 };
 

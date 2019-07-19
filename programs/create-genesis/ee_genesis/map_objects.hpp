@@ -8,6 +8,7 @@
 #include <boost/multi_index/composite_key.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <chainbase/chainbase.hpp>
+#include <boost/interprocess/containers/vector.hpp>
 
 namespace cyberway { namespace genesis { namespace ee {
 
@@ -26,13 +27,15 @@ enum object_type
 
 struct comment_header : public chainbase::object<comment_header_object_type, comment_header> {
     template<typename Constructor, typename Allocator>
-    comment_header(Constructor &&c, chainbase::allocator<Allocator> a) {
+    comment_header(Constructor &&c, chainbase::allocator<Allocator> a) : offsets(a) {
+        offsets.reserve(30);
         c(*this);
     }
 
     id_type id;
     uint64_t hash;
-    uint64_t offset;
+    uint64_t parent_hash;
+    boost::interprocess::vector<uint64_t, chainbase::allocator<uint64_t>> offsets;
     operation_number create_op;
     operation_number last_delete_op;
     fc::time_point_sec created;
@@ -95,7 +98,7 @@ struct account_metadata : public chainbase::object<account_metadata_object_type,
 
 struct by_id;
 struct by_hash;
-struct by_created;
+struct by_parent_hash;
 
 using comment_header_index = chainbase::shared_multi_index_container<
     comment_header,
@@ -107,8 +110,8 @@ using comment_header_index = chainbase::shared_multi_index_container<
             tag<by_hash>,
             member<comment_header, uint64_t, &comment_header::hash>>,
         ordered_non_unique<
-            tag<by_created>,
-            member<comment_header, fc::time_point_sec, &comment_header::created>>>
+            tag<by_parent_hash>,
+            member<comment_header, uint64_t, &comment_header::parent_hash>>>
 >;
 
 struct by_hash_voter;

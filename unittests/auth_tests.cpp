@@ -369,15 +369,29 @@ BOOST_AUTO_TEST_CASE( any_auth ) { try {
 
 } FC_LOG_AND_RETHROW() }
 
+BOOST_AUTO_TEST_CASE(no_dots_accounts) {
+try {
+    TESTER chain;
+
+    chain.produce_block();
+
+    account_name acc = N(.dot);
+
+    BOOST_CHECK_EXCEPTION(
+        chain.create_account(acc), action_validate_exception,
+        fc_exception_message_is("account name cannot start from '.'"));
+
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_CASE(no_double_billing) {
 try {
    TESTER chain;
 
    chain.produce_block();
 
-   account_name acc1 = N("bill1");
-   account_name acc2 = N("bill2");
-   account_name acc1a = N("bill1a");
+   account_name acc1 = N(bill1);
+   account_name acc2 = N(bill2);
+   account_name acc1a = N(bill1a);
 
    chain.create_account(acc1);
    chain.create_account(acc1a);
@@ -386,7 +400,6 @@ try {
    auto& chaindb = chain.control->chaindb();
 
    using resource_usage_object = eosio::chain::resource_limits::resource_usage_object;
-   using by_owner = eosio::chain::resource_limits::by_owner;
 
    auto create_acc = [&](account_name a) {
 
@@ -415,9 +428,9 @@ try {
 
    create_acc(acc2);
 
-   const auto &usage = chaindb.get<resource_usage_object,by_owner>(acc1);
+   const auto &usage = chaindb.get<resource_usage_object,by_id>(acc1);
 
-   const auto &usage2 = chaindb.get<resource_usage_object,by_owner>(acc1a);
+   const auto &usage2 = chaindb.get<resource_usage_object,by_id>(acc1a);
 
    BOOST_TEST(usage.accumulators[resource_limits::CPU].average() > 0);
    BOOST_TEST(usage.accumulators[resource_limits::NET].average() > 0);
@@ -433,10 +446,10 @@ try {
 
    chain.produce_block();
 
-   account_name acc1 = N("acc1");
-   account_name acc2 = N("acc2");
-   account_name acc3 = N("acc3");
-   account_name acc4 = N("acc4");
+   account_name acc1 = N(acc1);
+   account_name acc2 = N(acc2);
+   account_name acc3 = N(acc3);
+   account_name acc4 = N(acc4);
 
    chain.create_account(acc1);
    chain.produce_block();

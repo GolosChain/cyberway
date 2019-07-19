@@ -11,12 +11,15 @@
 
 namespace eosio { namespace chain {
 
-    using cyberway::chaindb::cursor_t;
-    using cyberway::chaindb::account_name_t;
-    using cyberway::chaindb::scope_name_t;
-    using cyberway::chaindb::table_name_t;
-    using cyberway::chaindb::index_name_t;
-    using cyberway::chaindb::primary_key_t;
+    namespace chaindb = cyberway::chaindb;
+
+    using chaindb::cursor_t;
+    using chaindb::account_name_t;
+    using chaindb::scope_name_t;
+    using chaindb::table_name_t;
+    using chaindb::index_name_t;
+    using chaindb::primary_key_t;
+    using chaindb::cursor_kind;
 
     class chaindb_api : public context_aware_api {
     public:
@@ -24,57 +27,65 @@ namespace eosio { namespace chain {
 
         cursor_t chaindb_clone(account_name_t code, cursor_t cursor) {
             // cursor is already opened -> no reason to check ABI for it
-            return context.chaindb.clone({code, cursor}).cursor;
+            auto cloned_find_info = context.cursors_guard->get(code, cursor).clone();
+            return context.cursors_guard->add(code, std::move(cloned_find_info));
         }
 
         void chaindb_close(account_name_t code, cursor_t cursor) {
             // cursor is already opened -> no reason to check ABI for it
-            context.chaindb.close({code, cursor});
+            context.cursors_guard->remove(code, cursor);
         }
 
         cursor_t chaindb_lower_bound(
             account_name_t code, scope_name_t scope, table_name_t table, index_name_t index,
             array_ptr<const char> key, size_t size
         ) {
-            return context.chaindb.lower_bound({code, scope, table, index}, key, size).cursor;
+            auto cursor = context.chaindb.lower_bound({code, scope, table, index}, cursor_kind::ManyRecords, key, size);
+            return context.cursors_guard->add(code, std::move(cursor));
         }
 
         cursor_t chaindb_lower_bound_pk(
             account_name_t code, scope_name_t scope, table_name_t table, primary_key_t pk
         ) {
-            return context.chaindb.lower_bound({code, scope, table}, pk).cursor;
+            auto cursor = context.chaindb.lower_bound({code, scope, table}, cursor_kind::ManyRecords, pk);
+            return context.cursors_guard->add(code, std::move(cursor));
         }
 
         cursor_t chaindb_upper_bound(
             account_name_t code, scope_name_t scope, table_name_t table, index_name_t index,
             array_ptr<const char> key, size_t size
         ) {
-            return context.chaindb.upper_bound({code, scope, table, index}, key, size).cursor;
+            auto cursor = context.chaindb.upper_bound({code, scope, table, index}, key, size);
+            return context.cursors_guard->add(code, std::move(cursor));
         }
 
         cursor_t chaindb_upper_bound_pk(
             account_name_t code, scope_name_t scope, table_name_t table, primary_key_t pk
         ) {
-            return context.chaindb.upper_bound({code, scope, table}, pk).cursor;
+            auto cursor = context.chaindb.upper_bound({code, scope, table}, pk);
+            return context.cursors_guard->add(code, std::move(cursor));
         }
 
         cursor_t chaindb_locate_to(
             account_name_t code, scope_name_t scope, table_name_t table, index_name_t index,
             primary_key_t pk, array_ptr<const char> key, size_t size
         ) {
-            return context.chaindb.locate_to({code, scope, table, index}, key, size, pk).cursor;
+            auto cursor = context.chaindb.locate_to({code, scope, table, index}, key, size, pk);
+            return context.cursors_guard->add(code, std::move(cursor));
         }
 
         cursor_t chaindb_begin(
             account_name_t code, scope_name_t scope, table_name_t table, index_name_t index
         ) {
-            return context.chaindb.begin({code, scope, table, index}).cursor;
+            auto cursor = context.chaindb.begin({code, scope, table, index});
+            return context.cursors_guard->add(code, std::move(cursor));
         }
 
         cursor_t chaindb_end(
             account_name_t code, scope_name_t scope, table_name_t table, index_name_t index
         ) {
-            return context.chaindb.end({code, scope, table, index}).cursor;
+            auto cursor = context.chaindb.end({code, scope, table, index});
+            return context.cursors_guard->add(code, std::move(cursor));
         }
 
         primary_key_t chaindb_current(account_name_t code, cursor_t cursor) {
@@ -99,10 +110,12 @@ namespace eosio { namespace chain {
             assert(context.chaindb_cache);
             auto& chaindb_cache = *context.chaindb_cache;
 
+            chaindb::cursor_request request{code, cursor};
+
             chaindb_cache.cache_code   = code;
             chaindb_cache.cache_cursor = cursor;
 
-            chaindb_cache.cache = context.chaindb.get_cache_object({code, cursor}, true);
+            chaindb_cache.cache = context.chaindb.get_cache_object(request, true);
 
             if (chaindb_cache.cache) {
                 auto& blob = chaindb_cache.cache->blob();
@@ -164,7 +177,7 @@ namespace eosio { namespace chain {
             fc::raw::pack(ds, service);
 
             s = std::min(s, size);
-            std::memset(data, size, 0);
+            std::memset(data, 0, size);
             std::memcpy(data, pack_buffer.data(), s);
 
             return s;
@@ -210,17 +223,11 @@ namespace eosio { namespace chain {
         void chaindb_ram_state(
             account_name_t code, scope_name_t scope, table_name_t table, primary_key_t pk, bool in_ram
         ) {
-            namespace chaindb = cyberway::chaindb;
-
             validate_db_access_violation(code);
 
-            chaindb::cache_object_ptr cache_ptr;
-            chaindb::table_request    request{code, scope, table};
+            chaindb::table_request request{code, scope, table};
 
-            auto find = context.chaindb.lower_bound(request, pk);
-            if (find.pk == pk) {
-                cache_ptr = context.chaindb.get_cache_object({code, find.cursor}, false);
-            }
+            auto cache_ptr = context.chaindb.get_cache_object(request, pk, false);
 
             EOS_ASSERT(cache_ptr, eosio::chain::object_query_exception,
                 "Object with the primary key ${pk} doesn't exist in the table ${table}:${scope}",

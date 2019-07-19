@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ee_genesis_serializer.hpp"
+#include "../config.hpp"
 #include <fc/crypto/sha256.hpp>
 
 namespace cyberway { namespace genesis { namespace ee {
@@ -14,12 +15,22 @@ public:
 
     void start(const bfs::path& ee_directory, const fc::sha256& hash);
     void finalize();
-public:
-    ee_genesis_serializer messages;
-    ee_genesis_serializer transfers;
-    ee_genesis_serializer pinblocks;
-    ee_genesis_serializer accounts;
-    ee_genesis_serializer funds;
+
+    enum ee_ser_type {contracts, messages, transfers, withdraws, delegations, rewards, pinblocks, accounts, witnesses, funds, balance_conversions};
+    ee_genesis_serializer& get_serializer(ee_ser_type type) {
+        return serializers.at(type);
+    }
+
+private:
+    std::map<ee_ser_type, ee_genesis_serializer> serializers;
+
+};
+
+struct setabi_info {
+    OBJECT_CTOR(setabi_info);
+
+    name account;
+    bytes abi;
 };
 
 struct vote_info {
@@ -42,7 +53,7 @@ struct reblog_info {
 
 struct comment_info {
     OBJECT_CTOR(comment_info);
-    
+
     name parent_author;
     string parent_permlink;
     name author;
@@ -54,6 +65,12 @@ struct comment_info {
     fc::flat_set<string> tags;
     string language;
     int64_t net_rshares;
+    uint16_t rewardweight = 0;
+    asset max_payout{0, symbol(GLS)};
+    uint16_t benefics_prcnt = 0;
+    uint16_t curators_prcnt = 0;
+    uint16_t tokenprop = 0;
+    bool archived = true;
     asset author_reward;
     asset benefactor_reward;
     asset curator_reward;
@@ -68,7 +85,70 @@ struct transfer_info {
     name to;
     asset quantity;
     string memo;
+    bool to_vesting;
     fc::time_point_sec time;
+};
+
+struct withdraw_info {
+    OBJECT_CTOR(withdraw_info);
+
+    name from;
+    name to;
+    asset quantity;
+    fc::time_point_sec time;
+};
+
+struct author_reward {
+    OBJECT_CTOR(author_reward);
+
+    name author;
+    string permlink;
+    name parent_author;
+    string parent_permlink;
+    asset sbd_and_steem_payout;
+    asset vesting_payout;
+    fc::time_point_sec time;
+};
+
+struct benefactor_reward {
+    OBJECT_CTOR(benefactor_reward);
+
+    name benefactor;
+    name author;
+    string permlink;
+    name parent_author;
+    string parent_permlink;
+    asset reward;
+    fc::time_point_sec time;
+};
+
+struct curation_reward {
+    OBJECT_CTOR(curation_reward);
+
+    name curator;
+    asset reward;
+    name author;
+    string permlink;
+    name parent_author;
+    string parent_permlink;
+    fc::time_point_sec time;
+};
+
+struct delegation_reward {
+    OBJECT_CTOR(delegation_reward);
+
+    name delegator;
+    name delegatee;
+    asset reward;
+    fc::time_point_sec time;
+};
+
+struct balance_convert_info {
+    OBJECT_CTOR(balance_convert_info);
+
+    name owner;
+    asset amount;
+    string memo;
 };
 
 struct pin_info {
@@ -87,10 +167,18 @@ struct block_info {
 
 } } } // cyberway::genesis::ee
 
+FC_REFLECT(cyberway::genesis::ee::setabi_info, (account)(abi))
 FC_REFLECT(cyberway::genesis::ee::vote_info, (voter)(weight)(time)(rshares))
 FC_REFLECT(cyberway::genesis::ee::reblog_info, (account)(title)(body)(time))
-FC_REFLECT(cyberway::genesis::ee::comment_info, (parent_author)(parent_permlink)(author)(permlink)(created)(last_update)(title)(body)
-        (tags)(language)(net_rshares)(author_reward)(benefactor_reward)(curator_reward)(votes)(reblogs))
-FC_REFLECT(cyberway::genesis::ee::transfer_info, (from)(to)(quantity)(memo)(time))
+FC_REFLECT(cyberway::genesis::ee::comment_info, (parent_author)(parent_permlink)(author)(permlink)(created)(last_update)
+    (title)(body)(tags)(language)(net_rshares)(rewardweight)(max_payout)(benefics_prcnt)(curators_prcnt)(tokenprop)(archived)
+    (author_reward)(benefactor_reward)(curator_reward)(votes)(reblogs))
+FC_REFLECT(cyberway::genesis::ee::transfer_info, (from)(to)(quantity)(memo)(to_vesting)(time))
+FC_REFLECT(cyberway::genesis::ee::withdraw_info, (from)(to)(quantity)(time))
+FC_REFLECT(cyberway::genesis::ee::author_reward, (author)(permlink)(parent_author)(parent_permlink)(sbd_and_steem_payout)(vesting_payout)(time))
+FC_REFLECT(cyberway::genesis::ee::benefactor_reward, (benefactor)(author)(permlink)(parent_author)(parent_permlink)(reward)(time))
+FC_REFLECT(cyberway::genesis::ee::curation_reward, (curator)(reward)(author)(permlink)(parent_author)(parent_permlink)(time))
+FC_REFLECT(cyberway::genesis::ee::delegation_reward, (delegator)(delegatee)(reward)(time))
+FC_REFLECT(cyberway::genesis::ee::balance_convert_info, (owner)(amount)(memo))
 FC_REFLECT(cyberway::genesis::ee::pin_info, (pinner)(pinning))
 FC_REFLECT(cyberway::genesis::ee::block_info, (blocker)(blocking))
