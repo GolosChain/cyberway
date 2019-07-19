@@ -422,6 +422,18 @@ void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     process_account_metas();
 }
 
+void genesis_ee_builder::write_contracts_abis() {
+    std::cout << "-> Writing ABIs..." << std::endl;
+    auto& out = out_.get_serializer(event_engine_genesis::contracts);
+    out.start_section(config::system_account_name, N(setabi), "setabi");
+    for (const auto& acc: genesis_.get_contracts()) if (acc.second.abi.size()) {
+        out.emplace<setabi_info>([&](auto& r) {
+            r.account = acc.first;
+            r.abi = acc.second.abi;
+        });
+    }
+}
+
 void genesis_ee_builder::build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created) {
     const auto& vote_idx = maps_.get_index<vote_header_index, by_hash_voter>();
 
@@ -863,6 +875,7 @@ void genesis_ee_builder::build(const bfs::path& out_dir) {
 
     out_.start(out_dir, fc::sha256());
 
+    write_contracts_abis();
     write_messages();
     write_transfers();
     write_withdraws();

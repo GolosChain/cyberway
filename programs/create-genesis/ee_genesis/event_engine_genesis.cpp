@@ -4,6 +4,20 @@ namespace cyberway { namespace genesis { namespace ee {
 
 #define ABI_VERSION "cyberway::abi/1.0"
 
+static abi_def create_contracts_abi() {
+    abi_def abi;
+    abi.version = ABI_VERSION;
+
+    abi.structs.emplace_back( struct_def {
+        "setabi", "", {
+            {"account", "name"},
+            {"abi", "bytes"}
+        }
+    });
+
+    return abi;
+}
+
 static abi_def create_messages_abi() {
     abi_def abi;
     abi.version = ABI_VERSION;
@@ -273,6 +287,7 @@ static abi_def create_funds_abi() {
 void event_engine_genesis::start(const bfs::path& ee_directory, const fc::sha256& hash) {
     using ser_info = std::tuple<string, abi_def>;
     const std::map<ee_ser_type, ser_info> infos = {
+        {ee_ser_type::contracts,   {"contracts.dat",   create_contracts_abi()}},
         {ee_ser_type::messages,    {"messages.dat",    create_messages_abi()}},
         {ee_ser_type::transfers,   {"transfers.dat",   create_transfers_abi()}},
         {ee_ser_type::withdraws,   {"withdraws.dat",   create_withdraws_abi()}},

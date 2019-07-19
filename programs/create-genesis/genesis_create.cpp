@@ -1347,6 +1347,9 @@ const genesis_info& genesis_create::get_info() const {
 const genesis_state& genesis_create::get_conf() const {
     return _impl->_conf;
 }
+const contracts_map& genesis_create::get_contracts() const {
+    return _impl->_contracts;
+}
 const export_info& genesis_create::get_exp_info() const {
     return _impl->_exp_info;
 }

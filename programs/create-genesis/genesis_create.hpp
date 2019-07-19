@@ -36,6 +36,7 @@ public:
     // ee interface
     const genesis_info& get_info() const;
     const genesis_state& get_conf() const;
+    const contracts_map& get_contracts() const;
     const export_info& get_exp_info() const;
     name name_by_idx(acc_idx idx) const;
     supply_distributor get_gbg_to_golos_converter() const;
