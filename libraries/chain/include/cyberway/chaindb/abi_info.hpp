@@ -106,4 +106,11 @@ namespace cyberway { namespace chaindb {
     bytes   merge_abi_def(const bytes&, const bytes&);
 
 
+    //-------------------------------------------------------------------
+
+    abi_def merge_abi_def(abi_def, abi_def);
+    bytes   merge_abi_def(abi_def, const bytes&);
+    bytes   merge_abi_def(const bytes&, const bytes&);
+
+
 } } // namespace cyberway::chaindb
