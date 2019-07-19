@@ -231,6 +231,12 @@ namespace cyberway { namespace chaindb {
                 invalid_scope_name_exception,
                 "Scope type should has type: int64, uint64, name, symbol_code or symbol",
                 ("field", k.field)("table", get_table_name(table)));
+
+            for (auto& index: table.indexes) if (!index.unique) for (auto& order: index.orders) {
+                CYBERWAY_ASSERT(order.field != k.field, invalid_index_description_exception,
+                    "Not-unique index ${index} for the table ${table} can't contain primary key ${pk}",
+                    ("table", get_table_name(table))("index", get_index_name(index))("pk", k.field));
+            }
         }
     }; // struct index_builder
 
@@ -378,17 +384,12 @@ namespace cyberway { namespace chaindb {
             paths.clear();
             indexes.clear();
 
-            bool was_pk   = false;
             auto pk_order = find_pk_order(*ttr->second);
             for (auto& index: ttr->second->indexes) {
                 indexes.emplace(index.name, &index);
                 path.clear();
                 for (auto& order: index.orders) {
                     path.append(":").append(order.order).append("+").append(order.field);
-                    was_pk |= (order.field == pk_order->field);
-                }
-                if (!was_pk && !index.unique) {
-                    path.append(":").append(names::asc_order).append("+").append(pk_order->field);
                 }
                 paths.insert(path);
             }

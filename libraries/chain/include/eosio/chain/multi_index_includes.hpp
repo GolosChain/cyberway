@@ -13,7 +13,7 @@
 #include <cyberway/chaindb/multi_index.hpp>
 #include <cyberway/chaindb/index_object.hpp>
 
-#define CHAINDB_TABLE_TAG(_TYPE, _NAME, _ACCOUNT)       \
+#define CHAINDB_TABLE_TAG(_TYPE, _ACCOUNT, _NAME)       \
     namespace cyberway { namespace chaindb {            \
         template<> struct tag<_TYPE> {                  \
             using type = _TYPE;                         \

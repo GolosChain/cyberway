@@ -15,6 +15,10 @@
 namespace cyberway { namespace chaindb {
 
     inline bool is_noscope_table(const table_info& info) {
+        if (info.code == eosio::chain::config::history_account_name) {
+            return true;
+        }
+
         if (!is_system_code(info.code)) {
             return false;
         }

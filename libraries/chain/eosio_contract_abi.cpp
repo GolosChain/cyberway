@@ -802,15 +802,15 @@ abi_def history_contract_abi(abi_def abi) {
     abi.tables.emplace_back( eosio::chain::table_def {
        name("pubkeyhist"), "pubkeyhist", {
           { name("primary"), true, {{"id", "asc"}} },
-          { name("bypubkey"), false, {
-                {"public_key", "asc"}
-//                {"id", "asc"}
+          { name("bypubkey"), true, {
+                {"public_key", "asc"},
+                {"id", "asc"}
             }
           },
-          { name("byaccperm"), false, {
+          { name("byaccperm"), true, {
                 {"name", "asc"},
-                {"permission", "asc"}
-//                {"id", "asc"}
+                {"permission", "asc"},
+                {"id", "asc"}
             }
           }
        }
@@ -829,9 +829,9 @@ abi_def history_contract_abi(abi_def abi) {
                 {"id", "asc"}
             }
           },
-          { name("bycontrol"), false, {
+          { name("bycontrol"), true, {
                 {"controlling_account", "asc"},
-//                {"id", "asc"}
+                {"id", "asc"}
             }
           },
           { name("controlauth"), false, {
