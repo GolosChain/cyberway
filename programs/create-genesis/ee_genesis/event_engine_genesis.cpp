@@ -220,10 +220,20 @@ static abi_def create_accounts_abi() {
     });
 
     abi.structs.emplace_back( struct_def {
+       "key_weight", "", {
+            {"key", "public_key"},
+            {"weight", "uint16"}
+        }
+    });
+
+    abi.structs.emplace_back( struct_def {
         "account_info", "", {
             {"creator", "name"},
             {"owner", "name"},
             {"name", "string"},
+            {"owner_keys", "key_weight[]"},
+            {"active_keys", "key_weight[]"},
+            {"posting_keys", "key_weight[]"},
             {"created", "time_point_sec"},
             {"last_update", "time_point_sec"},
             {"reputation", "int64"},

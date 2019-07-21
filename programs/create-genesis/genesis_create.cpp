@@ -354,6 +354,10 @@ struct genesis_create::genesis_create_impl final {
             const auto& owner  = store_permission(name, config::owner_name, 0, own, usage_id++);
             const auto& active = store_permission(name, config::active_name, owner.id, act, usage_id++);
             const auto& posting= store_permission(name, posting_auth_name, active.id, post, usage_id++);
+            _exp_info.account_infos[a.account.id] = mvo
+                ("owner_keys", own.keys)
+                ("active_keys", act.keys)
+                ("posting_keys", post.keys);
 
             auto itr = std::find_if(_info.transit_account_authorities.begin(), _info.transit_account_authorities.end(),
                     [&](const auto& acc) {return acc.name == name;});
@@ -403,7 +407,7 @@ struct genesis_create::genesis_create_impl final {
                 u.scope = app;
                 u.name = s;
             });
-            _exp_info.account_infos[auth.account.id] = mvo
+            _exp_info.account_infos[auth.account.id] = _exp_info.account_infos[auth.account.id]
                 ("creator", app)
                 ("owner", n)
                 ("name", s)
