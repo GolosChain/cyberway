@@ -14,6 +14,18 @@ from testUtils import Account
 from testUtils import EnumType
 from testUtils import addEnum
 from testUtils import unhandledEnumType
+import numpy as np
+
+rateLimitingPrecision = 1000000
+resources_num = 4
+minResourceUsage = 0.001
+
+def intDivideCeil(num, den):
+    ret = int(num) // int(den)
+    if (int(num) % int(den)) > 0:
+        ret += 1
+    return ret
+
 
 class ReturnType(EnumType):
     pass
@@ -628,8 +640,8 @@ class Node(object):
 
     def getTable(self, contract, scope, table, exitOnError=False):
         cmdDesc = "get table"
-        cmd="%s %s %s %s" % (cmdDesc, contract, scope, table)
-        msg="contract=%s, scope=%s, table=%s" % (contract, scope, table);
+        cmd="%s %s %s %s --limit=1024" % (cmdDesc, contract, scope, table)
+        msg="account=%s, scope=%s, table=%s" % (contract, scope, table);
         return self.processCleosCmd(cmd, cmdDesc, exitOnError=exitOnError, exitMsg=msg)
 
     def getTableAccountBalance(self, contract, scope):
@@ -642,7 +654,66 @@ class Node(object):
         except (TypeError, KeyError) as _:
             print("transaction[rows][0][balance] not found. Transaction: %s" % (trans))
             raise
-
+    
+    def getSysTableRow(self, table):
+        t = self.getTable('""', '""', table, exitOnError=True)
+        try:
+            return t["rows"][0]
+        except (TypeError, KeyError) as _:
+            print("sys table row not found. table: %s" % (t))
+            raise
+    
+    def getChainParams(self):
+        return self.getSysTableRow("gproperty")["configuration"]
+    
+    def getResConfig(self):
+        return self.getSysTableRow("resconfig")
+        
+    def getResState(self):
+        return self.getSysTableRow("resstate")
+        
+    def getCoreTotalStaked(self):
+        t = self.getTable('""', '""', "stake.stat", exitOnError=True)
+        for s in t["rows"]:
+            if s["token_code"] == CORE_SYMBOL:
+                return int(s["total_staked"])
+    
+    def setChainParams(self, newParams):
+        params = self.getChainParams()
+        for k,v in newParams.items():
+            params[k] = v
+        data="""{"params": %s}""" % (json.dumps(params))
+        return self.pushMessage("cyber", "setparams", data, "--permission cyber@active")
+    
+    def freezeVirtualLimits(self, limits):
+        self.setChainParams({"min_virtual_limits": limits, "max_virtual_limits": limits})
+        
+    def getAccountUsage(self, name):
+        w = self.getResConfig()["account_usage_average_windows"]
+        ret = np.zeros(resources_num)
+        us = self.getTable('""', '""', "resusage", exitOnError=True)
+        for u in us["rows"]:
+            if u["owner"] == name:
+                for i in range(resources_num):
+                    ret[i] = intDivideCeil(int(u["accumulators"][i]["value_ex"]) * int(w[i]), rateLimitingPrecision)
+                break
+        return ret
+    
+    def getPricelist(self): #approx float values
+        state = self.getResState()
+        config = self.getResConfig()
+        used = np.zeros(resources_num)
+        ret = np.zeros(resources_num)
+        for i in range(resources_num):
+            avg = float(intDivideCeil(state["block_usage_accumulators"][i]["value_ex"], rateLimitingPrecision))
+            used[i] = max(avg / config["limit_parameters"][i]["target"], minResourceUsage)
+        usedSum = sum(used)
+        totalStaked = self.getCoreTotalStaked()
+        for i in range(resources_num):
+            capacity = float(state["virtual_limits"][i]) * float(config["account_usage_average_windows"][i])
+            ret[i] = float(totalStaked * used[i]) / (usedSum * capacity)
+        return ret
+        
     def getCurrencyBalance(self, contract, account, symbol=CORE_SYMBOL, exitOnError=False):
         """returns raw output from get currency balance e.g. '99999.9950 CUR'"""
         assert(contract)
@@ -1202,15 +1273,8 @@ class Node(object):
             Utils.errorExit("Failed to \"%s\"" % (cmdDesc))
 
         return trans
-
-    def killNodeOnProducer(self, producer, whereInSequence, blockType=BlockType.head, silentErrors=True, exitOnError=False, exitMsg=None, returnType=ReturnType.json):
-        assert(isinstance(producer, str))
-        assert(isinstance(whereInSequence, int))
-        assert(isinstance(blockType, BlockType))
-        assert(isinstance(returnType, ReturnType))
-        basedOnLib="true" if blockType==BlockType.lib else "false"
-        cmd="curl %s/v1/test_control/kill_node_on_producer -d '{ \"producer\":\"%s\", \"where_in_sequence\":%d, \"based_on_lib\":\"%s\" }' -X POST -H \"Content-Type: application/json\"" % \
-            (self.endpointHttp, producer, whereInSequence, basedOnLib)
+    
+    def sendCurlCmd(self, cmd, silentErrors=True, exitOnError=False, exitMsg=None, returnType=ReturnType.json):
         if Utils.Debug: Utils.Print("cmd: %s" % (cmd))
         rtn=None
         start=time.perf_counter()
@@ -1246,6 +1310,25 @@ class Node(object):
             Utils.errorExit("Failed to \"%s\"" % (cmd))
 
         return rtn
+
+    def killNodeOnProducer(self, producer, whereInSequence, blockType=BlockType.head, silentErrors=True, exitOnError=False, exitMsg=None, returnType=ReturnType.json):
+        assert(isinstance(producer, str))
+        assert(isinstance(whereInSequence, int))
+        assert(isinstance(blockType, BlockType))
+        assert(isinstance(returnType, ReturnType))
+        basedOnLib="true" if blockType==BlockType.lib else "false"
+        cmd="curl %s/v1/test_control/kill_node_on_producer -d '{ \"producer\":\"%s\", \"where_in_sequence\":%d, \"based_on_lib\":\"%s\" }' -X POST -H \"Content-Type: application/json\"" % \
+            (self.endpointHttp, producer, whereInSequence, basedOnLib)
+        return self.sendCurlCmd(cmd, silentErrors=silentErrors, exitOnError=exitOnError, exitMsg=exitMsg, returnType=returnType)
+    
+    def getProducerRuntimeOptions(self, silentErrors=True, exitOnError=False, exitMsg=None, returnType=ReturnType.json):
+        cmd="curl %s/v1/producer/get_runtime_options" % (self.endpointHttp)
+        return self.sendCurlCmd(cmd, silentErrors=silentErrors, exitOnError=exitOnError, exitMsg=exitMsg, returnType=returnType)
+    
+    def setSubjectiveRam(self, size, reserved_size, rlm, silentErrors=True, exitOnError=False, exitMsg=None, returnType=ReturnType.json):
+        cmd="curl %s/v1/producer/update_runtime_options -d '{ \"subjective_ram_size\":%d, \"subjective_reserved_ram_size\":%d, \"ram_load_multiplier\":%d }' " % \
+            (self.endpointHttp, size, reserved_size, rlm)
+        return self.sendCurlCmd(cmd, silentErrors=silentErrors, exitOnError=exitOnError, exitMsg=exitMsg, returnType=returnType)
 
     def waitForTransBlockIfNeeded(self, trans, waitForTransBlock, exitOnError=False):
         if not waitForTransBlock:

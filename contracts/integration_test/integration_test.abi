@@ -1,16 +1,19 @@
 {
-   "version": "eosio::abi/1.0",
-   "types": [{
-      "new_type_name": "account_name",
-      "type": "name"
-   }],
+   "version": "cyberway::abi/1.1",
   "structs": [{
       "name": "store",
       "base": "",
       "fields": [
-        {"name":"from", "type":"account_name"},
-        {"name":"to", "type":"account_name"},
+        {"name":"from", "type":"name"},
+        {"name":"to", "type":"name"},
         {"name":"num", "type":"uint64"}
+      ]
+    },{
+      "name": "modify",
+      "base": "",
+      "fields": [
+        {"name":"from", "type":"name"},
+        {"name":"val", "type":"uint64"}
       ]
     },{
      "name": "payload",
@@ -24,16 +27,20 @@
   "actions": [{
       "name": "store",
       "type": "store"
+    },{
+      "name": "modify",
+      "type": "modify"
     }
 
   ],
   "tables": [{
-      "name": "payloads",
-      "type": "payload",
-      "index_type": "i64",
-      "key_names" : ["key"],
-      "key_types" : ["uint64"]
-    }
+            "name": "payloads",
+            "type": "payload",
+            "indexes": [
+                { "name": "primary", "unique": "true",  "orders": [ {"field": "key",  "order": "asc"}  ] }
+            ]
+        }
   ],
+  "variants": [],
   "abi_extensions": []
 }
