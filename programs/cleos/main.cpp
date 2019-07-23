@@ -794,12 +794,12 @@ chain::action create_buyrambytes(const name& creator, const name& newaccount, ui
 
 chain::action create_delegate(const name& from, const name& receiver, const asset& stake, bool transfer) {
    fc::variant act_payload = fc::mutable_variant_object()
-         ("from", from.to_string())
-         ("receiver", receiver.to_string())
-         ("stake", stake.to_string())
+         ("grantor_name", from.to_string())
+         ("recipient_name", receiver.to_string())
+         ("quantity", stake.to_string())
          ("transfer", transfer);
-   return create_action(get_account_permissions(tx_permission, {from,config::active_name}),
-                        config::system_account_name, N(delegatebw), act_payload);
+   return create_action(get_account_permissions(tx_permission, {from, config::active_name}),
+                        N(cyber.stake), N(delegateuse), act_payload);
 }
 
 chain::action create_open(const string& contract, const name& owner, symbol sym, const name& ram_payer) {
@@ -1539,9 +1539,16 @@ struct delegate_bandwidth_subcommand {
       add_standard_transaction_options(delegate_bandwidth, "from@active");
 
       delegate_bandwidth->set_callback([this] {
-          EOS_THROW(action_not_found_exception, "Action delegatebw is not supported yet");
-//         std::vector<chain::action> acts{create_delegate(from_str, receiver_str, stake, transfer)};
-//         send_actions(std::move(acts));
+          if (transfer) {
+              auto accountPermissions = get_account_permissions(tx_permission, {from_str, config::active_name});
+
+              fc::variant withdraw_params = fc::mutable_variant_object("account", from_str)("quantity", stake);
+              fc::variant transfer_params = fc::mutable_variant_object("from", from_str)("to", "cyber.stake")("quantity", stake)("memo", receiver_str);
+              send_actions({create_action(accountPermissions, N(cyber.stake), N(withdraw), withdraw_params), create_action(accountPermissions, N(cyber.token), N(transfer), transfer_params)});
+          } else {
+              std::vector<chain::action> acts{create_delegate(from_str, receiver_str, to_asset(stake), transfer)};
+              send_actions(std::move(acts));
+          }
       });
    }
 };
