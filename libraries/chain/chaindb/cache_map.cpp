@@ -501,7 +501,6 @@ namespace cyberway { namespace chaindb {
             if (!cache_obj_ptr) {
                 object_value obj;
                 obj.service = value.service;
-                obj.service.size = 0;
 
                 cache_obj_ptr = new cache_object(std::move(obj));
                 is_new_ptr    = true;
