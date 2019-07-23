@@ -25,6 +25,9 @@ public:
       fc::optional<int32_t> last_block_time_offset_us;
       fc::optional<int32_t> max_scheduled_transaction_time_per_block_ms;
       fc::optional<int32_t> subjective_cpu_leeway_us;
+      fc::optional<uint64_t> subjective_ram_size;
+      fc::optional<uint64_t> subjective_reserved_ram_size;
+      fc::optional<uint32_t> ram_load_multiplier;
       fc::optional<double>  incoming_defer_ratio;
    };
 
@@ -70,7 +73,9 @@ private:
 
 } //eosio
 
-FC_REFLECT(eosio::producer_plugin::runtime_options, (max_transaction_time)(max_irreversible_block_age)(produce_time_offset_us)(last_block_time_offset_us)(max_scheduled_transaction_time_per_block_ms)(subjective_cpu_leeway_us)(incoming_defer_ratio));
+FC_REFLECT(eosio::producer_plugin::runtime_options, 
+    (max_transaction_time)(max_irreversible_block_age)(produce_time_offset_us)(last_block_time_offset_us)(max_scheduled_transaction_time_per_block_ms)
+    (subjective_cpu_leeway_us)(subjective_ram_size)(subjective_reserved_ram_size)(ram_load_multiplier)(incoming_defer_ratio));
 //TODO: Removed by CyberWay
 //FC_REFLECT(eosio::producer_plugin::integrity_hash_information, (head_block_id)(integrity_hash))
 //FC_REFLECT(eosio::producer_plugin::snapshot_information, (head_block_id)(snapshot_name))

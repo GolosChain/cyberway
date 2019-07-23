@@ -262,10 +262,11 @@ namespace cyberway { namespace chaindb {
     }; // struct lru_cache_object_state
 
     struct lru_cache_cell final: public cache_cell {
-        lru_cache_cell(cache_map_impl& m, const uint64_t p, const revision_t r, const uint64_t d)
+        lru_cache_cell(cache_map_impl& m, const uint64_t p, const revision_t r, const uint64_t d, const uint32_t rlm)
         : cache_cell(m, p, cache_cell::Pending),
           revision_(r),
-          max_distance_(d) {
+          max_distance_(d),
+          ram_load_multiplier_(rlm) {
             assert(revision_ >= start_revision);
             assert(max_distance_ > 0);
         }
@@ -334,20 +335,22 @@ namespace cyberway { namespace chaindb {
             if (!object_size) {
                 return;
             }
-
-            auto delta = state.prev_state ?
+            auto pos_diff = state.prev_state ? pos() - state.prev_state->cell->pos() : max_distance_;
+            bool in_ram = pos_diff < max_distance_;
+            auto delta =  in_ram ?
                std::max(
                    eosio::chain::int_arithmetic::safe_prop<uint64_t>(
-                       object_size, pos() - state.prev_state->cell->pos(), max_distance_),
+                       object_size, pos_diff, max_distance_),
                    uint64_t(1)) :
-               object_size * config::ram_load_multiplier;
-
+               object_size * ram_load_multiplier_;
+            
             add_ram_bytes(delta);
         }
 
         uint64_t ram_bytes_ = 0;
         revision_t revision_ = impossible_revision;
         const uint64_t max_distance_ = 0;
+        const uint32_t ram_load_multiplier_ = config::default_ram_load_multiplier;
     }; // struct lru_cache_cell
 
     //-----------------------------------------------------------------------------------------------
@@ -488,7 +491,7 @@ namespace cyberway { namespace chaindb {
             auto  cache_obj_ptr = find_in_cache(service, value.service);
             bool  is_new_ptr    = false;
             bool  is_del_ptr    = false;
-
+            
             if (!cache_obj_ptr && has_pending_cell()) {
                 auto itr = service.deleted_object_tree.find(value.service);
                 if (service.deleted_object_tree.end() != itr) {
@@ -623,6 +626,17 @@ namespace cyberway { namespace chaindb {
                 obj_ptr->object_.service.revision = rev;
             }
         }
+        
+        void set_subjective_ram(uint64_t size, uint64_t reserved_size, uint32_t rlm) {
+            subjective_ram_size = size;
+            subjective_reserved_ram_size = reserved_size;
+            if (subjective_ram_size) {
+                ram_limit_ = get_ram_limit(subjective_ram_size, subjective_reserved_ram_size);
+            }
+            if (rlm) {
+                ram_load_multiplier = rlm;
+            }
+        }
 
         primary_key_t get_next_pk(const table_info& table) {
             auto service_ptr = find_cache_service(table);
@@ -687,7 +701,7 @@ namespace cyberway { namespace chaindb {
                 }
             }
 
-            lru_cell_list_.emplace_back(*this, pos, revision, ram_limit_);
+            lru_cell_list_.emplace_back(*this, pos, revision, ram_limit_, ram_load_multiplier);
             pending_cell_list_.emplace_back(&lru_cell_list_.back());
         }
 
@@ -755,6 +769,10 @@ namespace cyberway { namespace chaindb {
 
         uint64_t               ram_limit_ = get_ram_limit();
         uint64_t               ram_used_  = 0;
+        
+        uint64_t subjective_ram_size = 0;
+        uint64_t subjective_reserved_ram_size = 0;
+        uint32_t ram_load_multiplier = config::default_ram_load_multiplier;
 
         static uint64_t get_ram_limit(
             const uint64_t limit   = config::default_ram_size,
@@ -783,7 +801,7 @@ namespace cyberway { namespace chaindb {
 
         bool add_pending_object(cache_object_ptr obj_ptr) {
             assert(obj_ptr);
-
+            
             auto pending_ptr = find_pending_cell();
             if (!pending_ptr) {
                 return false;
@@ -904,7 +922,10 @@ namespace cyberway { namespace chaindb {
                 using global_property_object = eosio::chain::global_property_object;
                 if (cache_obj.has_data() && cache_obj.service().table == chaindb::tag<global_property_object>::get_code()) {
                     auto& gpo = multi_index_item_data<global_property_object>::get_T(cache_obj);
-                    ram_limit_ = get_ram_limit(gpo.configuration.ram_size, gpo.configuration.reserved_ram_size);
+                    
+                    ram_limit_ = get_ram_limit(
+                        subjective_ram_size ? subjective_ram_size          : gpo.configuration.ram_size, 
+                        subjective_ram_size ? subjective_reserved_ram_size : gpo.configuration.reserved_ram_size);
                 }
             }
 
@@ -1360,6 +1381,10 @@ namespace cyberway { namespace chaindb {
 
     void cache_map::set_revision(const revision_t revision) const {
         impl_->set_revision(revision);
+    }
+    
+    void cache_map::set_subjective_ram(uint64_t size, uint64_t reserved_size, uint32_t rlm) const {
+        impl_->set_subjective_ram(size, reserved_size, rlm);
     }
 
     void cache_map::start_session(const revision_t revision) const {

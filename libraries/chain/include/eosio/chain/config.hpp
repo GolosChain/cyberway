@@ -90,7 +90,7 @@ static constexpr resource_windows_t default_account_usage_windows      = {{_HOUR
 static constexpr resource_limits_t  default_max_block_usage            = {{1'400'000,     1*_MB,         128*_MB,         4*_MB}};
 static constexpr resource_limits_t  default_max_transaction_usage      = {{800'000,       512*_KB,       64*_MB,          4*_MB - 1}};
 
-static constexpr uint64_t ram_load_multiplier = 2;
+static constexpr uint32_t default_ram_load_multiplier = 2;
 
 const static uint32_t   maximum_block_size                           = 2*_MB; // maximum block size for pack/unpack data in block_log
 const static uint32_t   default_base_per_transaction_net_usage       = 12;  // 12 bytes (11 bytes for worst case of transaction_receipt_header + 1 byte for static_variant tag)

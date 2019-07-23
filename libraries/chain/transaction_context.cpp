@@ -258,7 +258,7 @@ namespace bacc = boost::accumulators;
       pricelist = rl.get_pricelist();
       available_resources.init();
 
-      _deadline = start + get_billing_timer_duration_limit();
+      _deadline = start + get_billing_timer_duration_limit() + leeway;
 
       // Check if deadline is limited by caller-set deadline (only change deadline if billed_cpu_time_us is not set)
       if( explicit_billed_cpu_time || caller_set_deadline < _deadline ) {
@@ -411,11 +411,6 @@ namespace bacc = boost::accumulators;
        trace->elapsed = now - start;
 
        update_billed_cpu_time(now);
-       
-       const auto& cfg = control.get_global_properties().configuration;
-       EOS_ASSERT( billed_cpu_time_us >= cfg.min_transaction_cpu_usage, transaction_exception,
-          "cannot bill CPU time less than the minimum of ${min_billable} us",
-          ("min_billable", cfg.min_transaction_cpu_usage)("billed_cpu_time_us", billed_cpu_time_us));
 
        hard_limits[resource_limits::CPU    ].check(billed_cpu_time_us);
        hard_limits[resource_limits::NET    ].check(net_usage);
@@ -434,35 +429,34 @@ namespace bacc = boost::accumulators;
       // if (undo_session) undo_session->undo();
       if (chaindb_undo_session) chaindb_undo_session->undo();
    }
-   
-    fc::time_point transaction_context::get_current_time() const { 
-        return explicit_billed_cpu_time ? start + fc::microseconds(billed_cpu_time_us) : fc::time_point::now();
-    };
 
     void transaction_context::checktime()const {
 
         if (!explicit_billed_cpu_time && BOOST_LIKELY((_deadline_timer.expired == false)))
             return;
 
-        auto now = get_current_time();
-        if (BOOST_UNLIKELY(now > _deadline)) {
-            auto cpu_used = (now - pseudo_start).count();
+        auto now = fc::time_point::now();
+        auto used_cpu_time = get_used_cpu_time(now);
+        auto billing_limit_us = get_billing_timer_duration_limit().count();
+        bool caller_deadline_violated = !explicit_billed_cpu_time && (now > caller_set_deadline);
+
+        if (BOOST_UNLIKELY(used_cpu_time > billing_limit_us || caller_deadline_violated)) {
             EOS_ASSERT(!explicit_billed_cpu_time, explicitly_billed_exception,
             //? in this case, EOS throws deadline_exception
                 "explicitly_billed_exception",
-                ("now", now)("deadline", _deadline)("start", start)("cpu_used", cpu_used));
+                ("used_cpu_time", used_cpu_time)("billing_limit_us", billing_limit_us));
             
             EOS_ASSERT(!timer_off, timer_off_exception,
             //? again, deadline_exception in EOS
                 "timer_off_exception",
-                ("now", now)("deadline", _deadline)("start", start)("cpu_used", cpu_used));
+                ("used_cpu_time", used_cpu_time)("billing_limit_us", billing_limit_us));
             
-            EOS_ASSERT(now <= caller_set_deadline, deadline_exception,
+            EOS_ASSERT(!caller_deadline_violated, deadline_exception,
                 "deadline_exception",
-                ("now", now)("deadline", _deadline)("start", start)("cpu_used", cpu_used));
+                ("now", now)("caller_set_deadline", caller_set_deadline));
                 
-            hard_limits[resource_limits::CPU].check(cpu_used);
-            available_resources.check_cpu_usage(cpu_used);
+            hard_limits[resource_limits::CPU].check(used_cpu_time);
+            available_resources.check_cpu_usage(used_cpu_time);
     
             EOS_ASSERT( false,  transaction_exception, "unexpected deadline exception code" );
       }
@@ -486,7 +480,7 @@ namespace bacc = boost::accumulators;
       auto now = fc::time_point::now();
       pseudo_start = now - billed_time;
       
-      _deadline = pseudo_start + get_billing_timer_duration_limit();
+      _deadline = pseudo_start + get_billing_timer_duration_limit() + leeway;
       if(caller_set_deadline < _deadline) {
          _deadline = caller_set_deadline;
       }
@@ -500,19 +494,6 @@ namespace bacc = boost::accumulators;
       resume_billing_timer();
    };
 
-   void transaction_context::validate_cpu_usage_to_bill( int64_t billed_us, bool check_minimum )const {
-      if (!control.skip_trx_checks()) {
-         if( check_minimum ) {
-            const auto& cfg = control.get_global_properties().configuration;
-            EOS_ASSERT( billed_us >= cfg.min_transaction_cpu_usage, transaction_exception,
-                        "cannot bill CPU time less than the minimum of ${min_billable} us",
-                        ("min_billable", cfg.min_transaction_cpu_usage)("billed_cpu_time_us", billed_us)
-                      );
-         }
-         hard_limits[resource_limits::CPU].check(billed_us);
-      }
-   }
-
    void transaction_context::add_storage_usage( const storage_payer_info& storage ) {
       if( control.chaindb().get<account_object>(storage.payer).privileged ) {
          return;
@@ -523,15 +504,30 @@ namespace bacc = boost::accumulators;
 
       accounts_storage_deltas[storage.payer] += storage.delta;
 
-      auto now = get_current_time();
       available_resources.update_storage_usage(storage);
       reset_billing_timer();
    }
+   
+   int64_t transaction_context::get_used_cpu_time(fc::time_point now)const {
+      if (explicit_billed_cpu_time) {
+         return billed_cpu_time_us;
+      }
+      int64_t ret = (now - pseudo_start).count();
+      if (ret > leeway.count()) {
+          ret -= leeway.count();
+      }
+      return ret;
+   }
 
    uint32_t transaction_context::update_billed_cpu_time( fc::time_point now ) {
+      int64_t min_billable =  control.get_global_properties().configuration.min_transaction_cpu_usage;
       if (!explicit_billed_cpu_time) {
-         const auto& cfg = control.get_global_properties().configuration;
-         billed_cpu_time_us = std::max((now - pseudo_start).count(), static_cast<int64_t>(cfg.min_transaction_cpu_usage));
+         billed_cpu_time_us = std::max(get_used_cpu_time(now), min_billable);
+      }
+      else {
+         EOS_ASSERT( billed_cpu_time_us >= min_billable, transaction_exception,
+            "cannot bill CPU time less than the minimum of ${min_billable} us",
+            ("min_billable", min_billable)("billed_cpu_time_us", billed_cpu_time_us));
       }
       return static_cast<uint32_t>(billed_cpu_time_us);
    }

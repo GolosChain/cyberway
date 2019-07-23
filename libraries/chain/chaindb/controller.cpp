@@ -510,6 +510,10 @@ namespace cyberway { namespace chaindb {
             undo_.set_revision(revision);
             cache_.set_revision(revision);
         }
+        
+        void set_subjective_ram(uint64_t size, uint64_t reserved_size, uint32_t rlm) const {
+            cache_.set_subjective_ram(size, reserved_size, rlm);
+        }
 
         chaindb_session start_undo_session(bool enabled) {
             auto revision = undo_.start_undo_session(enabled);
@@ -945,6 +949,10 @@ namespace cyberway { namespace chaindb {
 
     void chaindb_controller::set_revision(revision_t revision) const {
         return impl_->set_revision(revision);
+    }
+    
+    void chaindb_controller::set_subjective_ram(uint64_t size, uint64_t reserved_size, uint32_t rlm) const {
+        impl_->set_subjective_ram(size, reserved_size, rlm);
     }
 
     chaindb_session chaindb_controller::start_undo_session(bool enabled) const {

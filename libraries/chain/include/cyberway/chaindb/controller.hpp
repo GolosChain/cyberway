@@ -134,6 +134,7 @@ namespace cyberway { namespace chaindb {
 
         revision_t revision() const;
         void set_revision(revision_t revision) const;
+        void set_subjective_ram(uint64_t size, uint64_t reserved_size, uint32_t rlm) const;
 
         chaindb_session start_undo_session(bool enabled) const;
         void undo_last_revision() const;
