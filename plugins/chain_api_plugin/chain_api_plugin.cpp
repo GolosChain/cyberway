@@ -71,8 +71,8 @@ public:
     std::vector<uint8_t> get_proxylevel_limits(const get_proxylevel_limits_params& params) const;
 
 private:
-   get_table_rows_result walk_table_row_range(const get_table_rows_params& p,
-                                              cyberway::chaindb::find_info& itr, cyberway::chaindb::primary_key_t end_pk) const;
+    get_table_rows_result iterate_reverse(const cyberway::chaindb::index_request& request, const get_table_rows_params& p, const fc::time_point& end_time) const;
+    get_table_rows_result iterate_averse(const cyberway::chaindb::index_request& request, const get_table_rows_params& p, const fc::time_point& end_time) const;
 
     fc::optional<eosio::chain::asset> get_account_core_liquid_balance(const get_account_params& params) const;
 
@@ -80,7 +80,7 @@ private:
 
     uint32_t get_grantors_count(chain::account_name account, chain::symbol_code token_code) const;
     uint8_t get_proxy_level(chain::account_name account, chain::symbol_code token_code) const;
-
+    fc::variant get_row_value(const get_table_rows_params& p, const cyberway::chaindb::cursor_request& cursor, const cyberway::chaindb::index_info& index) const;
 
 private:
 
@@ -547,49 +547,72 @@ get_table_rows_result chain_api_plugin_impl::get_table_rows( const get_table_row
    }
 
    const cyberway::chaindb::index_request request{p.code, scope, p.table, p.index};
+   const auto end_time = fc::time_point::now() + fc::microseconds(1000 * 10); /// 10ms max time
 
    if (p.reverse && *p.reverse) {
-       // TODO: implement rbegin end rend methods in mongo driver https://github.com/GolosChain/cyberway/issues/446
-       EOS_THROW(cyberway::chaindb::driver_unsupported_operation_exception, "Backward iteration through table not supported yet");
+       return iterate_reverse(request, p, end_time);
    } else {
-       auto begin = p.lower_bound.is_null() ? chaindb.begin(request) : chaindb.lower_bound(request, p.lower_bound);
-       const auto end_pk = p.upper_bound.is_null() ? cyberway::chaindb::primary_key::End : chaindb.upper_bound(request, p.upper_bound).pk;
-       return walk_table_row_range(p, begin, end_pk);
+       return iterate_averse(request, p, end_time);
    }
-
 }
 
-get_table_rows_result chain_api_plugin_impl::walk_table_row_range(const get_table_rows_params& p, cyberway::chaindb::find_info& itr, cyberway::chaindb::primary_key_t end_pk) const {
+get_table_rows_result chain_api_plugin_impl::iterate_reverse(const cyberway::chaindb::index_request& request, const get_table_rows_params& p, const fc::time_point& end_time) const {
+    auto& chaindb = chain_controller_.chaindb();
+    const auto end_pk = p.lower_bound.is_null() ? chaindb.begin(request).pk : chaindb.lower_bound(request, p.lower_bound).pk;
+    const auto hard_end_pk = chaindb.begin(request).pk;
+    auto itr = p.upper_bound.is_null() ? std::move(--chaindb.end(request)) : chaindb.upper_bound(request, p.upper_bound);
+
     get_table_rows_result result;
 
-    auto cur_time = fc::time_point::now();
-    const auto end_time = cur_time + fc::microseconds(1000 * 10); /// 10ms max time
-
-    auto& chaindb = chain_controller_.chaindb();
     cyberway::chaindb::cursor_request cursor{p.code, itr.cursor};
     auto index = chaindb.index_at_cursor(cursor);
 
-    for(unsigned int count = 0;
-        cur_time <= end_time && count < p.limit && itr.pk != end_pk;
-        ++itr, ++count, cur_time = fc::time_point::now()
-    ) {
-        if (p.show_payer && *p.show_payer) {
-            const auto object = chaindb.object_at_cursor(cursor);
-            auto value = fc::mutable_variant_object()
-                ("data",    object.value)
-                ("scope",   cyberway::chaindb::scope_name::from_table(index).to_string())
-                ("primary", cyberway::chaindb::primary_key::from_table(index, object.service.pk).to_string())
-                ("payer",   chain::account_name(object.service.payer))
-                ("size",    object.service.size)
-                ("in_ram",  object.service.in_ram);
-            result.rows.push_back(std::move(value));
-        } else {
-            result.rows.push_back(chaindb.object_at_cursor(cursor).value);
+    for (size_t count = 0; count < p.limit && fc::time_point::now() < end_time && (end_pk == hard_end_pk || itr.pk != end_pk); --itr, ++count) {
+
+        result.rows.push_back(get_row_value(p, cursor, index));
+
+        if (end_pk == hard_end_pk && itr.pk == end_pk) {
+            break;
         }
     }
 
     result.more = itr.pk != end_pk;
     return result;
+}
+
+get_table_rows_result chain_api_plugin_impl::iterate_averse(const cyberway::chaindb::index_request& request, const get_table_rows_params& p, const fc::time_point& end_time) const {
+    auto& chaindb = chain_controller_.chaindb();
+    auto itr = p.lower_bound.is_null() ? chaindb.begin(request) : chaindb.lower_bound(request, p.lower_bound);
+    const auto end_pk = p.upper_bound.is_null() ? cyberway::chaindb::primary_key::End : chaindb.upper_bound(request, p.upper_bound).pk;
+
+    get_table_rows_result result;
+
+    cyberway::chaindb::cursor_request cursor{p.code, itr.cursor};
+    auto index = chaindb.index_at_cursor(cursor);
+
+    for(unsigned int count = 0; fc::time_point::now() <= end_time && count < p.limit && itr.pk != end_pk; ++itr, ++count) {
+        result.rows.push_back(get_row_value(p, cursor, index));
+    }
+
+    result.more = itr.pk != end_pk;
+    return result;
+}
+
+fc::variant chain_api_plugin_impl::get_row_value(const get_table_rows_params& p, const cyberway::chaindb::cursor_request& cursor, const cyberway::chaindb::index_info& index) const {
+    auto& chaindb = chain_controller_.chaindb();
+
+    if (p.show_payer && *p.show_payer) {
+        const auto object = chaindb.object_at_cursor(cursor);
+        return fc::mutable_variant_object()
+            ("data",    object.value)
+            ("scope",   cyberway::chaindb::scope_name::from_table(index).to_string())
+            ("primary", cyberway::chaindb::primary_key::from_table(index, object.service.pk).to_string())
+            ("payer",   chain::account_name(object.service.payer))
+            ("size",    object.service.size)
+            ("in_ram",  object.service.in_ram);
+    } else {
+        return chaindb.object_at_cursor(cursor).value;
+    }
 }
 
 
