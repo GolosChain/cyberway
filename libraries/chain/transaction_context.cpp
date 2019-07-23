@@ -693,11 +693,11 @@ namespace bacc = boost::accumulators;
         min_cpu_limit = UINT64_MAX;
         cpu_limits.reserve(trx_ctx.bill_to_accounts.capacity());
         for (const auto& a : trx_ctx.bill_to_accounts) {
-            auto balance = rl.get_account_balance(pending_block_time, a, trx_ctx.pricelist, true); //тут нада объективное бросать?ы
+            auto balance = rl.get_account_balance(pending_block_time, a, trx_ctx.pricelist, true);
             auto& lim = cpu_limits[a];
             lim = UINT64_MAX;
             if (cpu_price.numerator && balance < UINT64_MAX) {
-                lim = safe_prop(balance, cpu_price.denominator, cpu_price.numerator);
+                lim = safe_prop(balance, cpu_price.denominator, cpu_price.numerator, false);
             }
             min_cpu_limit = std::min(lim, min_cpu_limit);
         }
@@ -718,13 +718,17 @@ namespace bacc = boost::accumulators;
         auto& cpu_price     = trx_ctx.pricelist[resource_limits::CPU];
 
         auto cost = safe_prop_ceil(delta_abs, storage_price.numerator, storage_price.denominator);
-        auto cpu = cost ? (cpu_price.numerator ? safe_prop_ceil(cost, cpu_price.denominator, cpu_price.numerator) : UINT64_MAX) : 0;
+        auto cpu = cost ? (cpu_price.numerator ? safe_prop_ceil(cost, cpu_price.denominator, cpu_price.numerator, false) : UINT64_MAX) : 0;
 
         bool need_to_update_min = (lim == min_cpu_limit) && (storage.delta < 0);
         if (storage.delta > 0) {
             EOS_ASSERT(lim >= cpu, account_resources_exceeded,
-                "account ${a} has insufficient staked tokens: unspent cpu = ${b}, cost = ${c}, cpu equivalent = ${e}",
-                ("a", storage.payer)("b", lim)("c", cost)("e", cpu));
+                "account ${a} has insufficient staked tokens: unspent cpu = ${b}, delta = ${d}, storage price = ${psn}/${psd}, cost = ${c}, cpu price = ${pcn}/${pcd}, cpu equivalent = ${e}",
+                ("a", storage.payer)("b", lim)("d", storage.delta)
+                ("psn", storage_price.numerator)("psd", storage_price.denominator)
+                ("c", cost)
+                ("pcn", cpu_price.numerator)("pcd", cpu_price.denominator)
+                ("e", cpu));
             lim -= cpu;
         }
         else {
@@ -752,7 +756,7 @@ namespace bacc = boost::accumulators;
         auto& net_price = trx_ctx.pricelist[resource_limits::NET];
         
         auto cost = safe_prop_ceil(static_cast<uint64_t>(delta), net_price.numerator, net_price.denominator);
-        auto cpu = safe_prop_ceil(cost, cpu_price.denominator, cpu_price.numerator);
+        auto cpu = safe_prop_ceil(cost, cpu_price.denominator, cpu_price.numerator, false);
 
         EOS_ASSERT(min_cpu_limit >= cpu, account_resources_exceeded,
             "transaction costs too much; unspent cpu = ${b}, cost cpu equivalent = ${e}", ("b", min_cpu_limit)("e", cpu));
