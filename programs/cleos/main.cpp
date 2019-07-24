@@ -1571,12 +1571,11 @@ struct undelegate_bandwidth_subcommand {
 
       undelegate_bandwidth->set_callback([this] {
          fc::variant act_payload = fc::mutable_variant_object()
-                  ("from", from_str)
-                  ("receiver", receiver_str)
-                  ("unstake_quantity", to_asset(unstake_amount));
+                  ("grantor_name", from_str)
+                  ("recipient_name", receiver_str)
+                  ("quantity", to_asset(unstake_amount));
          auto accountPermissions = get_account_permissions(tx_permission, {from_str,config::active_name});
-         EOS_THROW(action_not_found_exception, "Action undelegatebw is not supported yet");
-//         send_actions({create_action(accountPermissions, config::system_account_name, N(undelegatebw), act_payload)});
+         send_actions({create_action(accountPermissions, N(cyber.stake), N(recalluse), act_payload)});
       });
    }
 };
