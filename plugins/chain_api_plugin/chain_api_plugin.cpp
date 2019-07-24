@@ -577,6 +577,11 @@ get_table_rows_result chain_api_plugin_impl::iterate_reverse(const cyberway::cha
     }
 
     result.more = itr.pk != end_pk;
+
+    if (result.more) {
+        result.next = chaindb.object_at_cursor(cursor).value;
+    }
+
     return result;
 }
 
@@ -595,6 +600,11 @@ get_table_rows_result chain_api_plugin_impl::iterate_averse(const cyberway::chai
     }
 
     result.more = itr.pk != end_pk;
+
+    if (result.more) {
+        result.next = chaindb.object_at_cursor(cursor).value;
+    }
+
     return result;
 }
 
