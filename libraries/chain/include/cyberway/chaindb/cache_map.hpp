@@ -37,6 +37,7 @@ namespace cyberway { namespace chaindb {
         void set_object(const table_info&, cache_object&, object_value) const;
         void set_service(const table_info&, cache_object&, service_state) const;
         void set_revision(const object_value&, revision_t) const;
+        void set_subjective_ram(uint64_t size, uint64_t reserved_size, uint32_t rlm) const;
 
         uint64_t calc_ram_bytes(revision_t) const;
         void set_revision(revision_t) const;
