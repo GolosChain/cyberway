@@ -415,6 +415,7 @@ void apply_context::schedule_deferred_transaction( const uint128_t& sender_id, a
 //      // add_ram_usage( ptr->payer, -(config::billable_size_v<generated_transaction_object> + ptr->packed_trx.size()) );
 
       chaindb.modify( *ptr, get_storage_payer(owner), [&]( auto& gtx ) {
+            gtx.trx_id      = trx.id();
             gtx.sender      = receiver;
             gtx.sender_id   = sender_id;
             gtx.published   = control.pending_block_time();
