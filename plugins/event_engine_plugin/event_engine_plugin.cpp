@@ -235,6 +235,10 @@ void event_engine_plugin_impl::send_genesis_file(const bfs::path& genesis_file) 
 void event_engine_plugin_impl::applied_transaction(const chain::transaction_trace_ptr& trx_trace) {
     ilog("Applied trx: ${block_num}, ${id}", ("block_num", trx_trace->block_num)("id", trx_trace->id));
 
+    if (trx_trace->failed_dtrx_trace) {
+        applied_transaction(trx_trace->failed_dtrx_trace);
+    }
+
     std::function<void(ApplyTrxMessage &msg, const chain::action_trace&)> process_action_trace = 
     [&](ApplyTrxMessage &msg, const chain::action_trace& trace) {
         if (is_handled_contract(trace.receipt.receiver)) {

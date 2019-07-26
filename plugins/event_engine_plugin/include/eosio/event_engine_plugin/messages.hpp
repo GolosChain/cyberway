@@ -117,6 +117,7 @@ namespace eosio {
        chain::block_timestamp_type        block_time;
        fc::optional<chain::block_id_type> prod_block_id;
        std::vector<ActionData>            actions;
+       fc::optional<fc::exception>        except;
 
        ApplyTrxMessage(MsgChannel msg_channel, MsgType msg_type, const chain::transaction_trace_ptr& trace)
        : BaseMessage(msg_channel, msg_type)
@@ -124,6 +125,7 @@ namespace eosio {
        , block_num(trace->block_num)
        , block_time(trace->block_time)
        , prod_block_id(trace->producer_block_id)
+       , except(trace->except)
        {}
    };
 
@@ -209,4 +211,4 @@ FC_REFLECT_DERIVED(eosio::BlockMessage, (eosio::BaseMessage), (id)(previous)(pro
    (scheduled_shuffle_slot)(scheduled_slot)(active_schedule)(next_schedule)(block_num)(block_time)(block_slot)(next_block_time))
 FC_REFLECT_DERIVED(eosio::AcceptedBlockMessage, (eosio::BlockMessage), (trxs)(events))
 FC_REFLECT_DERIVED(eosio::AcceptTrxMessage, (eosio::BaseMessage)(eosio::TrxMetadata), )
-FC_REFLECT_DERIVED(eosio::ApplyTrxMessage, (eosio::BaseMessage), (id)(block_num)(block_time)(prod_block_id)(actions))
+FC_REFLECT_DERIVED(eosio::ApplyTrxMessage, (eosio::BaseMessage), (id)(block_num)(block_time)(prod_block_id)(actions)(except))
