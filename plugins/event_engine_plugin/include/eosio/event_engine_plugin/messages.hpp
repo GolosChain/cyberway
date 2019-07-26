@@ -29,12 +29,14 @@ namespace eosio {
        bool                       accepted;
        bool                       implicit;
        bool                       scheduled;
+       variant                    trx;
 
-       TrxMetadata(const chain::transaction_metadata_ptr &meta)
+       TrxMetadata(const chain::transaction_metadata_ptr &meta, const fc::variant& trx)
        : id(meta->id)
        , accepted(meta->accepted)
        , implicit(meta->implicit)
        , scheduled(meta->scheduled)
+       , trx(trx)
        {}
    };
 
@@ -103,9 +105,9 @@ namespace eosio {
    const auto core_genesis_code = N(core);
 
    struct AcceptTrxMessage : public BaseMessage, TrxMetadata {
-       AcceptTrxMessage(MsgChannel msg_channel, BaseMessage::MsgType msg_type, const chain::transaction_metadata_ptr &trx_meta)
+       AcceptTrxMessage(MsgChannel msg_channel, BaseMessage::MsgType msg_type, const chain::transaction_metadata_ptr &trx_meta, const fc::variant &trx = fc::variant())
        : BaseMessage(msg_channel, msg_type)
-       , TrxMetadata(trx_meta)
+       , TrxMetadata(trx_meta, trx)
        {}
    };
 
@@ -196,7 +198,7 @@ namespace eosio {
 
 FC_REFLECT(eosio::EventData, (code)(event)(data)(args))
 FC_REFLECT(eosio::ActionData, (receiver)(code)(action)(auth)(data)(args)(events))
-FC_REFLECT(eosio::TrxMetadata, (id)(accepted)(implicit)(scheduled))
+FC_REFLECT(eosio::TrxMetadata, (id)(accepted)(implicit)(scheduled)(trx))
 FC_REFLECT(eosio::TrxReceipt, (id)(status)(cpu_usage_us)(net_usage_words)(ram_kbytes)(storage_kbytes))
 
 FC_REFLECT_ENUM(eosio::MsgChannel, (Blocks)(Genesis))
