@@ -182,7 +182,8 @@ void event_engine_plugin_impl::irreversible_block(const chain::block_state_ptr& 
 void event_engine_plugin_impl::accepted_transaction(const chain::transaction_metadata_ptr& trx_meta) {
     ilog("Accepted trx: ${id}, ${signed_id}", ("id", trx_meta->id)("signed_id", trx_meta->signed_id));
 
-    AcceptTrxMessage msg(MsgChannel::Blocks, BaseMessage::AcceptTrx, trx_meta);
+    fc::variant trx = db.to_variant_with_abi(trx_meta->packed_trx->get_transaction(), abi_serializer_max_time);
+    AcceptTrxMessage msg(MsgChannel::Blocks, BaseMessage::AcceptTrx, trx_meta, std::move(trx));
     send_message(msg);
 }
 
@@ -233,6 +234,10 @@ void event_engine_plugin_impl::send_genesis_file(const bfs::path& genesis_file) 
 
 void event_engine_plugin_impl::applied_transaction(const chain::transaction_trace_ptr& trx_trace) {
     ilog("Applied trx: ${block_num}, ${id}", ("block_num", trx_trace->block_num)("id", trx_trace->id));
+
+    if (trx_trace->failed_dtrx_trace) {
+        applied_transaction(trx_trace->failed_dtrx_trace);
+    }
 
     std::function<void(ApplyTrxMessage &msg, const chain::action_trace&)> process_action_trace = 
     [&](ApplyTrxMessage &msg, const chain::action_trace& trace) {
