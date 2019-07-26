@@ -1413,7 +1413,7 @@ struct approve_producer_subcommand {
 
    approve_producer_subcommand(CLI::App* actionRoot) {
       auto approve_producer = actionRoot->add_subcommand("approve", localized("Deprecated. Not used"));
-      approve_producer->set_callback([this] {
+      approve_producer->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation approve is not supported anymore");
       });
    }
@@ -1426,7 +1426,7 @@ struct unapprove_producer_subcommand {
    unapprove_producer_subcommand(CLI::App* actionRoot) {
       auto approve_producer = actionRoot->add_subcommand("unapprove", localized("Deprecated. Not used"));
 
-      approve_producer->set_callback([this] {
+      approve_producer->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation unapprove is not supported anymore");
       });
    }
@@ -1645,17 +1645,127 @@ struct bidname_info_subcommand {
    }
 };
 
+
+struct list_bw_printer {
+    virtual void print_delgated_bw_info(const std::string& account) {
+        grantor_ = account;
+        while (has_more_) {
+            auto result = call(get_table_func, fc::mutable_variant_object("code", "cyber.stake")
+                               ("scope", "cyber.stake")
+                               ("table", "provision")
+                               ("index", "bykey")
+                               ("lower_bound", fc::mutable_variant_object("token_code", CORE_SYMBOL_NAME)
+                                                                         ("grantor_name", grantor_)
+                                                                         ("recipient_name", recipient_request_key))
+            );
+
+            auto res = result.as<eosio::get_table_rows_result>();
+
+            print_result(res);
+        }
+    }
+
+    virtual ~list_bw_printer()  = default;
+
+protected:
+
+    virtual void print_result(const eosio::get_table_rows_result& res) {
+        for (const auto& r : res.rows) {
+            const bool is_requested_grantor = r["grantor_name"].as_string() == grantor_;
+
+            if (!is_requested_grantor) {
+                has_more_ = false;
+                return;
+            }
+
+            ++count_;
+            print_row(r);
+
+        }
+
+        verify_has_more(res);
+    }
+
+    void verify_has_more (const eosio::get_table_rows_result& res) {
+        has_more_ = res.more;
+        if (has_more_) {
+            recipient_request_key = res.next["recipient_name"].as_string();
+        }
+    }
+
+    virtual void print_row(const fc::variant& row) const = 0;
+
+protected:
+
+    bool has_more_ = true;
+    std::string recipient_request_key;
+    std::string grantor_;
+    size_t count_ = 0;
+};
+
+struct json_printer : public list_bw_printer {
+    virtual void print_delgated_bw_info(const std::string& account) override {
+        std::cout << '[';
+
+        list_bw_printer::print_delgated_bw_info(account);
+
+        std::cout << ']' << std::endl;
+    }
+
+private:
+
+    void print_row(const fc::variant& row) const override {
+        if(count_ != 1) {
+             std::cout << ',' << std::endl;
+        }
+        std::cout << fc::json::to_pretty_string(row);
+    }
+
+};
+
+class human_printer : public list_bw_printer {
+    void print_result(const eosio::get_table_rows_result& res) override {
+        if (recipient_request_key.empty()) {
+            if (res.rows.empty() || res.rows.front()["grantor_name"].as_string() != grantor_) {
+                std::cerr << "Delegated bandwidth not found" << std::endl;
+                has_more_ = false;
+                return;
+            } else {
+                std::cout << std::setw(7) << std::left << "#"
+                          << std::setw(13) << std::left << "Recipient"
+                          << std::setw(21) << std::left << "Granted"
+                          << std::endl;
+            }
+        }
+        list_bw_printer::print_result(res);
+    }
+
+    void print_row (const fc::variant& row) const override {
+        std::cout << std::setw(7) << std::left << count_
+                  << std::setw(13) << std::left << row["recipient_name"].as_string()
+                  << std::setw(21) << std::left << asset(row["amount"].as_int64())
+                  << std::endl;
+
+    }
+
+};
+
 struct list_bw_subcommand {
-   eosio::name account;
-   bool not_used = false;
+    eosio::name account;
+    bool print_json = false;
 
-   list_bw_subcommand(CLI::App* actionRoot) {
-      auto list_bw = actionRoot->add_subcommand("listbw", localized("List delegated bandwidth"));
-      list_bw->add_option("account", account, localized("The account delegated bandwidth"))->required();
-      list_bw->add_flag("--json,-j", not_used, localized("Deprecated. Result always in JSON") );
+       list_bw_subcommand(CLI::App* actionRoot) {
+            auto list_bw = actionRoot->add_subcommand("listbw", localized("List delegated bandwidth"));
+            list_bw->add_option("account", account, localized("The account delegated bandwidth"))->required();
+            list_bw->add_flag("--json,-j", print_json, localized("Output in JSON format") );
 
-      list_bw->set_callback([this] {
-         EOS_THROW(action_not_found_exception, "Delegating bandwith is not implemented yet");
+            list_bw->set_callback([this] {
+                if (print_json) {
+                    json_printer().print_delgated_bw_info(account.to_string());
+                } else {
+                    human_printer().print_delgated_bw_info(account.to_string());
+                }
+
       });
    }
 };
@@ -1669,7 +1779,7 @@ struct buyram_subcommand {
 
    buyram_subcommand(CLI::App* actionRoot) {
       auto buyram = actionRoot->add_subcommand("buyram", localized("Deprecated command"));
-      buyram->set_callback([this] {
+      buyram->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation buyram is not supported anymore");
       });
    }
@@ -1682,7 +1792,7 @@ struct sellram_subcommand {
 
    sellram_subcommand(CLI::App* actionRoot) {
       auto sellram = actionRoot->add_subcommand("sellram", localized("Deprecated command"));
-      sellram->set_callback([this] {
+      sellram->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation sellram is not supported anymore");
       });
    }
@@ -1693,7 +1803,7 @@ struct claimrewards_subcommand {
 
    claimrewards_subcommand(CLI::App* actionRoot) {
       auto claim_rewards = actionRoot->add_subcommand("claimrewards", localized("Deprecated command"));
-      claim_rewards->set_callback([this] {
+      claim_rewards->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation claimrewards is not supported anymore");
       });
    }

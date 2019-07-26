@@ -104,6 +104,7 @@ namespace eosio {
     struct get_table_rows_result {
         std::vector<fc::variant> rows; ///< one row per item, either encoded as hex String or JSON object
         bool                     more = false; ///< true if last element in data is not the end and sizeof data() < limit
+        fc::variant              next; ///<if more == true, this field contains the element after the last in the rows field
     };
 
     struct get_table_by_scope_result_row {
@@ -149,7 +150,7 @@ namespace eosio {
     };
 }
 
-FC_REFLECT( eosio::get_table_rows_result, (rows)(more) )
+FC_REFLECT( eosio::get_table_rows_result, (rows)(more)(next) )
 FC_REFLECT( eosio::get_table_by_scope_result_row, (code)(scope)(table)(payer)(count))
 FC_REFLECT( eosio::get_table_by_scope_result, (rows)(more) )
 FC_REFLECT( eosio::get_currency_stats_result, (supply)(max_supply)(issuer))
