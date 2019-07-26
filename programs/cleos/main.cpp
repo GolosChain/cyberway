@@ -792,14 +792,20 @@ chain::action create_buyrambytes(const name& creator, const name& newaccount, ui
                         config::system_account_name, N(buyrambytes), act_payload);
 }
 
-chain::action create_delegate(const name& from, const name& receiver, const asset& stake, bool transfer) {
+chain::action create_delegate(const name& from, const name& receiver, const asset& stake) {
    fc::variant act_payload = fc::mutable_variant_object()
          ("grantor_name", from.to_string())
          ("recipient_name", receiver.to_string())
-         ("quantity", stake.to_string())
-         ("transfer", transfer);
+         ("quantity", stake.to_string());
    return create_action(get_account_permissions(tx_permission, {from, config::active_name}),
                         N(cyber.stake), N(delegateuse), act_payload);
+}
+
+chain::action create_withdraw(const name& from, const asset& stake) {
+   fc::variant act_payload = fc::mutable_variant_object("account", from)
+                                                       ("quantity", stake);
+   return create_action(get_account_permissions(tx_permission, {from, config::active_name}),
+                        N(cyber.stake), N(withdraw), act_payload);
 }
 
 chain::action create_open(const string& contract, const name& owner, symbol sym, const name& ram_payer) {
@@ -811,6 +817,16 @@ chain::action create_open(const string& contract, const name& owner, symbol sym,
       get_account_permissions(tx_permission, {ram_payer,config::active_name}),
       contract, "open", variant_to_bin( contract, N(open), open_ )
    };
+}
+
+chain::action create_stake_open(const name& owner, symbol_code sym, const name& ram_payer) {
+   auto payload = fc::mutable_variant_object
+      ("owner", owner)
+      ("token_code", sym)
+      ("ram_payer", ram_payer);
+
+   return create_action(get_account_permissions(tx_permission, {ram_payer, config::active_name}),
+                        N(cyber.stake), N(open), payload);
 }
 
 chain::action create_transfer(const string& contract, const name& sender, const name& recipient, asset amount, const string& memo ) {
@@ -1345,19 +1361,19 @@ struct create_account_subcommand {
                } EOS_RETHROW_EXCEPTIONS( public_key_type_exception, "Invalid active public key: ${public_key}", ("public_key", active_key_str) );
             }
 
-            auto create = create_newaccount(creator, account_name, owner, active);
-            if (!simple) {
-                const auto stake_asset = to_asset(stake);
-               if ( stake_asset.get_amount() != 0) {
-                   EOS_THROW(action_not_found_exception, "Action delegatebw is not supported yet");
-//                  action delegate = create_delegate( creator, account_name, stake_asset, transfer);
-//                  send_actions( { create, delegate } );
+            std::vector<action> actions = {create_newaccount(creator, account_name, owner, active)};
+            const auto delegate_asset = stake.empty() ? asset() : to_asset(stake);
+
+            if (!simple && delegate_asset.get_amount() != 0) {
+               if (transfer) {
+                   actions.push_back(create_withdraw(creator,asset::from_string(stake)));
+                   actions.push_back(create_transfer("cyber.token", creator, N(cyber.stake), delegate_asset, account_name));
                } else {
-                  send_actions( { create } );
-               }
-            } else {
-               send_actions( { create } );
-            }
+                   actions.push_back(create_stake_open(account_name, symbol().to_symbol_code(), creator));
+                   actions.push_back(create_delegate( creator, account_name, delegate_asset));
+              }
+           }
+           send_actions(std::move(actions));
       });
    }
 };
@@ -1539,15 +1555,12 @@ struct delegate_bandwidth_subcommand {
       add_standard_transaction_options(delegate_bandwidth, "from@active");
 
       delegate_bandwidth->set_callback([this] {
+          const auto to_delegate_asset = to_asset(stake);
           if (transfer) {
-              auto accountPermissions = get_account_permissions(tx_permission, {from_str, config::active_name});
-
-              fc::variant withdraw_params = fc::mutable_variant_object("account", from_str)("quantity", stake);
-              fc::variant transfer_params = fc::mutable_variant_object("from", from_str)("to", "cyber.stake")("quantity", stake)("memo", receiver_str);
-              send_actions({create_action(accountPermissions, N(cyber.stake), N(withdraw), withdraw_params), create_action(accountPermissions, N(cyber.token), N(transfer), transfer_params)});
+              send_actions({create_withdraw(from_str, to_delegate_asset),
+                            create_transfer("cyber.token", from_str, "cyber.stake", to_delegate_asset, receiver_str)});
           } else {
-              std::vector<chain::action> acts{create_delegate(from_str, receiver_str, to_asset(stake), transfer)};
-              send_actions(std::move(acts));
+              send_actions({create_delegate(from_str, receiver_str, to_delegate_asset)});
           }
       });
    }
