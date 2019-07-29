@@ -1566,6 +1566,28 @@ struct delegate_bandwidth_subcommand {
    }
 };
 
+struct claim_undelegated_bandwith_subcommand {
+    string from_str;
+    string receiver_str;
+    string token_code_str;
+
+   claim_undelegated_bandwith_subcommand(CLI::App* actionRoot) {
+      auto undelegate_bandwidth = actionRoot->add_subcommand("claimbw", localized("Claim undelegated bandwidth"));
+      undelegate_bandwidth->add_option("from", from_str, localized("An account claims undelegated stake"))->required();
+      undelegate_bandwidth->add_option("receiver", receiver_str, localized("An account returning stake"))->required();
+      undelegate_bandwidth->add_option("token_code", token_code_str, localized("An asset symbol claimed"))->required();
+
+      undelegate_bandwidth->set_callback([this] {
+         fc::variant act_payload = fc::mutable_variant_object()
+                  ("grantor_name", from_str)
+                  ("recipient_name", receiver_str)
+                  ("token_code", token_code_str);
+         auto accountPermissions = get_account_permissions(tx_permission, {from_str,config::active_name});
+         send_actions({create_action(accountPermissions, N(cyber.stake), N(claim), act_payload)});
+      });
+   }
+};
+
 struct undelegate_bandwidth_subcommand {
    string from_str;
    string receiver_str;
@@ -4242,6 +4264,7 @@ int main( int argc, char** argv ) {
 
    auto delegateBandWidth = delegate_bandwidth_subcommand(system);
    auto undelegateBandWidth = undelegate_bandwidth_subcommand(system);
+   auto claimBandWidth = claim_undelegated_bandwith_subcommand(system);
    auto listBandWidth = list_bw_subcommand(system);
    auto bidname = bidname_subcommand(system);
    auto bidnameinfo = bidname_info_subcommand(system);
