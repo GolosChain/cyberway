@@ -376,6 +376,8 @@ namespace eosio {
          }
 
          my->chain_plug = app().find_plugin<chain_plugin>();
+         add_indices();
+
          EOS_ASSERT( my->chain_plug, chain::missing_chain_plugin_exception, ""  );
          auto& chain = my->chain_plug->chain();
 
@@ -387,7 +389,6 @@ namespace eosio {
    }
 
    void history_plugin::plugin_startup() {
-        add_indices();
    }
 
    void history_plugin::plugin_shutdown() {
