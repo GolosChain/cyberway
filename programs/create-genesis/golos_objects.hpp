@@ -3,6 +3,7 @@
 
 namespace cyberway { namespace golos {
 
+static constexpr size_t max_witnesses = 21;
 
 struct dynamic_global_property_object {
     id_type id;
@@ -34,6 +35,8 @@ struct dynamic_global_property_object {
     uint64_t current_reserve_ratio;
     uint32_t vote_regeneration_per_day;
     uint16_t custom_ops_bandwidth_multiplier;
+    uint32_t transit_block_num;
+    fc::array<uint128_t, max_witnesses> transit_witnesses;
 };
 
 
@@ -157,6 +160,7 @@ struct witness_object {
     version running_version;
     hardfork_version hardfork_version_vote;
     time_point_sec hardfork_time_vote;
+    time_point_sec transit_to_cyberway_vote;
 };
 struct witness_vote_object {
     id_type id;
@@ -168,7 +172,7 @@ struct witness_schedule_object {
     uint128_t current_virtual_time;
     uint32_t next_shuffle_block_num;
     // fc::array<account_name_type, 21/*STEEMIT_MAX_WITNESSES*/> current_shuffled_witnesses;
-    fc::array<uint128_t, 21/*STEEMIT_MAX_WITNESSES*/> current_shuffled_witnesses;
+    fc::array<uint128_t, max_witnesses> current_shuffled_witnesses;
     uint8_t num_scheduled_witnesses;
     uint8_t top19_weight;
     uint8_t timeshare_weight;
@@ -383,6 +387,7 @@ FC_REFLECT(cyberway::golos::dynamic_global_property_object,
     (sbd_interest_rate)(sbd_print_rate)(average_block_size)(maximum_block_size)
     (current_aslot)(recent_slots_filled)(participation_count)(last_irreversible_block_num)(max_virtual_bandwidth)
     (current_reserve_ratio)(vote_regeneration_per_day)(custom_ops_bandwidth_multiplier)(is_forced_min_price)
+    (transit_block_num)(transit_witnesses)
 )
 
 FC_REFLECT(cyberway::golos::account_object,
@@ -412,7 +417,7 @@ FC_REFLECT(cyberway::golos::change_recovery_account_request_object,
 FC_REFLECT(cyberway::golos::witness_object,
     (id)(owner)(created)(url)(votes)(schedule)(virtual_last_update)(virtual_position)(virtual_scheduled_time)(total_missed)
     (last_aslot)(last_confirmed_block_num)(pow_worker)(signing_key)(props)(sbd_exchange_rate)(last_sbd_exchange_update)
-    (last_work)(running_version)(hardfork_version_vote)(hardfork_time_vote))
+    (last_work)(running_version)(hardfork_version_vote)(hardfork_time_vote)(transit_to_cyberway_vote))
 FC_REFLECT(cyberway::golos::witness_schedule_object,
     (id)(current_virtual_time)(next_shuffle_block_num)(current_shuffled_witnesses)(num_scheduled_witnesses)
     (top19_weight)(timeshare_weight)(miner_weight)(witness_pay_normalization_factor)
