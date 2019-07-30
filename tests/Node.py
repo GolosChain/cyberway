@@ -414,7 +414,7 @@ class Node(object):
 
             return self.getTransactionMdb(transId, silentErrors=silentErrors, exitOnError=exitOnError)
 
-    def getTransactionMdb(self, transId, silentErrors=False, exitOnError=False):
+    def getTransactionMdb(self, transId, silentErrors=False, exitOnError=False, raw=False):
         """Get transaction from MongoDB. Since DB only contains finalized blocks, transactions can take a while to appear in DB."""
         cmd="%s %s" % (Utils.MongoPath, self.mongoEndpointArgs)
         #subcommand='db.Transactions.findOne( { $and : [ { "trx_id": "%s" }, {"irreversible":true} ] } )' % (transId)
@@ -427,7 +427,8 @@ class Node(object):
                 end=time.perf_counter()
                 Utils.Print("cmd Duration: %.3f sec" % (end-start))
             if trans is not None:
-                return trans
+                Utils.Print("Raw: %s" % raw)
+                return trans if raw else self.formatMongoTx(trans)
         except subprocess.CalledProcessError as ex:
             end=time.perf_counter()
             msg=ex.output.decode("utf-8")
@@ -438,6 +439,13 @@ class Node(object):
             elif not silentErrors:
                 Utils.Print("ERROR: %s" % (errorMsg))
             return None
+
+    # mongodb and history plugins return transactions in different format. convert mongo trx to history plugin format
+    def formatMongoTx(self, tx):
+        actions = []
+        for a in tx["actions"]:
+            actions.append({"act": a})
+        return {"traces": actions, "trx": {"trx": tx}}
 
     def isTransInBlock(self, transId, blockId):
         """Check if transId is within block identified by blockId"""
@@ -482,12 +490,8 @@ class Node(object):
         refBlockNum=None
         key=""
         try:
-            if not self.enableMongo:
-                key="[trx][trx][ref_block_num]"
-                refBlockNum=trans["trx"]["trx"]["ref_block_num"]
-            else:
-                key="[ref_block_num]"
-                refBlockNum=trans["ref_block_num"]
+            key="[trx][trx][ref_block_num]"
+            refBlockNum=trans["trx"]["trx"]["ref_block_num"]
             refBlockNum=int(refBlockNum)+1
         except (TypeError, ValueError, KeyError) as _:
             Utils.Print("transaction%s not found. Transaction: %s" % (key, trans))
@@ -513,7 +517,7 @@ class Node(object):
         """Given a transaction Id (string), will return block id (int) containing the transaction. This is specific to MongoDB."""
         assert(transId)
         assert(isinstance(transId, str))
-        trans=self.getTransactionMdb(transId)
+        trans=self.getTransactionMdb(transId, raw=True)
         if not trans: return None
 
         refBlockNum=None
@@ -922,6 +926,7 @@ class Node(object):
         assert(isinstance(offset, int))
 
         cmd="%s %s" % (Utils.MongoPath, self.mongoEndpointArgs)
+        # Note: this subcommand returns only one action and only works with transfers
         subcommand='db.action_traces.find({$or: [{"act.data.from":"%s"},{"act.data.to":"%s"}]}).sort({"_id":%d}).limit(%d)' % (account.name, account.name, pos, abs(offset))
         if Utils.Debug: Utils.Print("cmd: echo '%s' | %s" % (subcommand, cmd))
         start=time.perf_counter()
@@ -931,7 +936,8 @@ class Node(object):
                 end=time.perf_counter()
                 Utils.Print("cmd Duration: %.3f sec" % (end-start))
             if actions is not None:
-                return actions
+                # prepare same output as in history plugin
+                return {"actions": [{"action_trace": actions}]}
         except subprocess.CalledProcessError as ex:
             end=time.perf_counter()
             msg=ex.output.decode("utf-8")
@@ -1475,7 +1481,10 @@ class Node(object):
         if waitForBlock:
             self.waitForBlock(blockNum, timeout=timeout, blockType=BlockType.head)
         block=self.getBlock(blockNum, exitOnError=exitOnError)
-        blockProducer=block["block"]["producer"]
+        if self.enableMongo:
+            blockProducer=block["block"]["producer"]
+        else:
+            blockProducer=block["producer"]
         if blockProducer is None and exitOnError:
             Utils.cmdError("could not get producer for block number %s" % (blockNum))
             Utils.errorExit("Failed to get block's producer")
@@ -1537,16 +1546,34 @@ class Node(object):
         found = None
         prevActive = prevPending = None
         prevVersion = prevPendingVersion = None
+        slot = None
         prevSlot = None
         slotSize = None
         synced = False
         while maxBlocks > 0:
-            block = self.getBlockStateByNum(blockNum)["block_header_state"]
-            slot = block["scheduled_shuffle_slot"]
+            validVer = True
+            if self.enableMongo:
+                block = self.getBlockStateByNum(blockNum)["block_header_state"]
+                slot = block["scheduled_shuffle_slot"]
+            else:
+                self.waitForBlock(blockNum)
+                block = self.getBlock(blockNum)
+                cmdDesc="get schedule"
+                cmd="%s -j" % cmdDesc
+                sch = self.processCleosCmd(cmd, cmdDesc, silentErrors=False, exitOnError=True)
+                validVer = sch["active"]["version"] == block["schedule_version"]
+                block = {
+                    "active_schedule": sch["active"] or {"version":0, "producers":[]},
+                    "pending_schedule": sch["pending"] or {"version":0, "producers":[]},
+                    "proposed_schedule": sch["proposed"] or {"version":0, "producers":[]}
+                }
+
             if slot != prevSlot:
-                Utils.Print("Slot changed: %i/%i; (previous lasted %s blocks)" % (blockNum, slot, slotSize))
+                Utils.Print("Slot changed: %i/%s; (previous lasted %s blocks)" % (blockNum, slot, slotSize))
                 synced = prevSlot != None
                 prevSlot = slot
+                slotSize = 0
+            if slotSize == None:
                 slotSize = 0
             slotSize += 1
 
@@ -1557,26 +1584,34 @@ class Node(object):
                     pending = getScheduleProducers(block["pending_schedule"])
                     if set(pending).intersection(waitProds) == waitProds:
                         found = "P"
-                        Utils.Print("Found in pending schedule; %i/%i" % (blockNum, slot))
+                        Utils.Print("Found in pending schedule; %i/%s" % (blockNum, slot))
                 if set(active).intersection(waitProds) == waitProds:
+                    Utils.Print("Found in active schedule; %i/%s" % (blockNum, slot))
+                    if not validVer:
+                        blockNum += 1
+                        continue
                     found = "A"
-                    Utils.Print("Found in active schedule; %i/%i" % (blockNum, slot))
+                    if not self.enableMongo:
+                        synced = True
                     if not requireVersionChange:
                         break
 
             if activeS["version"] != prevVersion:
                 fakeChange = prevVersion == None
+                if found == "A" and not fakeChange and not validVer:
+                    blockNum += 1
+                    continue
                 prevVersion = activeS["version"]
                 prevActive = active
-                Utils.Print("Changed active version: %i/%i/%i; [%s]" % (prevVersion, blockNum, slot, ','.join(map(str, active))))
+                Utils.Print("Changed active version: %i/%i/%s; [%s]" % (prevVersion, blockNum, slot, ','.join(map(str, active))))
                 if found == "A" and not fakeChange:
                     break
             elif set(prevActive) != set(active):
-                Utils.Print("Schedule changed without version change (%i/%i):\n[%s]" % (
+                Utils.Print("Schedule changed without version change (%i/%s):\n[%s]" % (
                     blockNum, slot, ','.join(map(str, active))))
                 prevActive = active
             elif prevActive != active:
-                Utils.Print("Schedule shuffled (%i/%i):\n[%s]" % (blockNum, slot, ','.join(map(str, active))))
+                Utils.Print("Schedule shuffled (%i/%s):\n[%s]" % (blockNum, slot, ','.join(map(str, active))))
                 prevActive = active
 
             blockNum += 1
@@ -1584,7 +1619,8 @@ class Node(object):
         Utils.Debug = temp
         if found != "A":
             Utils.errorExit("Failed to find producers in active schedule")
-        return (blockNum+1, synced)
+        add = 1 if self.enableMongo else 0
+        return (blockNum + add, synced)
 
 
     # TBD: make nodeId an internal property

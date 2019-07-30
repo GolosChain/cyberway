@@ -167,6 +167,8 @@ class Cluster(object):
             nodeosArgs += " --plugin eosio::mongo_db_plugin --mongodb-uri %s" % self.mongoUri
             if delMongoData:
                 nodeosArgs += " --delete-all-blocks --mongodb-wipe"
+        else:
+            nodeosArgs += " --plugin eosio::history_plugin --plugin eosio::history_api_plugin --filter-on \"*\""
         if extraNodeosArgs is not None:
             assert(isinstance(extraNodeosArgs, str))
             nodeosArgs += extraNodeosArgs
