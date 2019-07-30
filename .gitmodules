@@ -1,6 +1,6 @@
 [submodule "libraries/appbase"]
 	path = libraries/appbase
-	url = https://github.com/GolosChain/cyberway.appbase.git
+	url = https://github.com/cyberway/cyberway.appbase.git
 [submodule "contracts/musl/upstream"]
 	path = contracts/musl/upstream
 	url = https://github.com/EOSIO/musl.git
@@ -23,10 +23,10 @@
 	url = http://github.com/EOSIO/wabt
 [submodule "libraries/chainbase"]
 	path = libraries/chainbase
-	url = https://github.com/GolosChain/cyberway.chainbase.git
+	url = https://github.com/cyberway/cyberway.chainbase.git
 [submodule "libraries/fc"]
 	path = libraries/fc
-	url = https://github.com/GolosChain/cyberway.fc.git
+	url = https://github.com/cyberway/cyberway.fc.git
 [submodule "libraries/yubihsm"]
 	path = libraries/yubihsm
 	url = https://github.com/Yubico/yubihsm-shell
