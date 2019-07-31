@@ -1,7 +1,7 @@
 #!/bin/bash
 ##########################################################################
 # This is the CyberWay automated install script for Linux and Mac OS.
-# This file was downloaded from https://github.com/GolosChain/cyberway
+# This file was downloaded from https://github.com/cyberway/cyberway
 #
 # Copyright (c) 2017, Respective Authors all rights reserved.
 #
@@ -27,7 +27,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
-# https://github.com/GolosChain/cyberway/blob/master/LICENSE
+# https://github.com/cyberway/cyberway/blob/master/LICENSE
 ##########################################################################
 
 
@@ -167,7 +167,7 @@ fi
 
 if [ ! -d "${REPO_ROOT}/.git" ]; then
    printf "\\nThis build script only works with sources cloned from git\\n"
-   printf "Please clone a new eos directory with 'git clone https://github.com/GolosChain/cyberway --recursive'\\n"
+   printf "Please clone a new eos directory with 'git clone https://github.com/cyberway/cyberway --recursive'\\n"
    printf "See the wiki for instructions: https://github.com/EOSIO/eos/wiki\\n"
    exit 1
 fi

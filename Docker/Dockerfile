@@ -4,9 +4,9 @@ ARG branch=master
 ARG symbol=CYBER
 ARG compiletype=RelWithDebInfo
 
-ADD https://api.github.com/repos/GolosChain/cyberway/git/refs/heads/$branch /etc/version.json
+ADD https://api.github.com/repos/cyberway/cyberway/git/refs/heads/$branch /etc/version.json
 
-RUN git clone -b $branch https://github.com/GolosChain/cyberway.git --recursive
+RUN git clone -b $branch https://github.com/cyberway/cyberway.git --recursive
 
 RUN cd cyberway \
     && echo "$branch:$(git rev-parse HEAD)" > /etc/cyberway-version \
