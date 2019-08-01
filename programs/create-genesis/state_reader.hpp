@@ -296,7 +296,7 @@ public:
         EOS_ASSERT(string(h.magic) == golos_state_header::expected_magic, genesis_exception,
             "Unknown format of the Golos state file.");
         EOS_ASSERT(h.version == 3, genesis_exception,
-            "Can only open Golos state file version 2, but version ${v} provided.", ("v", h.version));
+            "Can only open Golos state file version 3, but version ${v} provided.", ("v", h.version));
         EOS_ASSERT(h.block_num > 0, genesis_exception, "Golos state file block_num should be greater than 0.");
 
         while (in) {
