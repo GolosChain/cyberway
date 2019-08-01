@@ -409,20 +409,22 @@ fc::optional<eosio::chain::asset> chain_api_plugin_impl::get_account_core_liquid
 
     auto& db_controller = chain_controller_.chaindb();
 
-    auto accounts_it = db_controller.begin(request);
+    try {
+        auto accounts_it = db_controller.begin(request);
+        for (; accounts_it.pk != cyberway::chaindb::primary_key::End; ++accounts_it) {
+            const auto value = db_controller.object_at_cursor({token_code, accounts_it.cursor}).value;
+            const auto balance_object = value["balance"];
+            eosio::chain::asset asset_value;
 
-    for (; accounts_it.pk != cyberway::chaindb::primary_key::End; ++accounts_it) {
-        const auto value = db_controller.object_at_cursor({token_code, accounts_it.cursor}).value;
-        const auto balance_object = value["balance"];
-        eosio::chain::asset asset_value;
+            fc::from_variant(balance_object, asset_value);
 
-        fc::from_variant(balance_object, asset_value);
-
-        if (asset_value.get_symbol() == core_symbol) {
-            return {asset_value};
+            if (asset_value.get_symbol() == core_symbol) {
+                return {asset_value};
+            }
         }
+    } catch (...) {
+        //
     }
-
     return {};
 }
 
