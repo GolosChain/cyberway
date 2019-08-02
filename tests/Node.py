@@ -427,7 +427,6 @@ class Node(object):
                 end=time.perf_counter()
                 Utils.Print("cmd Duration: %.3f sec" % (end-start))
             if trans is not None:
-                Utils.Print("Raw: %s" % raw)
                 return trans if raw else self.formatMongoTx(trans)
         except subprocess.CalledProcessError as ex:
             end=time.perf_counter()

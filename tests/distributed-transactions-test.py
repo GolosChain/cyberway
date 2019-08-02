@@ -90,7 +90,7 @@ try:
     eosioAccount=cluster.eosioAccount
 
     Print("Create accounts.")
-    if not cluster.createAccounts(eosioAccount):
+    if not cluster.createAccounts(defproduceraAccount):
         errorExit("Accounts creation failed.")
 
     Print("Spread funds and validate")

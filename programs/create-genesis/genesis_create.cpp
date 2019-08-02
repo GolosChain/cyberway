@@ -364,7 +364,7 @@ struct genesis_create::genesis_create_impl final {
             if (itr != _info.transit_account_authorities.end()) {
                 std::map<permission_name,perm_id_t> parents = {
                         {config::owner_name, owner.id},
-                        {config::active_name, active.id}, 
+                        {config::active_name, active.id},
                         {posting_auth_name, posting.id}
                 };
                 parse_and_store_permissions(name, itr->permissions, usage_id, parents, _conf.initial_key);
@@ -617,7 +617,7 @@ struct genesis_create::genesis_create_impl final {
                             auto total_funds = acc.balance + acc.proxied;
                             if (total_funds != 0) {
                                 auto own_funds = int_arithmetic::safe_prop(total_funds, acc.own_share, acc.shares_sum);
-                                quantity += asset(int_arithmetic::safe_prop(own_funds, percent, 10000l));
+                                quantity += asset(int_arithmetic::safe_pct(own_funds, percent));
                             }
                             found = true;
                             break;
@@ -628,7 +628,7 @@ struct genesis_create::genesis_create_impl final {
                     auto acc = std::find_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& a){return a.name == from;});
                     EOS_ASSERT(acc != _info.accounts.end(), genesis_exception, "Can't find account ${name}", ("name", from));
                     EOS_ASSERT(acc->sys_staked, genesis_exception, "Account ${name} doesn't has staked funds", ("name", from));
-                    quantity += asset(int_arithmetic::safe_prop(acc->sys_staked->get_amount(), percent, 10000l));
+                    quantity += asset(int_arithmetic::safe_pct(acc->sys_staked->get_amount(), percent));
                 }
             } else {
                 quantity += asset::from_string(item.quantity);
@@ -646,7 +646,7 @@ struct genesis_create::genesis_create_impl final {
             delegateid++;
         }
 
-        uint64_t n_delegate_agents = delegatemap.size() - 
+        uint64_t n_delegate_agents = delegatemap.size() -
                 std::count_if(_visitor.vests.begin(), _visitor.vests.end(), [&](const auto& v){return delegatemap.count(name_by_idx(v.first));}) -
                 std::count_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& a){return a.sys_staked && delegatemap.count(a.name);});
 
