@@ -53,7 +53,7 @@ class TestHelper(object):
             parser.add_argument("-s", type=str, help="topology", choices=["mesh"], default="mesh")
         if "-c" in includeArgs:
             parser.add_argument("-c", type=str, help="chain strategy",
-                    choices=[Utils.SyncResyncTag, Utils.SyncNoneTag, Utils.SyncHardReplayTag],
+                    choices=[Utils.SyncResyncTag, Utils.SyncNoneTag, Utils.SyncReplayTag, Utils.SyncHardReplayTag],
                     default=Utils.SyncResyncTag)
         if "--kill-sig" in includeArgs:
             parser.add_argument("--kill-sig", type=str, choices=[Utils.SigKillTag, Utils.SigTermTag], help="kill signal.",

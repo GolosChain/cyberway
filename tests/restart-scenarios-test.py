@@ -10,8 +10,8 @@ import random
 ###############################################################
 # Test for different nodes restart scenarios.
 # Nodes can be producing or non-producing.
-# -p <producing nodes count>
-# -c <chain strategy[replay|resync|none]>
+# -p <producing nodes count>, mandatory
+# -c <chain strategy[replay|resync|none]>, default is resync
 # -s <topology>
 # -d <delay between nodes startup>
 # -v <verbose logging>
@@ -27,12 +27,13 @@ Print=Utils.Print
 errorExit=Utils.errorExit
 
 args=TestHelper.parse_args({"-p","-d","-s","-c","--kill-sig","--kill-count","--keep-logs","--p2p-plugin"
-                            ,"--dump-error-details","-v","--leave-running","--clean-run"})
+                            ,"--dump-error-details","-v","--leave-running","--clean-run","--mongodb"})
 pnodes=args.p
 topo=args.s
 delay=args.d
 chainSyncStrategyStr=args.c
 debug=args.v
+enableMongo=args.mongodb
 total_nodes = pnodes
 killCount=args.kill_count if args.kill_count > 0 else 1
 killSignal=args.kill_sig
@@ -47,7 +48,7 @@ Utils.Debug=debug
 testSuccessful=False
 
 random.seed(seed) # Use a fixed seed for repeatability.
-cluster=Cluster(walletd=True)
+cluster=Cluster(walletd=True, enableMongo=enableMongo)
 walletMgr=WalletMgr(True)
 
 try:
@@ -64,6 +65,8 @@ try:
 
     Print ("producing nodes: %d, topology: %s, delay between nodes launch(seconds): %d, chain sync strategy: %s" % (
     pnodes, topo, delay, chainSyncStrategyStr))
+    if pnodes < 2:
+        errorExit("Please use at least 2 pnodes to run this test (-p argument)")
 
     Print("Stand up cluster")
     if cluster.launch(pnodes, total_nodes, topo=topo, delay=delay, p2pPlugin=p2pPlugin) is False:
