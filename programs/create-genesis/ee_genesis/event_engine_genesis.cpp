@@ -241,6 +241,8 @@ static abi_def create_accounts_abi() {
             {"balance_in_sys", "asset"},
             {"vesting_shares", "asset"},
             {"received_vesting_shares", "asset"},
+            {"staked_balance", "asset"},
+            {"staked_proxied", "asset"},
             {"json_metadata", "string"},
         }
     });
