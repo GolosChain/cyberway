@@ -683,6 +683,9 @@ struct genesis_create::genesis_create_impl final {
                 EOS_ASSERT(agent.get_own_funds() >= agent.provided, genesis_exception,
                         "Agent ${account} provide more funds (${provided}) than has (${funds})",
                         ("account", agent.account)("provided", agent.provided)("funds", agent.get_own_funds()));
+                _exp_info.account_infos[acc] = _exp_info.account_infos[acc]
+                    ("staked_balance", asset(x.balance, sys_sym))
+                    ("staked_proxied", asset(x.proxied, sys_sym));
             }
         }
         for (const auto& acc: _info.accounts) {
