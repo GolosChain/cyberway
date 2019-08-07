@@ -2440,14 +2440,6 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
 
    auto res = json.as<eosio::get_account_results>();
    if (!json_format) {
-      asset staked;
-      asset unstaking;
-
-      if( res.core_liquid_balance.valid() ) {
-         unstaking = asset( 0, res.core_liquid_balance->get_symbol() ); // Correct core symbol for unstaking asset.
-         staked = asset( 0, res.core_liquid_balance->get_symbol() );    // Correct core symbol for staked asset.
-      }
-
       std::cout << "created: " << string(res.created) << std::endl;
 
       if(res.privileged) std::cout << "privileged: true" << std::endl;
@@ -2553,15 +2545,8 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
       if ( res.total_resources.is_object() ) {
          auto net_total = to_asset(res.total_resources.get_object()["net_weight"].as_string());
 
-         if( net_total.get_symbol() != unstaking.get_symbol() ) {
-            // Core symbol of nodeos responding to the request is different than core symbol built into cleos
-            unstaking = asset( 0, net_total.get_symbol() ); // Correct core symbol for unstaking asset.
-            staked = asset( 0, net_total.get_symbol() ); // Correct core symbol for staked asset.
-         }
-
          if( res.self_delegated_bandwidth.is_object() ) {
             asset net_own =  asset::from_string( res.self_delegated_bandwidth.get_object()["net_weight"].as_string() );
-            staked = net_own;
 
             auto net_others = net_total - net_own;
 
@@ -2625,10 +2610,6 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
 
          if( res.self_delegated_bandwidth.is_object() ) {
             asset cpu_own = asset::from_string( res.self_delegated_bandwidth.get_object()["cpu_weight"].as_string() );
-            asset ram_own = asset::from_string( res.self_delegated_bandwidth.get_object()["ram_weight"].as_string() );
-            asset store_own = asset::from_string( res.self_delegated_bandwidth.get_object()["storage_weight"].as_string() );
-
-            staked += cpu_own + ram_own + store_own;
 
             auto cpu_others = cpu_total - cpu_own;
 
@@ -2650,40 +2631,27 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
       std::cout << indent << std::left << std::setw(11) << "limit:"     << std::right << std::setw(18) << to_pretty_time( res.cpu_limit.max ) << "\n";
       std::cout << std::endl;
 
-      if( res.refund_request.is_object() ) {
-         auto obj = res.refund_request.get_object();
-         auto request_time = fc::time_point_sec::from_iso_string( obj["request_time"].as_string() );
-         fc::time_point refund_time = request_time + fc::days(3);
-         auto now = res.head_block_time;
-         asset net = asset::from_string( obj["net_amount"].as_string() );
-         asset cpu = asset::from_string( obj["cpu_amount"].as_string() );
-         unstaking = net + cpu;
-
-         if( unstaking > asset( 0, unstaking.get_symbol() ) ) {
-            std::cout << std::fixed << setprecision(3);
-            std::cout << "unstaking tokens:" << std::endl;
-            std::cout << indent << std::left << std::setw(25) << "time of unstake request:" << std::right << std::setw(20) << string(request_time);
-            if( now >= refund_time ) {
-               std::cout << " (available to claim now with 'eosio::refund' action)\n";
-            } else {
-               std::cout << " (funds will be available in " << to_pretty_time( (refund_time - now).count(), 0 ) << ")\n";
-            }
-            std::cout << indent << std::left << std::setw(25) << "from net bandwidth:" << std::right << std::setw(18) << net << std::endl;
-            std::cout << indent << std::left << std::setw(25) << "from cpu bandwidth:" << std::right << std::setw(18) << cpu << std::endl;
-            std::cout << indent << std::left << std::setw(25) << "total:" << std::right << std::setw(18) << unstaking << std::endl;
-            std::cout << std::endl;
-         }
-      }
-
       if( res.core_liquid_balance.valid() ) {
+         const auto owned = res.stake_info.staked - res.stake_info.provided;
+         const auto effective = res.stake_info.staked - res.stake_info.provided + res.stake_info.received;
+
          std::cout << res.core_liquid_balance->get_symbol().name() << " balances: " << std::endl;
          std::cout << indent << std::left << std::setw(11)
                    << "liquid:" << std::right << std::setw(18) << *res.core_liquid_balance << std::endl;
          std::cout << indent << std::left << std::setw(11)
-                   << "staked:" << std::right << std::setw(18) << staked << std::endl;
+                   << "staked:" << std::right << std::setw(18) << res.stake_info.staked << std::endl;
          std::cout << indent << std::left << std::setw(11)
-                   << "unstaking:" << std::right << std::setw(18) << unstaking << std::endl;
-         std::cout << indent << std::left << std::setw(11) << "total:" << std::right << std::setw(18) << (*res.core_liquid_balance + staked + unstaking) << std::endl;
+                   << "recieved:" << std::right << std::setw(18) << res.stake_info.received << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "provided:" << std::right << std::setw(18) << res.stake_info.provided << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "unstaking:" << std::right << std::setw(18) << chain::asset(0, res.stake_info.staked.get_symbol()) << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "owned:" << std::right << std::setw(18) << owned << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "effective:" << std::right << std::setw(18) << effective << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "total:" << std::right << std::setw(18) << (*res.core_liquid_balance + effective) << std::endl;
          std::cout << std::endl;
       }
 
