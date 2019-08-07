@@ -332,6 +332,7 @@ public:
         rep_state += ".reputation";
         read_state_file(rep_state, visitor);
 
+        ilog("Dynamic global property: ${gpo}", ("gpo",visitor.gpo));
         ilog("Done reading Genesis state.");
     }
 };
