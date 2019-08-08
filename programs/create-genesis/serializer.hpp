@@ -57,12 +57,14 @@ private:
     bytes _buffer;
 
 public:
-    void start(const bfs::path& out_file, int n_sections) {
+    void start(const bfs::path& out_file, int n_sections, const genesis_ext_header &ext_hdr) {
         out.exceptions(std::ofstream::failbit | std::ofstream::badbit);
         out.open(out_file, std::ios_base::binary);
         genesis_header hdr;
         hdr.tables_count = n_sections;
         out.write((char*)(&hdr), sizeof(hdr));
+        fc::raw::pack(out, ext_hdr);
+
         _section_count = n_sections;
         _buffer.resize(1024*1024);
     }

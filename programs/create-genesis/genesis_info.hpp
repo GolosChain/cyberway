@@ -212,6 +212,7 @@ struct genesis_info {
     };
 
     struct parameters {
+        uint8_t initial_prod_count = 0;
         stake_params stake;
         posting_rules posting_rules;
         fc::optional<hardfork_info> require_hardfork;
@@ -264,7 +265,7 @@ FC_REFLECT(cyberway::genesis::genesis_info::stake_params,
     (enabled)(max_proxies)(depriving_window)(min_own_staked_for_election))
 FC_REFLECT(cyberway::genesis::genesis_info::hardfork_info, (version)(time))
 FC_REFLECT(cyberway::genesis::genesis_info::funds_share, (name)(numerator)(denominator))
-FC_REFLECT(cyberway::genesis::genesis_info::parameters, (stake)(posting_rules)(require_hardfork)(funds))
+FC_REFLECT(cyberway::genesis::genesis_info::parameters, (initial_prod_count)(stake)(posting_rules)(require_hardfork)(funds))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters::ee_history_days, (transfers)(withdraws)(rewards))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters, (history_days))
 FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(genesis_json)(accounts)(auth_links)(transit_account_authorities)(delegateuse)(tables)(golos)(params)(ee_params))

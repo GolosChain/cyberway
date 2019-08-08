@@ -1302,11 +1302,41 @@ struct genesis_create::genesis_create_impl final {
         ilog("Done.");
     }
 
-    void prepare_writer(const bfs::path& out_file) {
+    void prepare_writer(const bfs::path& out_file, const genesis_ext_header &ext_hdr) {
         const int n_sections = static_cast<int>(stored_contract_tables::_max) + _info.tables.size();
-        db.start(out_file, n_sections);
+        db.start(out_file, n_sections, ext_hdr);
         db.prepare_serializers(_contracts);
     };
+
+    std::vector<producer_key> get_producers() {
+        EOS_ASSERT(_info.params.initial_prod_count > 0, genesis_exception,
+                ("initial_prod_count can't be zero"));
+        EOS_ASSERT(_info.params.initial_prod_count <= _visitor.witnesses.size(),
+                genesis_exception, "initial_prod_count (${count}) too large. State has only ${witnesses} witnesses", 
+                ("count", _info.params.initial_prod_count)("witnesses", _visitor.witnesses.size()));
+
+        vector<const golos::witness_object*> witnesses;
+        witnesses.reserve(_visitor.witnesses.size());
+        for (const auto &witness: _visitor.witnesses) {
+            witnesses.push_back(&witness);
+        }
+
+        std::sort(witnesses.begin(), witnesses.end(), [](const auto &lhs, const auto &rhs) {
+            return (lhs->hardfork_time_vote < rhs->hardfork_time_vote) ||
+                   (lhs->hardfork_time_vote == rhs->hardfork_time_vote && lhs->votes > rhs->votes);
+        });
+
+        std::vector<producer_key> producers;
+        producers.reserve(_info.params.initial_prod_count);
+        for (int i = 0; i < _info.params.initial_prod_count; i++) {
+            const auto &witness = *witnesses[i];
+            account_name account = name_by_acc(witness.owner);
+            public_key_type pubkey = pubkey_from_golos(witness.signing_key);
+            EOS_ASSERT(pubkey != public_key_type(), genesis_exception, "Witness ${account} has empty signing key", ("account", account));
+            producers.push_back(producer_key{account, pubkey});
+        }
+        return producers;
+    }
 };
 
 genesis_create::genesis_create(): _impl(new genesis_create_impl()) {
@@ -1326,7 +1356,10 @@ void genesis_create::write_genesis(
     _impl->_conf = conf;
     _impl->_contracts = accs;
 
-    _impl->prepare_writer(out_file);
+    genesis_ext_header ext_hdr;
+    ext_hdr.producers = _impl->get_producers();
+
+    _impl->prepare_writer(out_file, ext_hdr);
     _impl->store_contracts();
     _impl->store_auth_links();
     _impl->store_custom_tables();
