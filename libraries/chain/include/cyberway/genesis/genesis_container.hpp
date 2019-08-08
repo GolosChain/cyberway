@@ -1,5 +1,6 @@
 #pragma once
 #include <eosio/chain/types.hpp>
+#include <eosio/chain/producer_schedule.hpp>
 #include <cyberway/chaindb/controller.hpp>
 #include <fc/reflect/reflect.hpp>
 
@@ -11,7 +12,7 @@ using namespace chaindb;
 
 struct genesis_header {
     char magic[12] = "CyberwayGen";
-    uint32_t version = 1;
+    uint32_t version = 2;
 
     uint32_t tables_count;
 
@@ -19,6 +20,10 @@ struct genesis_header {
         genesis_header oth;
         return string(magic) == oth.magic && version == oth.version;
     }
+};
+
+struct genesis_ext_header {
+    std::vector<producer_key> producers;
 };
 
 struct table_header {
@@ -70,6 +75,7 @@ struct table_row final: sys_table_row {
 
 }} // cyberway::genesis
 
+FC_REFLECT(cyberway::genesis::genesis_ext_header, (producers))
 FC_REFLECT(cyberway::genesis::table_header, (code)(name)(abi_type)(count))
 FC_REFLECT(cyberway::genesis::sys_table_row, (ram_payer)(data))
 FC_REFLECT_DERIVED(cyberway::genesis::table_row, (cyberway::genesis::sys_table_row), (pk)(scope))
