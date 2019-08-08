@@ -188,8 +188,12 @@ namespace {
           prices_(rm.get_pricelist()),
           stake_agent_(controller_.find<eosio::chain::stake_agent_object, eosio::chain::stake_agent_object::by_key>
                        (eosio::chain::stake::agent_key(chain::symbol(CORE_SYMBOL).to_symbol_code(), account_))),
-          total_stake_(stake_agent_ == nullptr ? 0 : stake_agent_->get_effective_stake()),
+          effective_stake_(stake_agent_ == nullptr ? 0 : stake_agent_->get_effective_stake()),
           owned_stake_(stake_agent_ == nullptr ? 0 : (stake_agent_->get_own_funds() - stake_agent_->provided)),
+          stake_info_(stake_agent_ == nullptr ? stake_funds{chain::asset(0), chain::asset(0), chain::asset(0)}
+                                              : stake_funds{chain::asset(stake_agent_->get_own_funds()),
+                                                            chain::asset(stake_agent_->received),
+                                                            chain::asset(stake_agent_->provided)}),
           resources_usage_(rm.get_account_usage(name)),
           resources_info_(chain::resource_limits::resources_num),
           resource_limits_(chain::resource_limits::resources_num),
@@ -237,11 +241,15 @@ namespace {
         }
 
         int64_t get_resource_total_stake_part(chain::resource_limits::resource_id code) const {
-            return get_resource_stake_part(total_stake_, code);
+            return get_resource_stake_part(effective_stake_, code);
         }
 
         int64_t get_resource_owned_stake_part(chain::resource_limits::resource_id code) const {
             return get_resource_stake_part(owned_stake_, code);
+        }
+
+        const stake_funds& get_stake_info() const {
+            return stake_info_;
         }
 
     private:
@@ -309,9 +317,10 @@ namespace {
         chain::account_name account_;
         std::vector<chain::resource_limits::ratio> prices_;
         const eosio::chain::stake_agent_object* stake_agent_;
-        uint64_t total_stake_;
+        uint64_t effective_stake_;
         uint64_t owned_stake_;
         uint64_t account_balance_ = 0;
+        eosio::stake_funds stake_info_;
         std::vector<uint64_t> resources_usage_;
         std::vector<resource_info> resources_info_;
         std::vector<account_resource_limit> resource_limits_;
@@ -397,6 +406,8 @@ get_account_results chain_api_plugin_impl::get_account(const get_account_params&
 
 
 //    result.voter_info = get_account_voter_info(params);
+
+    result.stake_info = resource_calc.get_stake_info();
     return result;
 }
 

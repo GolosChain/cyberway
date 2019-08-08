@@ -22,6 +22,12 @@ namespace eosio {
        int64_t max = 0; ///< max per window under current congestion
     };
 
+    struct stake_funds {
+        chain::asset staked;
+        chain::asset received;
+        chain::asset provided;
+    };
+
     struct get_account_results {
        chain::name                account_name;
        uint32_t                   head_block_num = 0;
@@ -47,6 +53,8 @@ namespace eosio {
        fc::variant                self_delegated_bandwidth;
        fc::variant                refund_request;
        fc::variant                voter_info;
+
+       stake_funds                stake_info;
     };
 
     struct get_code_results {
@@ -159,10 +167,11 @@ FC_REFLECT( eosio::get_producer_schedule_result, (active)(pending)(proposed) )
 FC_REFLECT( eosio::get_scheduled_transactions_result, (transactions)(more) )
 FC_REFLECT( eosio::permission, (perm_name)(parent)(required_auth) )
 FC_REFLECT( eosio::account_resource_limit, (used)(available)(max) )
+FC_REFLECT( eosio::stake_funds, (staked)(received)(provided))
 FC_REFLECT( eosio::get_account_results,
             (account_name)(head_block_num)(head_block_time)(privileged)(last_code_update)(created)
             (core_liquid_balance)(ram_quota)(net_weight)(cpu_weight)(net_limit)(cpu_limit)(ram_limit)(storage_limit)(ram_usage)(permissions)
-            (total_resources)(self_delegated_bandwidth)(refund_request)(voter_info) )
+            (total_resources)(self_delegated_bandwidth)(refund_request)(voter_info)(stake_info))
 FC_REFLECT( eosio::get_code_results, (account_name)(code_hash)(wast)(wasm)(abi) )
 FC_REFLECT( eosio::get_code_hash_results, (account_name)(code_hash) )
 FC_REFLECT( eosio::get_abi_results, (account_name)(abi) )
