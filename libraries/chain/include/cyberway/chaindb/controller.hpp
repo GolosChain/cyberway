@@ -123,6 +123,7 @@ namespace cyberway { namespace chaindb {
         const undo_stack& get_undo_stack() const;
 
         void restore_db() const;
+        void initialize_db() const;
         void drop_db() const;
         void push_cache() const;
 

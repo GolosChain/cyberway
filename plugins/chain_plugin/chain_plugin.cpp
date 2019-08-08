@@ -164,6 +164,7 @@ public:
 
    bfs::path                        blocks_dir;
    bool                             readonly = false;
+   bool                             drop_db = false;
    flat_map<uint32_t,block_id_type> loaded_checkpoints;
 
    fc::optional<fork_database>      fork_db;
@@ -520,6 +521,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          throw;
       }
 
+      my->drop_db = false;
       my->chain_config = controller::config();
 
       LOAD_VALUE_SET( options, "trusted-producer", my->chain_config->trusted_producers );
@@ -658,11 +660,13 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          ilog( "Deleting state database and blocks" );
          if( options.at( "truncate-at-block" ).as<uint32_t>() > 0 )
             wlog( "The --truncate-at-block option does not make sense when deleting all blocks." );
+         my->drop_db = true;
          clear_directory_contents( my->chain_config->state_dir );
          fc::remove_all( my->blocks_dir );
       } else if( options.at( "hard-replay-blockchain" ).as<bool>()) {
          ilog( "--hard-replay-blockchain doesn't work now");
 //         ilog( "Hard replay requested: deleting state database" );
+//         my->drop_db = true;
 //         clear_directory_contents( my->chain_config->state_dir );
 //         auto backup_dir = block_log::repair_log( my->blocks_dir, options.at( "truncate-at-block" ).as<uint32_t>());
 //         if( fc::exists( backup_dir / config::reversible_blocks_dir_name ) ||
@@ -685,6 +689,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          ilog( "Replay requested: deleting state database" );
          if( options.at( "truncate-at-block" ).as<uint32_t>() > 0 )
             wlog( "The --truncate-at-block option does not work for a regular replay of the blockchain." );
+         my->drop_db = true;
          clear_directory_contents( my->chain_config->state_dir );
          if( options.at( "fix-reversible-blocks" ).as<bool>()) {
             if( !recover_reversible_blocks( my->chain_config->blocks_dir / config::reversible_blocks_dir_name,
@@ -922,6 +927,9 @@ void chain_plugin::plugin_startup()
 { try {
    try {
       auto shutdown = [](){ return app().is_quiting(); };
+      if (my->drop_db) {
+          my->chain->chaindb().drop_db();
+      }
 // TODO: removed by CyberWay
 //      if (my->snapshot_path) {
 //         auto infile = std::ifstream(my->snapshot_path->generic_string(), (std::ios::in | std::ios::binary));

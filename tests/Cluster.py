@@ -682,6 +682,7 @@ class Cluster(object):
         assert(isinstance(initialBalances, dict))
         assert(isinstance(transferAmount, int))
 
+        time.sleep(3)
         for node in self.nodes:
             if node.killed:
                 continue
