@@ -15,7 +15,7 @@ public:
     genesis_import(const bfs::path& genesis_file, controller& ctrl);
     ~genesis_import();
 
-    void import();
+    void import(block_state_ptr &block);
 
 private:
     struct impl;

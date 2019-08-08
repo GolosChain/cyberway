@@ -71,7 +71,7 @@ struct genesis_import::impl final {
         return true;
     }
 
-    void import_state() {
+    void import_state(block_state_ptr &block) {
         // file existance already checked when calculated hash
         std::cout << "Reading state from " << _state_file << "..." << std::endl;
         bfs::ifstream in(_state_file);
@@ -79,6 +79,13 @@ struct genesis_import::impl final {
         in.read((char*)&h, sizeof(h));
         std::cout << "Header magic: " << h.magic << "; ver: " << h.version << std::endl;
         EOS_ASSERT(h.is_valid(), extract_genesis_exception, "Unknown format of the Genesis state file.");
+
+        genesis_ext_header ext_header;
+        fc::raw::unpack(in, ext_header);
+        producer_schedule_type schedule = {0, ext_header.producers};
+        block->active_schedule       = schedule;
+        block->pending_schedule      = schedule;
+        block->pending_schedule_hash = fc::sha256::hash(schedule);
 
         while (in) {
             table_header t;
@@ -121,8 +128,8 @@ genesis_import::genesis_import(const bfs::path& genesis_file, controller& ctrl)
 genesis_import::~genesis_import() {
 }
 
-void genesis_import::import() {
-    _impl->import_state();
+void genesis_import::import(block_state_ptr &block) {
+    _impl->import_state(block);
     _impl->apply_db_changes(true);
 }
 
