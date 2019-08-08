@@ -161,7 +161,6 @@ namespace cyberway { namespace chaindb {
         ~chaindb_controller_impl() = default;
 
         void restore_db() {
-            history_abi_info_.abi().verify_tables_structure(driver_);
             system_abi_info_.init_abi();
             undo_.restore();
         }
@@ -171,6 +170,12 @@ namespace cyberway { namespace chaindb {
             undo_.clear(); // remove all undo states
             journal_.clear(); // remove all pending changes
             driver_.drop_db(); // drop database
+        }
+
+        void initialize_db() {
+            drop_db(); // force to drop old database
+            system_abi_info_.abi().verify_tables_structure(driver_);
+            history_abi_info_.abi().verify_tables_structure(driver_);
         }
 
         const cursor_info& current(const cursor_info& cursor) const {
@@ -763,6 +768,10 @@ namespace cyberway { namespace chaindb {
 
     void chaindb_controller::drop_db() const {
         impl_->drop_db();
+    }
+
+    void chaindb_controller::initialize_db() const {
+        impl_->initialize_db();
     }
 
     void chaindb_controller::push_cache() const {
