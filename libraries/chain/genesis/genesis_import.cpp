@@ -82,10 +82,12 @@ struct genesis_import::impl final {
 
         genesis_ext_header ext_header;
         fc::raw::unpack(in, ext_header);
-        producer_schedule_type schedule = {0, ext_header.producers};
-        block->active_schedule       = schedule;
-        block->pending_schedule      = schedule;
-        block->pending_schedule_hash = fc::sha256::hash(schedule);
+        if (ext_header.producers.size() ) {
+            producer_schedule_type schedule = {0, ext_header.producers};
+            block->active_schedule       = schedule;
+            block->pending_schedule      = schedule;
+            block->pending_schedule_hash = fc::sha256::hash(schedule);
+        }
 
         while (in) {
             table_header t;

@@ -200,10 +200,6 @@ struct genesis_info {
         int64_t depriving_window;
         int64_t min_own_staked_for_election = 0;
     };
-    struct hardfork_info {
-        uint32_t version;       // High byte is major version, next one is hardfork version, low 16bits are revision
-        time_point_sec time;
-    };
     struct funds_share {
         account_name name;
         // value multiplied to base CYBER supply. use num/denom to avoid floating point
@@ -215,7 +211,6 @@ struct genesis_info {
         uint8_t initial_prod_count = 0;
         stake_params stake;
         posting_rules posting_rules;
-        fc::optional<hardfork_info> require_hardfork;
         std::vector<funds_share> funds;
     } params;
 
@@ -263,9 +258,8 @@ FC_REFLECT(cyberway::genesis::genesis_info::golos_config,
     (domain)(names)(recovery)(max_supply)(sys_max_supply)(start_trx))
 FC_REFLECT(cyberway::genesis::genesis_info::stake_params,
     (enabled)(max_proxies)(depriving_window)(min_own_staked_for_election))
-FC_REFLECT(cyberway::genesis::genesis_info::hardfork_info, (version)(time))
 FC_REFLECT(cyberway::genesis::genesis_info::funds_share, (name)(numerator)(denominator))
-FC_REFLECT(cyberway::genesis::genesis_info::parameters, (initial_prod_count)(stake)(posting_rules)(require_hardfork)(funds))
+FC_REFLECT(cyberway::genesis::genesis_info::parameters, (initial_prod_count)(stake)(posting_rules)(funds))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters::ee_history_days, (transfers)(withdraws)(rewards))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters, (history_days))
 FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(genesis_json)(accounts)(auth_links)(transit_account_authorities)(delegateuse)(tables)(golos)(params)(ee_params))
