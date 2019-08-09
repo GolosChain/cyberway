@@ -1259,28 +1259,42 @@ struct genesis_create::genesis_create_impl final {
         ilog("Done.");
     }
 
-    void schedule_start() {
-        ilog("Scheduling Golos start...");
+    void schedule_emit() {
+        ilog("Scheduling emit...");
         db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", 1);
-        auto store_tx = [&](name code, name act_name, uint64_t sender_id_low, const bytes& data = {}) {
+        auto store_tx = [&](name code, name act_name, uint128_t sender_id, const bytes& data, const std::vector<std::pair<name,name>> &bwproviders = {}) {
             auto providebw = cyberway::chain::providebw(_info.golos.names.issuer, code);
             transaction tx{};
             tx.actions.emplace_back(action{{{code, config::active_name}}, code, act_name, data});
-            tx.actions.emplace_back(action{{{providebw.provider, N(providebw)}},
-                providebw.get_account(), providebw.get_name(),
-                fc::raw::pack(providebw)});
-            auto actor = code;
-            db.emplace<generated_transaction_object>(actor, [&](auto& t){
+            for (const auto bwprovider: bwproviders) {
+                auto providebw = cyberway::chain::providebw(bwprovider.first, bwprovider.second);
+                tx.actions.emplace_back(action{{{providebw.provider, N(providebw)}},
+                    providebw.get_account(), providebw.get_name(), fc::raw::pack(providebw)});
+            }
+            db.emplace<generated_transaction_object>(code, [&](auto& t){
                 t.set(tx);
                 t.trx_id = tx.id();
-                t.sender = actor;
-                t.sender_id = (uint128_t(actor.value) << 64) | sender_id_low;
+                t.sender = code;
+                t.sender_id = sender_id;
                 t.delay_until = _conf.initial_timestamp + fc::minutes(_info.golos.start_trx.delay_minutes);
                 t.expiration = t.delay_until + fc::hours(_info.golos.start_trx.expiration_hours);
                 t.published = _conf.initial_timestamp;
             });
         };
-        store_tx(_info.golos.names.emission, N(start), 1);
+        store_tx(_info.golos.names.emission, N(emit), symbol(GLS).value(), {},
+            {{_info.golos.names.issuer, _info.golos.names.emission},
+             {_info.golos.names.issuer, _info.golos.names.control},
+             {_info.golos.names.issuer, _info.golos.names.posting},
+             {_info.golos.names.issuer, _info.golos.names.vesting}});
+
+        db.start_section(_info.golos.names.emission, N(state), "state", 1);
+        auto pk = N(state);
+        auto start_time = (uint64_t)_visitor.gpo.time.sec_since_epoch() * 1000000;
+        db.insert(pk, _info.golos.names.emission, mvo()
+            ("id", pk)
+            ("prev_emit", start_time)
+            ("start_time", start_time)
+            ("active", true));
         ilog("Done.");
     }
 
@@ -1357,7 +1371,7 @@ void genesis_create::write_genesis(
     _impl->store_withdrawals();
     _impl->store_witnesses();
     _impl->store_memo_keys();
-    _impl->schedule_start();
+    _impl->schedule_emit();
 
     _impl->db.finalize();
 
