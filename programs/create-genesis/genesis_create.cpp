@@ -1354,6 +1354,11 @@ void genesis_create::write_genesis(
     _impl->_conf = conf;
     _impl->_contracts = accs;
 
+    if (_impl->_conf.initial_timestamp == time_point()) {
+        _impl->_conf.initial_timestamp = _impl->_visitor.gpo.time + hours(1);
+        ilog("Set initial_timestamp to ${initial_timestamp}", ("initial_timestamp", _impl->_conf.initial_timestamp));
+    }
+
     genesis_ext_header ext_hdr;
     ext_hdr.producers = _impl->get_producers();
 
