@@ -200,7 +200,7 @@ struct genesis_create::genesis_create_impl final {
     void parse_and_store_permissions(account_name n, const std::vector<genesis_info::permission>& permissions, uint64_t& id, std::map<permission_name,perm_id_t>& parents, const public_key_type& initial_key) {
         const uint64_t max_custom_parent_id = 100;            // this should be enough to cover build-in permissions
         for (const auto& p: permissions) {
-            const auto& auth = p.make_authority(initial_key, n);
+            const auto& auth = p.make_authority(initial_key, n, [&](const std::string& username){return name_by_username(username);});
             auto parent = p.get_parent();
             bool root = parent == eosio::chain::name();
             bool custom_parent = !root && parent.value < max_custom_parent_id;

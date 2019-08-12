@@ -60,13 +60,13 @@ struct genesis_info {
             return std::make_pair(parts[0], weight);
         }
 
-        std::vector<permission_level_weight> perm_levels(account_name code) const {
+        std::vector<permission_level_weight> perm_levels(account_name code, std::function<account_name(const std::string&)> name_resolver) const {
             std::vector<permission_level_weight> r;
             for (const auto& a: accounts) {
                 std::vector<string> parts;
                 auto perm_weight = split_weight(a);
                 split(parts, perm_weight.first, boost::algorithm::is_any_of("@"));
-                auto acc = parts[0].size() == 0 ? code : account_name(parts[0]);
+                auto acc = parts[0].size() == 0 ? code : name_resolver(parts[0]);
                 auto perm = account_name(parts.size() == 1 ? "" : parts[1].c_str());
                 r.emplace_back(permission_level_weight{permission_level{acc, perm}, perm_weight.second});
             }
@@ -82,8 +82,8 @@ struct genesis_info {
             return r;
         }
 
-        authority make_authority(const public_key_type& initial_key, account_name code) const {
-            return authority(threshold ? *threshold : 1, key_weights(initial_key), perm_levels(code), wait_weights());
+        authority make_authority(const public_key_type& initial_key, account_name code, std::function<account_name(const std::string&)> name_resolver) const {
+            return authority(threshold ? *threshold : 1, key_weights(initial_key), perm_levels(code, name_resolver), wait_weights());
         }
     };
 
