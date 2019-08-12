@@ -165,6 +165,7 @@ public:
    bfs::path                        blocks_dir;
    bool                             readonly = false;
    bool                             drop_db = false;
+   bool                             revert_to_lib = false;
    flat_map<uint32_t,block_id_type> loaded_checkpoints;
 
    fc::optional<fork_database>      fork_db;
@@ -467,6 +468,8 @@ void chain_plugin::set_program_options(options_description& cli, options_descrip
           "replace reversible block database with blocks imported from specified file and then exit")
          ("export-reversible-blocks", bpo::value<bfs::path>(),
            "export reversible block database in portable format into specified file and then exit")
+         ("revert-to-last-irreversible-block", bpo::bool_switch()->default_value(false),
+           "revert to last irreversible block")
          ("snapshot", bpo::value<bfs::path>(), "File to read Snapshot State from")
          ;
 
@@ -522,6 +525,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       }
 
       my->drop_db = false;
+      my->revert_to_lib = false;
       my->chain_config = controller::config();
 
       LOAD_VALUE_SET( options, "trusted-producer", my->chain_config->trusted_producers );
@@ -610,6 +614,10 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       my->chain_config->disable_replay_opts = options.at( "disable-replay-opts" ).as<bool>();
       my->chain_config->contracts_console = options.at( "contracts-console" ).as<bool>();
       my->chain_config->allow_ram_billing_in_notify = options.at( "disable-ram-billing-notify-checks" ).as<bool>();
+
+      if( options.at( "revert-to-last-irreversible-block" ).as<bool>()) {
+          my->revert_to_lib = true;
+      }
 
       if( options.count( "extract-genesis-json" ) || options.at( "print-genesis-json" ).as<bool>()) {
            ilog("Options 'extract-genesis-json' and 'print-genesis-json' doesn't work now");
@@ -925,11 +933,11 @@ void chain_plugin::init_request_handler() {
 
 void chain_plugin::plugin_startup()
 { try {
+   if (my->drop_db) {
+      my->chain->chaindb().drop_db();
+   }
    try {
       auto shutdown = [](){ return app().is_quiting(); };
-      if (my->drop_db) {
-          my->chain->chaindb().drop_db();
-      }
 // TODO: removed by CyberWay
 //      if (my->snapshot_path) {
 //         auto infile = std::ifstream(my->snapshot_path->generic_string(), (std::ios::in | std::ios::binary));
@@ -940,6 +948,16 @@ void chain_plugin::plugin_startup()
 //         my->chain->startup(shutdown);
 //      }
       my->chain->startup(shutdown);
+
+      if (my->revert_to_lib) {
+         auto lib = std::max(my->chain->last_irreversible_block_num(), uint32_t(1));
+         ilog("revert chain from block ${head} to ${lib}", ("head", my->chain->head_block_num())("lib", lib));
+         while (lib < my->chain->head_block_num()) {
+            auto id = my->chain->head_block_id();
+            my->chain->pop_block();
+            my->chain->fork_db().remove(id);
+         }
+      }
    } catch (const database_guard_exception& e) {
       log_guard_exception(e);
       // make sure to properly close the db

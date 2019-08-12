@@ -1713,7 +1713,7 @@ void controller::startup( std::function<bool()> shutdown, const snapshot_reader_
 //   }
 }
 
-const fork_database& controller::fork_db()const { return my->fork_db; }
+fork_database& controller::fork_db() const { return my->fork_db; }
 
 chaindb_controller& controller::chaindb() const { return my->chaindb; }
 
