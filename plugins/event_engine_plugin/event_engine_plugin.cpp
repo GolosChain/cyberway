@@ -329,12 +329,6 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
                 elog("failed to connect to notifier socket: ${e}", ("e", err.what()));
                 throw;
             }
-
-            my->send_genesis_start();
-            for(const auto& file: my->genesis_files) {
-                my->send_genesis_file(file);
-            }
-            my->send_genesis_end();
         }
 
         my->accepted_block_connection.emplace( 
@@ -360,6 +354,15 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
 }
 
 void event_engine_plugin::plugin_startup() {
+    auto& chain = app().find_plugin<chain_plugin>()->chain();
+    // Make the magic happen
+    if (chain.head_block_num() == 1) {
+        my->send_genesis_start();
+        for(const auto& file: my->genesis_files) {
+            my->send_genesis_file(file);
+        }
+        my->send_genesis_end();
+    }
 }
 
 void event_engine_plugin::plugin_shutdown() {
