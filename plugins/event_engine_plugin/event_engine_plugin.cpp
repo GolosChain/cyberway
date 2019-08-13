@@ -48,6 +48,7 @@ public:
     std::set<account_name> receiver_filter;
     std::vector<bfs::path> genesis_files;
     cyberway::chaindb::account_abi_info account_abi;
+    std::string init_buffer;
 
     void accepted_block( const chain::block_state_ptr& );
     void irreversible_block(const chain::block_state_ptr&);
@@ -63,14 +64,22 @@ public:
 private:
     template<typename Msg>
     void send_message(const Msg& msg) {
-        boost::system::error_code error;
+        auto stream_str = fc::json::to_string(fc::variant(msg)) + "\n";
+        if (!genesis_files.empty()) {
+            init_buffer.append(stream_str);
+        } else {
+            if (!init_buffer.empty()) {
+                init_buffer.append(stream_str);
+                stream_str = std::move(init_buffer);
+            }
 
-        const auto& streem_str = fc::json::to_string(fc::variant(msg)) + "\n";
-        boost::asio::write(socket, boost::asio::buffer(streem_str), error);
+            boost::system::error_code error;
+            boost::asio::write(socket, boost::asio::buffer(stream_str), error);
 
-        if (error) {
-            elog("event engine message sending error: ", ("e", error.message()));
-            appbase::app().quit();
+            if (error) {
+                elog("event engine message sending error: ", ("e", error.message()));
+                appbase::app().quit();
+            }
         }
     }
 
@@ -357,8 +366,9 @@ void event_engine_plugin::plugin_startup() {
     auto& chain = app().find_plugin<chain_plugin>()->chain();
     // Make the magic happen
     if (chain.head_block_num() == 1) {
+        auto genesis_files = std::move(my->genesis_files);
         my->send_genesis_start();
-        for(const auto& file: my->genesis_files) {
+        for(const auto& file: genesis_files) {
             my->send_genesis_file(file);
         }
         my->send_genesis_end();
