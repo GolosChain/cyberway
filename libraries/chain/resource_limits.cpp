@@ -27,10 +27,10 @@ static_assert( config::rate_limiting_precision > 0, "config::rate_limiting_preci
 
 static uint64_t update_elastic_limit(uint64_t current_limit, uint64_t average_usage, const elastic_limit_parameters& params) {
    uint64_t result = current_limit;
-   if (average_usage > params.target ) {
-      result = result * params.decrease_rate;
+   if (average_usage > params.target) {
+      result = safe_prop(result, params.decrease_rate.numerator, params.decrease_rate.denominator, false);
    } else {
-      result = result * params.increase_rate;
+      result = safe_prop(result, params.increase_rate.numerator, params.increase_rate.denominator, false);
    }
 
    return std::min(std::max(result, params.min), params.max);
@@ -391,7 +391,7 @@ uint64_t resource_limits_manager::get_used_resources_cost(account_name account, 
         auto add = safe_prop_ceil(res_usage[i], prices[i].numerator, prices[i].denominator);
         cost = (UINT64_MAX - cost) > add ? cost + add : UINT64_MAX;
     }
-
+    
     EOS_ASSERT(max_cost >= cost, account_resources_exceeded,
         "account ${a} has insufficient staked tokens (${s}).\n usage: cpu ${uc}, net ${un}, ram ${ur}, storage ${us}; \n prices: cpu ${pc}, net ${pn}, ram ${pr}, storage ${ps};\n cost ${c}",
         ("a", account)("s",max_cost)

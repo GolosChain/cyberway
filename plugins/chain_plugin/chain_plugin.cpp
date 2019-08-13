@@ -164,6 +164,8 @@ public:
 
    bfs::path                        blocks_dir;
    bool                             readonly = false;
+   bool                             drop_db = false;
+   bool                             revert_to_lib = false;
    flat_map<uint32_t,block_id_type> loaded_checkpoints;
 
    fc::optional<fork_database>      fork_db;
@@ -466,6 +468,8 @@ void chain_plugin::set_program_options(options_description& cli, options_descrip
           "replace reversible block database with blocks imported from specified file and then exit")
          ("export-reversible-blocks", bpo::value<bfs::path>(),
            "export reversible block database in portable format into specified file and then exit")
+         ("revert-to-last-irreversible-block", bpo::bool_switch()->default_value(false),
+           "revert to last irreversible block")
          ("snapshot", bpo::value<bfs::path>(), "File to read Snapshot State from")
          ;
 
@@ -520,6 +524,8 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          throw;
       }
 
+      my->drop_db = false;
+      my->revert_to_lib = false;
       my->chain_config = controller::config();
 
       LOAD_VALUE_SET( options, "trusted-producer", my->chain_config->trusted_producers );
@@ -609,6 +615,10 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       my->chain_config->contracts_console = options.at( "contracts-console" ).as<bool>();
       my->chain_config->allow_ram_billing_in_notify = options.at( "disable-ram-billing-notify-checks" ).as<bool>();
 
+      if( options.at( "revert-to-last-irreversible-block" ).as<bool>()) {
+          my->revert_to_lib = true;
+      }
+
       if( options.count( "extract-genesis-json" ) || options.at( "print-genesis-json" ).as<bool>()) {
            ilog("Options 'extract-genesis-json' and 'print-genesis-json' doesn't work now");
 // TODO: removed by CyberWay
@@ -658,11 +668,13 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          ilog( "Deleting state database and blocks" );
          if( options.at( "truncate-at-block" ).as<uint32_t>() > 0 )
             wlog( "The --truncate-at-block option does not make sense when deleting all blocks." );
+         my->drop_db = true;
          clear_directory_contents( my->chain_config->state_dir );
          fc::remove_all( my->blocks_dir );
       } else if( options.at( "hard-replay-blockchain" ).as<bool>()) {
          ilog( "--hard-replay-blockchain doesn't work now");
 //         ilog( "Hard replay requested: deleting state database" );
+//         my->drop_db = true;
 //         clear_directory_contents( my->chain_config->state_dir );
 //         auto backup_dir = block_log::repair_log( my->blocks_dir, options.at( "truncate-at-block" ).as<uint32_t>());
 //         if( fc::exists( backup_dir / config::reversible_blocks_dir_name ) ||
@@ -685,6 +697,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          ilog( "Replay requested: deleting state database" );
          if( options.at( "truncate-at-block" ).as<uint32_t>() > 0 )
             wlog( "The --truncate-at-block option does not work for a regular replay of the blockchain." );
+         my->drop_db = true;
          clear_directory_contents( my->chain_config->state_dir );
          if( options.at( "fix-reversible-blocks" ).as<bool>()) {
             if( !recover_reversible_blocks( my->chain_config->blocks_dir / config::reversible_blocks_dir_name,
@@ -920,6 +933,9 @@ void chain_plugin::init_request_handler() {
 
 void chain_plugin::plugin_startup()
 { try {
+   if (my->drop_db) {
+      my->chain->chaindb().drop_db();
+   }
    try {
       auto shutdown = [](){ return app().is_quiting(); };
 // TODO: removed by CyberWay
@@ -932,6 +948,16 @@ void chain_plugin::plugin_startup()
 //         my->chain->startup(shutdown);
 //      }
       my->chain->startup(shutdown);
+
+      if (my->revert_to_lib) {
+         auto lib = std::max(my->chain->last_irreversible_block_num(), uint32_t(1));
+         ilog("revert chain from block ${head} to ${lib}", ("head", my->chain->head_block_num())("lib", lib));
+         while (lib < my->chain->head_block_num()) {
+            auto id = my->chain->head_block_id();
+            my->chain->pop_block();
+            my->chain->fork_db().remove(id);
+         }
+      }
    } catch (const database_guard_exception& e) {
       log_guard_exception(e);
       // make sure to properly close the db

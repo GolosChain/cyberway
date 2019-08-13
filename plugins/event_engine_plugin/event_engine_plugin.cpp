@@ -5,6 +5,7 @@
 #include <boost/filesystem/path.hpp>
 #include <boost/filesystem/fstream.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
+#include <boost/asio.hpp>
 #include <eosio/event_engine_plugin/event_engine_plugin.hpp>
 #include <eosio/event_engine_plugin/ee_genesis_container.hpp>
 #include <eosio/event_engine_plugin/messages.hpp>
@@ -26,6 +27,9 @@ namespace eosio {
 
    static appbase::abstract_plugin& _event_engine_plugin = app().register_plugin<event_engine_plugin>();
 
+   boost::asio::io_service io_service;
+   boost::asio::local::stream_protocol::socket socket(io_service);
+
 class event_engine_plugin_impl {
 public:
     event_engine_plugin_impl(controller &db, fc::microseconds abi_serializer_max_time);
@@ -37,8 +41,6 @@ public:
     fc::optional<boost::signals2::scoped_connection> applied_transaction_connection;
     fc::optional<boost::signals2::scoped_connection> setabi_connection;
 
-    std::fstream dumpstream;
-    bool dumpstream_opened;
     uint32_t genesis_msg_id = 0;
 
     controller &db;
@@ -46,6 +48,7 @@ public:
     std::set<account_name> receiver_filter;
     std::vector<bfs::path> genesis_files;
     cyberway::chaindb::account_abi_info account_abi;
+    std::string init_buffer;
 
     void accepted_block( const chain::block_state_ptr& );
     void irreversible_block(const chain::block_state_ptr&);
@@ -61,10 +64,22 @@ public:
 private:
     template<typename Msg>
     void send_message(const Msg& msg) {
-        if(dumpstream_opened) {
-            dumpstream << fc::json::to_string(fc::variant(msg)) << std::endl;
-            EOS_ASSERT(!dumpstream.bad(), chain::plugin_config_exception, "Writing to event-engine-dumpfile failed");
-            dumpstream.flush();
+        auto stream_str = fc::json::to_string(fc::variant(msg)) + "\n";
+        if (!genesis_files.empty()) {
+            init_buffer.append(stream_str);
+        } else {
+            if (!init_buffer.empty()) {
+                init_buffer.append(stream_str);
+                stream_str = std::move(init_buffer);
+            }
+
+            boost::system::error_code error;
+            boost::asio::write(socket, boost::asio::buffer(stream_str), error);
+
+            if (error) {
+                elog("event engine message sending error: ", ("e", error.message()));
+                appbase::app().quit();
+            }
         }
     }
 
@@ -182,7 +197,8 @@ void event_engine_plugin_impl::irreversible_block(const chain::block_state_ptr& 
 void event_engine_plugin_impl::accepted_transaction(const chain::transaction_metadata_ptr& trx_meta) {
     ilog("Accepted trx: ${id}, ${signed_id}", ("id", trx_meta->id)("signed_id", trx_meta->signed_id));
 
-    AcceptTrxMessage msg(MsgChannel::Blocks, BaseMessage::AcceptTrx, trx_meta);
+    fc::variant trx = db.to_variant_with_abi(trx_meta->packed_trx->get_transaction(), abi_serializer_max_time);
+    AcceptTrxMessage msg(MsgChannel::Blocks, BaseMessage::AcceptTrx, trx_meta, std::move(trx));
     send_message(msg);
 }
 
@@ -234,6 +250,10 @@ void event_engine_plugin_impl::send_genesis_file(const bfs::path& genesis_file) 
 void event_engine_plugin_impl::applied_transaction(const chain::transaction_trace_ptr& trx_trace) {
     ilog("Applied trx: ${block_num}, ${id}", ("block_num", trx_trace->block_num)("id", trx_trace->id));
 
+    if (trx_trace->failed_dtrx_trace) {
+        applied_transaction(trx_trace->failed_dtrx_trace);
+    }
+
     std::function<void(ApplyTrxMessage &msg, const chain::action_trace&)> process_action_trace = 
     [&](ApplyTrxMessage &msg, const chain::action_trace& trace) {
         if (is_handled_contract(trace.receipt.receiver)) {
@@ -282,7 +302,7 @@ event_engine_plugin::~event_engine_plugin(){}
 
 void event_engine_plugin::set_program_options(options_description&, options_description& cfg) {
     cfg.add_options()
-        ("event-engine-dumpfile", bpo::value<string>()->default_value(""))
+        ("event-engine-unix-socket", bpo::value<string>()->default_value(""))
         ("event-engine-contract", bpo::value<vector<string>>()->composing()->multitoken(),
          "Smart-contracts for which event_engine will handle events (may specify multiple times)")
         ("event-engine-genesis",  bpo::value<vector<string>>()->composing()->multitoken())
@@ -306,18 +326,18 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
         LOAD_VALUE_SET(options, "event-engine-contract", my->receiver_filter);
         LOAD_VALUE_SET(options, "event-engine-genesis", my->genesis_files);
 
-        std::string dump_filename = options.at("event-engine-dumpfile").as<string>();
-        if(dump_filename != "") {
-            ilog("Openning dumpfile \"${filename}\"", ("filename", dump_filename));
-            my->dumpstream.open(dump_filename, std::ofstream::out | std::ofstream::app);
-            EOS_ASSERT(!my->dumpstream.fail(), chain::plugin_config_exception, "Can't open event-engine-dumpfile");
-            my->dumpstream_opened = true;
-
-            my->send_genesis_start();
-            for(const auto& file: my->genesis_files) {
-                my->send_genesis_file(file);
+        std::string uds_path = options.at("event-engine-unix-socket").as<string>();
+        if(uds_path != "") {
+            ilog("Unix socket path: \"${path}\"", ("path", uds_path));
+            ::unlink(uds_path.c_str());
+            boost::asio::local::stream_protocol::endpoint ep(uds_path);
+            boost::asio::local::stream_protocol::acceptor acceptor(io_service, ep);
+            try {
+                acceptor.accept(socket);
+            } catch (const boost::system::system_error &err) {
+                elog("failed to connect to notifier socket: ${e}", ("e", err.what()));
+                throw;
             }
-            my->send_genesis_end();
         }
 
         my->accepted_block_connection.emplace( 
@@ -343,14 +363,23 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
 }
 
 void event_engine_plugin::plugin_startup() {
+    auto& chain = app().find_plugin<chain_plugin>()->chain();
+    // Make the magic happen
+    if (chain.head_block_num() == 1) {
+        auto genesis_files = std::move(my->genesis_files);
+        my->send_genesis_start();
+        for(const auto& file: genesis_files) {
+            my->send_genesis_file(file);
+        }
+        my->send_genesis_end();
+    }
 }
 
 void event_engine_plugin::plugin_shutdown() {
    // OK, that's enough magic
-   if(my->dumpstream_opened) {
-       my->dumpstream.close();
-       my->dumpstream_opened = false;
-   }
+   boost::system::error_code ec;
+   socket.close(ec);
+
    my->accepted_block_connection.reset();
    my->irreversible_block_connection.reset();
    my->accepted_transaction_connection.reset();

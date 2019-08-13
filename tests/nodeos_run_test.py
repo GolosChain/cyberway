@@ -275,10 +275,7 @@ try:
     Print("Validate last action for account %s" % (testeraAccount.name))
     actions=node.getActions(testeraAccount, -1, -1, exitOnError=True)
     try:
-        if not enableMongo:
-            assert(actions["actions"][0]["action_trace"]["act"]["name"] == "transfer")
-        else:
-            assert(actions["act"]["name"] == "transfer")
+        assert(actions["actions"][0]["action_trace"]["act"]["name"] == "transfer")
     except (AssertionError, TypeError, KeyError) as _:
         Print("Action validation failed. Actions: %s" % (actions))
         raise
@@ -291,18 +288,11 @@ try:
     amountVal=None
     key=""
     try:
-        if not enableMongo:
-            key="[traces][0][act][name]"
-            typeVal=  transaction["traces"][0]["act"]["name"]
-            key="[traces][0][act][data][quantity]"
-            amountVal=transaction["traces"][0]["act"]["data"]["quantity"]
-            amountVal=int(decimal.Decimal(amountVal.split()[0])*10000)
-        else:
-            key="[actions][0][name]"
-            typeVal=  transaction["actions"][0]["name"]
-            key="[actions][0][data][quantity]"
-            amountVal=transaction["actions"][0]["data"]["quantity"]
-            amountVal=int(decimal.Decimal(amountVal.split()[0])*10000)
+        key="[traces][0][act][name]"
+        typeVal=  transaction["traces"][0]["act"]["name"]
+        key="[traces][0][act][data][quantity]"
+        amountVal=transaction["traces"][0]["act"]["data"]["quantity"]
+        amountVal=int(decimal.Decimal(amountVal.split()[0])*10000)
     except (TypeError, KeyError) as e:
         Print("transaction%s not found. Transaction: %s" % (key, transaction))
         raise

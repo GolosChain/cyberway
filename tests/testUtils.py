@@ -13,6 +13,7 @@ import socket
 from sys import stdout
 from sys import exit
 import traceback
+import numpy as np
 
 ###########################################################################################
 class Utils:
@@ -350,3 +351,7 @@ class EnumType:
 
     def __str__(self):
         return self.type
+
+maxInt64 = np.iinfo(np.int64).max
+maxInt32 = np.iinfo(np.int32).max
+    

@@ -846,6 +846,25 @@ void producer_plugin::update_runtime_options(const runtime_options& options) {
       chain::controller& chain = my->chain_plug->chain();
       chain.set_subjective_cpu_leeway(fc::microseconds(*options.subjective_cpu_leeway_us));
    }
+   
+   if (options.subjective_ram_size) {
+       if (options.subjective_reserved_ram_size && (*options.subjective_reserved_ram_size * 2 <= *options.subjective_ram_size)) {
+          my->chain_plug->chain().chaindb().set_subjective_ram(*options.subjective_ram_size, *options.subjective_reserved_ram_size, 
+            options.ram_load_multiplier ? *options.ram_load_multiplier : 0);
+       }
+       else {
+          elog("incorrect subjective RAM parameters, ignoring!");
+       }
+   }
+   else if (options.ram_load_multiplier) {
+      auto rlm = *options.ram_load_multiplier;
+      if (rlm) {
+         my->chain_plug->chain().chaindb().set_subjective_ram(0, 0, rlm);
+      }
+      else {
+         elog("incorrect subjective RAM parameters, ignoring!");
+      }
+   }
 }
 
 producer_plugin::runtime_options producer_plugin::get_runtime_options() const {

@@ -792,14 +792,20 @@ chain::action create_buyrambytes(const name& creator, const name& newaccount, ui
                         config::system_account_name, N(buyrambytes), act_payload);
 }
 
-chain::action create_delegate(const name& from, const name& receiver, const asset& stake, bool transfer) {
+chain::action create_delegate(const name& from, const name& receiver, const asset& stake) {
    fc::variant act_payload = fc::mutable_variant_object()
-         ("from", from.to_string())
-         ("receiver", receiver.to_string())
-         ("stake", stake.to_string())
-         ("transfer", transfer);
-   return create_action(get_account_permissions(tx_permission, {from,config::active_name}),
-                        config::system_account_name, N(delegatebw), act_payload);
+         ("grantor_name", from.to_string())
+         ("recipient_name", receiver.to_string())
+         ("quantity", stake.to_string());
+   return create_action(get_account_permissions(tx_permission, {from, config::active_name}),
+                        N(cyber.stake), N(delegateuse), act_payload);
+}
+
+chain::action create_withdraw(const name& from, const asset& stake) {
+   fc::variant act_payload = fc::mutable_variant_object("account", from)
+                                                       ("quantity", stake);
+   return create_action(get_account_permissions(tx_permission, {from, config::active_name}),
+                        N(cyber.stake), N(withdraw), act_payload);
 }
 
 chain::action create_open(const string& contract, const name& owner, symbol sym, const name& ram_payer) {
@@ -811,6 +817,16 @@ chain::action create_open(const string& contract, const name& owner, symbol sym,
       get_account_permissions(tx_permission, {ram_payer,config::active_name}),
       contract, "open", variant_to_bin( contract, N(open), open_ )
    };
+}
+
+chain::action create_stake_open(const name& owner, symbol_code sym, const name& ram_payer) {
+   auto payload = fc::mutable_variant_object
+      ("owner", owner)
+      ("token_code", sym)
+      ("ram_payer", ram_payer);
+
+   return create_action(get_account_permissions(tx_permission, {ram_payer, config::active_name}),
+                        N(cyber.stake), N(open), payload);
 }
 
 chain::action create_transfer(const string& contract, const name& sender, const name& recipient, asset amount, const string& memo ) {
@@ -1345,19 +1361,19 @@ struct create_account_subcommand {
                } EOS_RETHROW_EXCEPTIONS( public_key_type_exception, "Invalid active public key: ${public_key}", ("public_key", active_key_str) );
             }
 
-            auto create = create_newaccount(creator, account_name, owner, active);
-            if (!simple) {
-                const auto stake_asset = to_asset(stake);
-               if ( stake_asset.get_amount() != 0) {
-                   EOS_THROW(action_not_found_exception, "Action delegatebw is not supported yet");
-//                  action delegate = create_delegate( creator, account_name, stake_asset, transfer);
-//                  send_actions( { create, delegate } );
+            std::vector<action> actions = {create_newaccount(creator, account_name, owner, active)};
+            const auto delegate_asset = stake.empty() ? asset() : to_asset(stake);
+
+            if (!simple && delegate_asset.get_amount() != 0) {
+               if (transfer) {
+                   actions.push_back(create_withdraw(creator,asset::from_string(stake)));
+                   actions.push_back(create_transfer("cyber.token", creator, N(cyber.stake), delegate_asset, account_name));
                } else {
-                  send_actions( { create } );
-               }
-            } else {
-               send_actions( { create } );
-            }
+                   actions.push_back(create_stake_open(account_name, symbol().to_symbol_code(), creator));
+                   actions.push_back(create_delegate( creator, account_name, delegate_asset));
+              }
+           }
+           send_actions(std::move(actions));
       });
    }
 };
@@ -1413,7 +1429,7 @@ struct approve_producer_subcommand {
 
    approve_producer_subcommand(CLI::App* actionRoot) {
       auto approve_producer = actionRoot->add_subcommand("approve", localized("Deprecated. Not used"));
-      approve_producer->set_callback([this] {
+      approve_producer->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation approve is not supported anymore");
       });
    }
@@ -1426,7 +1442,7 @@ struct unapprove_producer_subcommand {
    unapprove_producer_subcommand(CLI::App* actionRoot) {
       auto approve_producer = actionRoot->add_subcommand("unapprove", localized("Deprecated. Not used"));
 
-      approve_producer->set_callback([this] {
+      approve_producer->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation unapprove is not supported anymore");
       });
    }
@@ -1539,9 +1555,35 @@ struct delegate_bandwidth_subcommand {
       add_standard_transaction_options(delegate_bandwidth, "from@active");
 
       delegate_bandwidth->set_callback([this] {
-          EOS_THROW(action_not_found_exception, "Action delegatebw is not supported yet");
-//         std::vector<chain::action> acts{create_delegate(from_str, receiver_str, stake, transfer)};
-//         send_actions(std::move(acts));
+          const auto to_delegate_asset = to_asset(stake);
+          if (transfer) {
+              send_actions({create_withdraw(from_str, to_delegate_asset),
+                            create_transfer("cyber.token", from_str, "cyber.stake", to_delegate_asset, receiver_str)});
+          } else {
+              send_actions({create_delegate(from_str, receiver_str, to_delegate_asset)});
+          }
+      });
+   }
+};
+
+struct claim_undelegated_bandwith_subcommand {
+    string from_str;
+    string receiver_str;
+    string token_code_str;
+
+   claim_undelegated_bandwith_subcommand(CLI::App* actionRoot) {
+      auto undelegate_bandwidth = actionRoot->add_subcommand("claimbw", localized("Claim undelegated bandwidth"));
+      undelegate_bandwidth->add_option("from", from_str, localized("An account claims undelegated stake"))->required();
+      undelegate_bandwidth->add_option("receiver", receiver_str, localized("An account returning stake"))->required();
+      undelegate_bandwidth->add_option("token_code", token_code_str, localized("An asset symbol claimed"))->required();
+
+      undelegate_bandwidth->set_callback([this] {
+         fc::variant act_payload = fc::mutable_variant_object()
+                  ("grantor_name", from_str)
+                  ("recipient_name", receiver_str)
+                  ("token_code", token_code_str);
+         auto accountPermissions = get_account_permissions(tx_permission, {from_str,config::active_name});
+         send_actions({create_action(accountPermissions, N(cyber.stake), N(claim), act_payload)});
       });
    }
 };
@@ -1564,12 +1606,11 @@ struct undelegate_bandwidth_subcommand {
 
       undelegate_bandwidth->set_callback([this] {
          fc::variant act_payload = fc::mutable_variant_object()
-                  ("from", from_str)
-                  ("receiver", receiver_str)
-                  ("unstake_quantity", to_asset(unstake_amount));
+                  ("grantor_name", from_str)
+                  ("recipient_name", receiver_str)
+                  ("quantity", to_asset(unstake_amount));
          auto accountPermissions = get_account_permissions(tx_permission, {from_str,config::active_name});
-         EOS_THROW(action_not_found_exception, "Action undelegatebw is not supported yet");
-//         send_actions({create_action(accountPermissions, config::system_account_name, N(undelegatebw), act_payload)});
+         send_actions({create_action(accountPermissions, N(cyber.stake), N(recalluse), act_payload)});
       });
    }
 };
@@ -1639,17 +1680,127 @@ struct bidname_info_subcommand {
    }
 };
 
+
+struct list_bw_printer {
+    virtual void print_delgated_bw_info(const std::string& account) {
+        grantor_ = account;
+        while (has_more_) {
+            auto result = call(get_table_func, fc::mutable_variant_object("code", "cyber.stake")
+                               ("scope", "cyber.stake")
+                               ("table", "provision")
+                               ("index", "bykey")
+                               ("lower_bound", fc::mutable_variant_object("token_code", CORE_SYMBOL_NAME)
+                                                                         ("grantor_name", grantor_)
+                                                                         ("recipient_name", recipient_request_key))
+            );
+
+            auto res = result.as<eosio::get_table_rows_result>();
+
+            print_result(res);
+        }
+    }
+
+    virtual ~list_bw_printer()  = default;
+
+protected:
+
+    virtual void print_result(const eosio::get_table_rows_result& res) {
+        for (const auto& r : res.rows) {
+            const bool is_requested_grantor = r["grantor_name"].as_string() == grantor_;
+
+            if (!is_requested_grantor) {
+                has_more_ = false;
+                return;
+            }
+
+            ++count_;
+            print_row(r);
+
+        }
+
+        verify_has_more(res);
+    }
+
+    void verify_has_more (const eosio::get_table_rows_result& res) {
+        has_more_ = res.more;
+        if (has_more_) {
+            recipient_request_key = res.next["recipient_name"].as_string();
+        }
+    }
+
+    virtual void print_row(const fc::variant& row) const = 0;
+
+protected:
+
+    bool has_more_ = true;
+    std::string recipient_request_key;
+    std::string grantor_;
+    size_t count_ = 0;
+};
+
+struct json_printer : public list_bw_printer {
+    virtual void print_delgated_bw_info(const std::string& account) override {
+        std::cout << '[';
+
+        list_bw_printer::print_delgated_bw_info(account);
+
+        std::cout << ']' << std::endl;
+    }
+
+private:
+
+    void print_row(const fc::variant& row) const override {
+        if(count_ != 1) {
+             std::cout << ',' << std::endl;
+        }
+        std::cout << fc::json::to_pretty_string(row);
+    }
+
+};
+
+class human_printer : public list_bw_printer {
+    void print_result(const eosio::get_table_rows_result& res) override {
+        if (recipient_request_key.empty()) {
+            if (res.rows.empty() || res.rows.front()["grantor_name"].as_string() != grantor_) {
+                std::cerr << "Delegated bandwidth not found" << std::endl;
+                has_more_ = false;
+                return;
+            } else {
+                std::cout << std::setw(7) << std::left << "#"
+                          << std::setw(13) << std::left << "Recipient"
+                          << std::setw(21) << std::left << "Granted"
+                          << std::endl;
+            }
+        }
+        list_bw_printer::print_result(res);
+    }
+
+    void print_row (const fc::variant& row) const override {
+        std::cout << std::setw(7) << std::left << count_
+                  << std::setw(13) << std::left << row["recipient_name"].as_string()
+                  << std::setw(21) << std::left << asset(row["amount"].as_int64())
+                  << std::endl;
+
+    }
+
+};
+
 struct list_bw_subcommand {
-   eosio::name account;
-   bool not_used = false;
+    eosio::name account;
+    bool print_json = false;
 
-   list_bw_subcommand(CLI::App* actionRoot) {
-      auto list_bw = actionRoot->add_subcommand("listbw", localized("List delegated bandwidth"));
-      list_bw->add_option("account", account, localized("The account delegated bandwidth"))->required();
-      list_bw->add_flag("--json,-j", not_used, localized("Deprecated. Result always in JSON") );
+       list_bw_subcommand(CLI::App* actionRoot) {
+            auto list_bw = actionRoot->add_subcommand("listbw", localized("List delegated bandwidth"));
+            list_bw->add_option("account", account, localized("The account delegated bandwidth"))->required();
+            list_bw->add_flag("--json,-j", print_json, localized("Output in JSON format") );
 
-      list_bw->set_callback([this] {
-         EOS_THROW(action_not_found_exception, "Delegating bandwith is not implemented yet");
+            list_bw->set_callback([this] {
+                if (print_json) {
+                    json_printer().print_delgated_bw_info(account.to_string());
+                } else {
+                    human_printer().print_delgated_bw_info(account.to_string());
+                }
+
       });
    }
 };
@@ -1663,7 +1814,7 @@ struct buyram_subcommand {
 
    buyram_subcommand(CLI::App* actionRoot) {
       auto buyram = actionRoot->add_subcommand("buyram", localized("Deprecated command"));
-      buyram->set_callback([this] {
+      buyram->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation buyram is not supported anymore");
       });
    }
@@ -1676,7 +1827,7 @@ struct sellram_subcommand {
 
    sellram_subcommand(CLI::App* actionRoot) {
       auto sellram = actionRoot->add_subcommand("sellram", localized("Deprecated command"));
-      sellram->set_callback([this] {
+      sellram->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation sellram is not supported anymore");
       });
    }
@@ -1687,7 +1838,7 @@ struct claimrewards_subcommand {
 
    claimrewards_subcommand(CLI::App* actionRoot) {
       auto claim_rewards = actionRoot->add_subcommand("claimrewards", localized("Deprecated command"));
-      claim_rewards->set_callback([this] {
+      claim_rewards->set_callback([] {
           EOS_THROW(action_not_found_exception, "Operation claimrewards is not supported anymore");
       });
    }
@@ -2289,14 +2440,6 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
 
    auto res = json.as<eosio::get_account_results>();
    if (!json_format) {
-      asset staked;
-      asset unstaking;
-
-      if( res.core_liquid_balance.valid() ) {
-         unstaking = asset( 0, res.core_liquid_balance->get_symbol() ); // Correct core symbol for unstaking asset.
-         staked = asset( 0, res.core_liquid_balance->get_symbol() );    // Correct core symbol for staked asset.
-      }
-
       std::cout << "created: " << string(res.created) << std::endl;
 
       if(res.privileged) std::cout << "privileged: true" << std::endl;
@@ -2402,15 +2545,8 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
       if ( res.total_resources.is_object() ) {
          auto net_total = to_asset(res.total_resources.get_object()["net_weight"].as_string());
 
-         if( net_total.get_symbol() != unstaking.get_symbol() ) {
-            // Core symbol of nodeos responding to the request is different than core symbol built into cleos
-            unstaking = asset( 0, net_total.get_symbol() ); // Correct core symbol for unstaking asset.
-            staked = asset( 0, net_total.get_symbol() ); // Correct core symbol for staked asset.
-         }
-
          if( res.self_delegated_bandwidth.is_object() ) {
             asset net_own =  asset::from_string( res.self_delegated_bandwidth.get_object()["net_weight"].as_string() );
-            staked = net_own;
 
             auto net_others = net_total - net_own;
 
@@ -2474,10 +2610,6 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
 
          if( res.self_delegated_bandwidth.is_object() ) {
             asset cpu_own = asset::from_string( res.self_delegated_bandwidth.get_object()["cpu_weight"].as_string() );
-            asset ram_own = asset::from_string( res.self_delegated_bandwidth.get_object()["ram_weight"].as_string() );
-            asset store_own = asset::from_string( res.self_delegated_bandwidth.get_object()["storage_weight"].as_string() );
-
-            staked += cpu_own + ram_own + store_own;
 
             auto cpu_others = cpu_total - cpu_own;
 
@@ -2499,40 +2631,27 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
       std::cout << indent << std::left << std::setw(11) << "limit:"     << std::right << std::setw(18) << to_pretty_time( res.cpu_limit.max ) << "\n";
       std::cout << std::endl;
 
-      if( res.refund_request.is_object() ) {
-         auto obj = res.refund_request.get_object();
-         auto request_time = fc::time_point_sec::from_iso_string( obj["request_time"].as_string() );
-         fc::time_point refund_time = request_time + fc::days(3);
-         auto now = res.head_block_time;
-         asset net = asset::from_string( obj["net_amount"].as_string() );
-         asset cpu = asset::from_string( obj["cpu_amount"].as_string() );
-         unstaking = net + cpu;
-
-         if( unstaking > asset( 0, unstaking.get_symbol() ) ) {
-            std::cout << std::fixed << setprecision(3);
-            std::cout << "unstaking tokens:" << std::endl;
-            std::cout << indent << std::left << std::setw(25) << "time of unstake request:" << std::right << std::setw(20) << string(request_time);
-            if( now >= refund_time ) {
-               std::cout << " (available to claim now with 'eosio::refund' action)\n";
-            } else {
-               std::cout << " (funds will be available in " << to_pretty_time( (refund_time - now).count(), 0 ) << ")\n";
-            }
-            std::cout << indent << std::left << std::setw(25) << "from net bandwidth:" << std::right << std::setw(18) << net << std::endl;
-            std::cout << indent << std::left << std::setw(25) << "from cpu bandwidth:" << std::right << std::setw(18) << cpu << std::endl;
-            std::cout << indent << std::left << std::setw(25) << "total:" << std::right << std::setw(18) << unstaking << std::endl;
-            std::cout << std::endl;
-         }
-      }
-
       if( res.core_liquid_balance.valid() ) {
+         const auto owned = res.stake_info.staked - res.stake_info.provided;
+         const auto effective = res.stake_info.staked - res.stake_info.provided + res.stake_info.received;
+
          std::cout << res.core_liquid_balance->get_symbol().name() << " balances: " << std::endl;
          std::cout << indent << std::left << std::setw(11)
                    << "liquid:" << std::right << std::setw(18) << *res.core_liquid_balance << std::endl;
          std::cout << indent << std::left << std::setw(11)
-                   << "staked:" << std::right << std::setw(18) << staked << std::endl;
+                   << "staked:" << std::right << std::setw(18) << res.stake_info.staked << std::endl;
          std::cout << indent << std::left << std::setw(11)
-                   << "unstaking:" << std::right << std::setw(18) << unstaking << std::endl;
-         std::cout << indent << std::left << std::setw(11) << "total:" << std::right << std::setw(18) << (*res.core_liquid_balance + staked + unstaking) << std::endl;
+                   << "recieved:" << std::right << std::setw(18) << res.stake_info.received << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "provided:" << std::right << std::setw(18) << res.stake_info.provided << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "unstaking:" << std::right << std::setw(18) << chain::asset(0, res.stake_info.staked.get_symbol()) << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "owned:" << std::right << std::setw(18) << owned << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "effective:" << std::right << std::setw(18) << effective << std::endl;
+         std::cout << indent << std::left << std::setw(11)
+                   << "total:" << std::right << std::setw(18) << (*res.core_liquid_balance + effective) << std::endl;
          std::cout << std::endl;
       }
 
@@ -4113,6 +4232,7 @@ int main( int argc, char** argv ) {
 
    auto delegateBandWidth = delegate_bandwidth_subcommand(system);
    auto undelegateBandWidth = undelegate_bandwidth_subcommand(system);
+   auto claimBandWidth = claim_undelegated_bandwith_subcommand(system);
    auto listBandWidth = list_bw_subcommand(system);
    auto bidname = bidname_subcommand(system);
    auto bidnameinfo = bidname_info_subcommand(system);

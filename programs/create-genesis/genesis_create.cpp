@@ -200,7 +200,7 @@ struct genesis_create::genesis_create_impl final {
     void parse_and_store_permissions(account_name n, const std::vector<genesis_info::permission>& permissions, uint64_t& id, std::map<permission_name,perm_id_t>& parents, const public_key_type& initial_key) {
         const uint64_t max_custom_parent_id = 100;            // this should be enough to cover build-in permissions
         for (const auto& p: permissions) {
-            const auto& auth = p.make_authority(initial_key, n);
+            const auto& auth = p.make_authority(initial_key, n, [&](const std::string& username){return name_by_username(username);});
             auto parent = p.get_parent();
             bool root = parent == eosio::chain::name();
             bool custom_parent = !root && parent.value < max_custom_parent_id;
@@ -354,13 +354,17 @@ struct genesis_create::genesis_create_impl final {
             const auto& owner  = store_permission(name, config::owner_name, 0, own, usage_id++);
             const auto& active = store_permission(name, config::active_name, owner.id, act, usage_id++);
             const auto& posting= store_permission(name, posting_auth_name, active.id, post, usage_id++);
+            _exp_info.account_infos[a.account.id] = mvo
+                ("owner_keys", own.keys)
+                ("active_keys", act.keys)
+                ("posting_keys", post.keys);
 
             auto itr = std::find_if(_info.transit_account_authorities.begin(), _info.transit_account_authorities.end(),
                     [&](const auto& acc) {return acc.name == name;});
             if (itr != _info.transit_account_authorities.end()) {
                 std::map<permission_name,perm_id_t> parents = {
                         {config::owner_name, owner.id},
-                        {config::active_name, active.id}, 
+                        {config::active_name, active.id},
                         {posting_auth_name, posting.id}
                 };
                 parse_and_store_permissions(name, itr->permissions, usage_id, parents, _conf.initial_key);
@@ -403,7 +407,7 @@ struct genesis_create::genesis_create_impl final {
                 u.scope = app;
                 u.name = s;
             });
-            _exp_info.account_infos[auth.account.id] = mvo
+            _exp_info.account_infos[auth.account.id] = _exp_info.account_infos[auth.account.id]
                 ("creator", app)
                 ("owner", n)
                 ("name", s)
@@ -434,28 +438,10 @@ struct genesis_create::genesis_create_impl final {
 
         // first prepare staking balances and sort agents by level. keys and proxy info required to do this
         fc::flat_map<acc_idx,public_key_type> keys;         // agent:key
-        auto hf = _info.params.require_hardfork;
+        std::vector<producer_key> initial_producers = get_producers();
         for (const auto& w: _visitor.witnesses) {
-            auto key = pubkey_from_golos(w.signing_key);
-            if (hf && key != public_key_type()) {
-                // the following cases exist:
-                //  1. running version == required
-                //      a) vote version == required if witness updated node and signed block before HF
-                //          i) vote time == required = ok
-                //          ii) vote time != required = wrong hf, reset
-                //      b) vote version == prev, if witness updated node and signed block after HF, reset
-                //          (almost impossible in final genesis, can affect reserve witness/miner from last schedule)
-                //  2. running version != required = wrong hf or didn't sign a block after node update, reset
-                if (
-                    w.running_version != hf->version
-#ifndef ONLY_CHECK_WITNESS_RUNNING_HF_VERSION
-                    || w.hardfork_version_vote != hf->version || w.hardfork_time_vote != hf->time
-#endif
-                ) {
-                    key = {};
-                }
-            }
-            keys[w.owner.id.value] = key;
+            auto producer = std::find_if(initial_producers.begin(), initial_producers.end(), [&](const auto &prod) {return prod.producer_name == name_by_acc(w.owner);});
+            keys[w.owner.id.value] = (producer == initial_producers.end()) ? public_key_type{} : producer->block_signing_key;
         }
         fc::flat_map<acc_idx,acc_idx> proxies;              // grantor:agent
         const auto& empty_acc = std::distance(_accs_map.begin(), std::find(_accs_map.begin(), _accs_map.end(), string("")));
@@ -613,7 +599,7 @@ struct genesis_create::genesis_create_impl final {
                             auto total_funds = acc.balance + acc.proxied;
                             if (total_funds != 0) {
                                 auto own_funds = int_arithmetic::safe_prop(total_funds, acc.own_share, acc.shares_sum);
-                                quantity += asset(int_arithmetic::safe_prop(own_funds, percent, 10000l));
+                                quantity += asset(int_arithmetic::safe_pct(own_funds, percent));
                             }
                             found = true;
                             break;
@@ -624,7 +610,7 @@ struct genesis_create::genesis_create_impl final {
                     auto acc = std::find_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& a){return a.name == from;});
                     EOS_ASSERT(acc != _info.accounts.end(), genesis_exception, "Can't find account ${name}", ("name", from));
                     EOS_ASSERT(acc->sys_staked, genesis_exception, "Account ${name} doesn't has staked funds", ("name", from));
-                    quantity += asset(int_arithmetic::safe_prop(acc->sys_staked->get_amount(), percent, 10000l));
+                    quantity += asset(int_arithmetic::safe_pct(acc->sys_staked->get_amount(), percent));
                 }
             } else {
                 quantity += asset::from_string(item.quantity);
@@ -642,7 +628,7 @@ struct genesis_create::genesis_create_impl final {
             delegateid++;
         }
 
-        uint64_t n_delegate_agents = delegatemap.size() - 
+        uint64_t n_delegate_agents = delegatemap.size() -
                 std::count_if(_visitor.vests.begin(), _visitor.vests.end(), [&](const auto& v){return delegatemap.count(name_by_idx(v.first));}) -
                 std::count_if(_info.accounts.begin(), _info.accounts.end(), [&](const auto& a){return a.sys_staked && delegatemap.count(a.name);});
 
@@ -679,6 +665,9 @@ struct genesis_create::genesis_create_impl final {
                 EOS_ASSERT(agent.get_own_funds() >= agent.provided, genesis_exception,
                         "Agent ${account} provide more funds (${provided}) than has (${funds})",
                         ("account", agent.account)("provided", agent.provided)("funds", agent.get_own_funds()));
+                _exp_info.account_infos[acc] = _exp_info.account_infos[acc]
+                    ("staked_balance", asset(x.balance, sys_sym))
+                    ("staked_proxied", asset(x.proxied, sys_sym));
             }
         }
         for (const auto& acc: _info.accounts) {
@@ -1270,36 +1259,82 @@ struct genesis_create::genesis_create_impl final {
         ilog("Done.");
     }
 
-    void schedule_start() {
-        ilog("Scheduling Golos start...");
+    void schedule_emit() {
+        ilog("Scheduling emit...");
         db.start_section(config::system_account_name, N(gtransaction), "generated_transaction_object", 1);
-        auto store_tx = [&](name code, name act_name, uint64_t sender_id_low, const bytes& data = {}) {
+        auto store_tx = [&](name code, name act_name, uint128_t sender_id, const bytes& data, const std::vector<std::pair<name,name>> &bwproviders = {}) {
             auto providebw = cyberway::chain::providebw(_info.golos.names.issuer, code);
             transaction tx{};
             tx.actions.emplace_back(action{{{code, config::active_name}}, code, act_name, data});
-            tx.actions.emplace_back(action{{{providebw.provider, N(providebw)}},
-                providebw.get_account(), providebw.get_name(),
-                fc::raw::pack(providebw)});
-            auto actor = code;
-            db.emplace<generated_transaction_object>(actor, [&](auto& t){
+            for (const auto bwprovider: bwproviders) {
+                auto providebw = cyberway::chain::providebw(bwprovider.first, bwprovider.second);
+                tx.actions.emplace_back(action{{{providebw.provider, N(providebw)}},
+                    providebw.get_account(), providebw.get_name(), fc::raw::pack(providebw)});
+            }
+            db.emplace<generated_transaction_object>(code, [&](auto& t){
                 t.set(tx);
                 t.trx_id = tx.id();
-                t.sender = actor;
-                t.sender_id = (uint128_t(actor.value) << 64) | sender_id_low;
+                t.sender = code;
+                t.sender_id = sender_id;
                 t.delay_until = _conf.initial_timestamp + fc::minutes(_info.golos.start_trx.delay_minutes);
                 t.expiration = t.delay_until + fc::hours(_info.golos.start_trx.expiration_hours);
                 t.published = _conf.initial_timestamp;
             });
         };
-        store_tx(_info.golos.names.emission, N(start), 1);
+        store_tx(_info.golos.names.emission, N(emit), symbol(GLS).value(), {},
+            {{_info.golos.names.issuer, _info.golos.names.emission},
+             {_info.golos.names.issuer, _info.golos.names.control},
+             {_info.golos.names.issuer, _info.golos.names.posting},
+             {_info.golos.names.issuer, _info.golos.names.vesting}});
+
+        db.start_section(_info.golos.names.emission, N(state), "state", 1);
+        auto pk = N(state);
+        auto start_time = (uint64_t)_visitor.gpo.time.sec_since_epoch() * 1000000;
+        db.insert(pk, _info.golos.names.emission, mvo()
+            ("id", pk)
+            ("prev_emit", start_time)
+            ("start_time", start_time)
+            ("active", true));
         ilog("Done.");
     }
 
-    void prepare_writer(const bfs::path& out_file) {
+    void prepare_writer(const bfs::path& out_file, const genesis_ext_header &ext_hdr) {
         const int n_sections = static_cast<int>(stored_contract_tables::_max) + _info.tables.size();
-        db.start(out_file, n_sections);
+        db.start(out_file, n_sections, ext_hdr);
         db.prepare_serializers(_contracts);
     };
+
+    std::vector<producer_key> get_producers() {
+        if (_info.params.initial_prod_count == 0) {
+            return {};
+        }
+
+        EOS_ASSERT(_info.params.initial_prod_count <= _visitor.witnesses.size(),
+                genesis_exception, "initial_prod_count (${count}) too large. State has only ${witnesses} witnesses", 
+                ("count", _info.params.initial_prod_count)("witnesses", _visitor.witnesses.size()));
+
+        vector<const golos::witness_object*> witnesses;
+        witnesses.reserve(_visitor.witnesses.size());
+        for (const auto &witness: _visitor.witnesses) {
+            witnesses.push_back(&witness);
+        }
+
+        std::sort(witnesses.begin(), witnesses.end(), [](const auto &lhs, const auto &rhs) {
+            return (lhs->hardfork_time_vote < rhs->hardfork_time_vote) ||
+                   (lhs->hardfork_time_vote == rhs->hardfork_time_vote && lhs->votes > rhs->votes);
+        });
+
+        std::vector<producer_key> producers;
+        producers.reserve(_info.params.initial_prod_count);
+        for (int i = 0; i < _info.params.initial_prod_count; i++) {
+            const auto &witness = *witnesses[i];
+            account_name account = name_by_acc(witness.owner);
+            public_key_type pubkey = pubkey_from_golos(witness.signing_key);
+            EOS_ASSERT(pubkey != public_key_type(), genesis_exception, "Witness ${account} has empty signing key", ("account", account));
+            producers.push_back(producer_key{account, pubkey});
+        }
+        return producers;
+    }
 };
 
 genesis_create::genesis_create(): _impl(new genesis_create_impl()) {
@@ -1319,7 +1354,15 @@ void genesis_create::write_genesis(
     _impl->_conf = conf;
     _impl->_contracts = accs;
 
-    _impl->prepare_writer(out_file);
+    if (_impl->_conf.initial_timestamp == time_point()) {
+        _impl->_conf.initial_timestamp = _impl->_visitor.gpo.time + hours(1);
+        ilog("Set initial_timestamp to ${initial_timestamp}", ("initial_timestamp", _impl->_conf.initial_timestamp));
+    }
+
+    genesis_ext_header ext_hdr;
+    ext_hdr.producers = _impl->get_producers();
+
+    _impl->prepare_writer(out_file, ext_hdr);
     _impl->store_contracts();
     _impl->store_auth_links();
     _impl->store_custom_tables();
@@ -1333,7 +1376,7 @@ void genesis_create::write_genesis(
     _impl->store_withdrawals();
     _impl->store_witnesses();
     _impl->store_memo_keys();
-    _impl->schedule_start();
+    _impl->schedule_emit();
 
     _impl->db.finalize();
 

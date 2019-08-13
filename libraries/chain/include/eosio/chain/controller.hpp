@@ -221,7 +221,8 @@ namespace eosio { namespace chain {
 
          boost::asio::thread_pool& get_thread_pool();
 
-         const fork_database& fork_db()const;
+         fork_database& fork_db() const;
+
 
          chaindb_controller& chaindb() const;
 

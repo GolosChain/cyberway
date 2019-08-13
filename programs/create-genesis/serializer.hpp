@@ -39,7 +39,7 @@ enum class stored_contract_tables: int {
     stake_agents,   stake_cands,
     stake_grants,   stake_provisions,
     stake_stats,    stake_params,
-    memo_key,       start_transaction,
+    memo_key,       emit_transaction, emit_state,
 
     _max                // to simplify setting tables_count of genesis container
 };
@@ -57,12 +57,14 @@ private:
     bytes _buffer;
 
 public:
-    void start(const bfs::path& out_file, int n_sections) {
+    void start(const bfs::path& out_file, int n_sections, const genesis_ext_header &ext_hdr) {
         out.exceptions(std::ofstream::failbit | std::ofstream::badbit);
         out.open(out_file, std::ios_base::binary);
         genesis_header hdr;
         hdr.tables_count = n_sections;
         out.write((char*)(&hdr), sizeof(hdr));
+        fc::raw::pack(out, ext_hdr);
+
         _section_count = n_sections;
         _buffer.resize(1024*1024);
     }

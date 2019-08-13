@@ -4,19 +4,30 @@
 # Preconditions:
 # - nodeos run with enabled event_engine_plugin
 # - event_engine_plugin write events in `events.dump` which located (or symlinked) in current directory
-# - `test` account created and contains `ee.test` contract
-# - wallet unlocked (with keys for `test` account)
+# - `tech.test` account created and contains `ee.test` contract
+# - `tech.test@active` should contain `test@cyber.code` authority
+# - wallet unlocked (with keys for `tech.test` account)
 
 import subprocess
 import unittest
 import time
 import json
 
+testAccount = 'tech.test'
+
 def jsonArg(a):
     return " '" + json.dumps(a) + "' "
 
 def cleos(arguments):
-    return subprocess.check_output("programs/cleos/cleos " + arguments, shell=True, universal_newlines=True)
+    (exception, traceback) = (None, None)
+    try:
+        return subprocess.check_output("programs/cleos/cleos " + arguments, stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
+    except subprocess.CalledProcessError as e:
+        import sys
+        (exception, traceback) = (e, sys.exc_info()[2])
+    
+    msg = str(exception) + ' with output:\n' + exception.output
+    raise Exception(msg).with_traceback(traceback)
 
 def pushAction(code, action, actor, args, *, delay=None, expiration=None):
     additional = ''
@@ -36,6 +47,14 @@ class Save:
 
     def __repr__(self):
         return 'Save "%s"' % self.name
+
+class Load:
+    def __init__(self, params, name):
+        self.params = params
+        self.name = name
+
+    def __repr__(self):
+        return 'Load "%s" (%s)' % (self.name, self.params.get(self.name))
 
 # Compare array with set of args (without order)
 class Unorder:
@@ -61,22 +80,40 @@ class Exactly:
     def __repr__(self):
         return str(self.value)
 
+class Missing:
+    def __init__(self, *args):
+        self.values = args
+
+    def __repr__(self):
+        return 'Missing'+str(self.values)
 
 
-def sendDeferredTrace(action, arg, sender_id, delay, replace, params):
+
+def AssertException(data={}):
+    return {'code':3050003, 'name': 'eosio_assert_message_exception', 
+            'stack':[{'format':'assertion failure with message: ${s}', 'data': data}]
+           }
+def DeadlineException():
+    return {'code':3080004, 'name':'deadline_exception', 'message': 'Transaction took too long'}
+
+def UsageExceededException():
+    return {'code':3080003, 'name':'tx_subjective_usage_exceeded', 
+            'message':'Transaction subjectively exceeded the current usage limit imposed on the transaction'}
+
+def SendDeferredTrace(action, arg, sender_id, delay, replace, params):
     def_action_in_event = {
-        'account':'test', 'name':action, 
-        'authorization':AllItems({'actor':'test', 'permission':'active'}), 
+        'account':testAccount, 'name':action, 
+        'authorization':AllItems({'actor':testAccount, 'permission':'active'}), 
         'data':{'arg':arg}
     }
     return {
-        "receiver":"test", "code":"test", "action":"senddeferred",
-        "auth":[{"actor":"test","permission":"active"}],
+        "receiver":testAccount, "code":testAccount, "action":"senddeferred",
+        "auth":[{"actor":testAccount,"permission":"active"}],
         "args":{"action":action, "arg":arg, "senderid":sender_id, "delay":delay, "replace":replace},
         "events":AllItems(
             {   'code':'', 'event':'senddeferred',
                 'args':{
-                    "sender":"test", 'sender_id':sender_id,
+                    "sender":testAccount, 'sender_id':sender_id,
                     'trx':{'delay_sec':delay, 'context_free_actions':Exactly([]), 'actions':AllItems(def_action_in_event)},
                     "trx_id":Save(params, 'def_trx_id'),
                     'packed_trx':Save(params, 'def_packed_trx')
@@ -84,20 +121,27 @@ def sendDeferredTrace(action, arg, sender_id, delay, replace, params):
             }
         )
     }
-def cancelDeferTrace(sender_id):
+def CancelDeferTrace(sender_id):
     return {
-        "receiver":"test", "code":"test", "action":"canceldefer",
-        "auth":[{"actor":"test","permission":"active"}],
+        "receiver":testAccount, "code":testAccount, "action":"canceldefer",
+        "auth":[{"actor":testAccount,"permission":"active"}],
         "args":{"senderid":sender_id},
         "events":AllItems(
-            {"code":"", "event":"canceldefer", "args":{"sender":"test", 'sender_id':sender_id}}
+            {"code":"", "event":"canceldefer", "args":{"sender":testAccount, 'sender_id':sender_id}}
         )
     }
-def actionTrace(action, arg):
+def ActionTrace(action, arg):
     return {
-        'receiver':'test', 'code':'test', 'action':action, 
-        'auth':[{'actor':'test', 'permission':'active'}], 
+        'receiver':testAccount, 'code':testAccount, 'action':action, 
+        'auth':[{'actor':testAccount, 'permission':'active'}], 
         'args':{'arg':arg}, 'events':[]
+    }
+
+def ActionData(action, args):
+    return {
+        'account':testAccount, 'name':action, 
+        'authorization':[{'actor':testAccount, 'permission':'active'}], 
+        'data':args
     }
 
 class EventEngineTester(unittest.TestCase):
@@ -126,15 +170,15 @@ class EventEngineTester(unittest.TestCase):
             for line in self.eventsFd:
                 lines.append(line)
                 msg = json.loads(line)
+                if msg['msg_type'] == 'AcceptBlock' and msg['block_num'] > maxBlockNum:
+                    self.fail('Missed events at block %d: %s\n\nReaden lines:\n%s' % (maxBlockNum, events[i:], ''.join(lines)))
                 if self.checkContains(selector, msg):
                     self._assertContains('events[%d]'%i, predicat, msg)
                     print('Found message for %d event: %s' % (i, selector))
                     i += 1
                     lines = []
                     break
-                if msg['msg_type'] == 'AcceptBlock' and msg['block_num'] >= maxBlockNum:
-                    self.fail('Missed events at block %d: %s\n\nReaden lines:\n%s' % (maxBlockNum, events[i:], ''.join(lines)))
-                time.sleep(1)
+            time.sleep(1)
 
     def _assertContains(self, path, templ, value, msg=None):
         if templ is None:
@@ -143,12 +187,18 @@ class EventEngineTester(unittest.TestCase):
             self.assertEqual(value, templ.value, '%s' % path)
         elif type(templ) is Save:
             templ.params[templ.name] = value
+        elif type(templ) is Load:
+            self._assertContains(path, templ.params[templ.name], value, msg=msg)
         elif type(templ) is type({}):
             self.assertEqual(type(value), type({}), path)
             for key,val in templ.items():
                 npath='%s["%s"]'%(path,key)
-                self.assertIn(key, value, npath)
-                self._assertContains(npath, val, value[key])
+                if type(val) is Missing:
+                    if key in value:
+                        self.fail("Key '%s' should be missing in %s' : %s" % (key, value, msg))
+                else:
+                    self.assertIn(key, value, npath)
+                    self._assertContains(npath, val, value[key])
         elif type(templ) is type([]):
             self.assertEqual(type(value), type([]), path)
             i = 0
@@ -156,7 +206,13 @@ class EventEngineTester(unittest.TestCase):
             while i < len(templ):
                 npath='%s[%d]' % (path, i)
                 errors = []
-                while j < len(value):
+                if type(templ[i]) is Missing:
+                  for itm in templ[i].values:
+                    for val in value:
+                      if self.checkContains(itm, val):
+                        self.fail("Item %s should missing in %s : %s" % (itm, value, path))
+                else:
+                  while j < len(value):
                     try:
                         self._assertContains(npath, templ[i], value[j])
                         break
@@ -164,7 +220,7 @@ class EventEngineTester(unittest.TestCase):
                         errors.append(str(err))
                         pass
                     j += 1
-                if j == len(value):
+                  if j == len(value):
                     self.fail("%s doesn't contains %s : %s\nChecked items:\n%s" % (value, templ[i], path, '\n'.join(errors)))
                 i += 1
         elif type(templ) is Unorder or type(templ) is AllItems:
@@ -177,7 +233,13 @@ class EventEngineTester(unittest.TestCase):
                 npath='%s[%d]' % (path, i)
                 j = 0
                 errors = []
-                while j < len(value):
+                if type(t) is Missing:
+                  for itm in t.values:
+                    for val in value:
+                      if self.checkContains(itm, val):
+                        self.fail("Item %s should missing in %s : %s" % (itm, value, path))
+                else:
+                  while j < len(value):
                     if j not in was:
                         try:
                             self._assertContains(npath, t, value[j])
@@ -231,6 +293,16 @@ class EventEngineTester(unittest.TestCase):
         self.assertContainsSuccess({"array":Unorder(4,2)}, obj)
         self.assertContainsFail({"array":Unorder(2,4,5)}, obj)
         self.assertContainsFail({"array":Unorder(2,2)}, obj)
+        self.assertContainsSuccess({"array":[Missing(5)]}, obj)
+        self.assertContainsFail({"array":[Missing(5,4)]}, obj)
+        self.assertContainsSuccess({"a":[Missing({"f":5})]}, {"a":[None, 10, "Self", {"f":4}]})
+        self.assertContainsFail({"a":[Missing({"f":5})]}, {"a":[None, 10, "Self", {"f":4}, {"f":5}]})
+        self.assertContainsSuccess({"array":Unorder(Missing(5))}, obj)
+        self.assertContainsFail({"array":Unorder(Missing(5,4))}, obj)
+        self.assertContainsSuccess({"a":Unorder(Missing({"f":5}))}, {"a":[None, 10, "Self", {"f":4}]})
+        self.assertContainsFail({"a":Unorder(Missing({"f":5}))}, {"a":[None, 10, "Self", {"f":4}, {"f":5}]})
+        self.assertContainsSuccess({'a':Missing()}, {'b':1234})
+        self.assertContainsFail({'a':Missing()}, {'a':134})
 
 
         self.assertContainsSuccess(
@@ -239,8 +311,8 @@ class EventEngineTester(unittest.TestCase):
 
         params = {}
         self.assertContainsSuccess(
-            {'id': Save(params, "onerror_trx_id"), 'msg_type': 'ApplyTrx', 'actions': [{'args': {'sent_trx': '8c7e195d09036077a32400000000050001000000000090b1ca000000000088544301000000000090b1ca00000000a8ed323208000000000000000000', 'sender_id': 12340}, 'data': '', 'receiver': 'test', 'events': [], 'code': 'cyber', 'auth': [{'actor': 'test', 'permission': 'active'}], 'action': 'onerror'}]},
-            {'id': 'c31ef3cb7bd820bc8bc90f21eb5ef01af08763839f982048e3452ce5be8e61ba', 'block_time': '2019-07-01T03:31:30.000', 'msg_type': 'ApplyTrx', 'actions': [{'args': {'sent_trx': '8c7e195d09036077a32400000000050001000000000090b1ca000000000088544301000000000090b1ca00000000a8ed323208000000000000000000', 'sender_id': 12340}, 'data': '', 'receiver': 'test', 'events': [], 'code': 'cyber', 'auth': [{'actor': 'test', 'permission': 'active'}], 'action': 'onerror'}], 'block_num': 780})
+            {'id': Save(params, "onerror_trx_id"), 'msg_type': 'ApplyTrx', 'actions': [{'args': {'sent_trx': '8c7e195d09036077a32400000000050001000000000090b1ca000000000088544301000000000090b1ca00000000a8ed323208000000000000000000', 'sender_id': 12340}, 'data': '', 'receiver': testAccount, 'events': [], 'code': 'cyber', 'auth': [{'actor': testAccount, 'permission': 'active'}], 'action': 'onerror'}]},
+            {'id': 'c31ef3cb7bd820bc8bc90f21eb5ef01af08763839f982048e3452ce5be8e61ba', 'block_time': '2019-07-01T03:31:30.000', 'msg_type': 'ApplyTrx', 'actions': [{'args': {'sent_trx': '8c7e195d09036077a32400000000050001000000000090b1ca000000000088544301000000000090b1ca00000000a8ed323208000000000000000000', 'sender_id': 12340}, 'data': '', 'receiver': testAccount, 'events': [], 'code': 'cyber', 'auth': [{'actor': testAccount, 'permission': 'active'}], 'action': 'onerror'}], 'block_num': 780})
 
         
 
@@ -270,62 +342,130 @@ class EventEngineTester(unittest.TestCase):
 
     def test_userSendTransaction(self):
         (action, arg) = ('check', 10)
-        result = pushAction('test', action, 'test', [arg])
+        result = pushAction(testAccount, action, testAccount, [arg])
         print("Pushed transaction with %s" % result['transaction_id'])
         self.assertEqual(result['processed']['receipt']['status'], 'executed')
 
         trx_id = result['transaction_id']
         block_num = result['processed']['block_num']
+
+        actionTrx = {'actions':AllItems(ActionData(action,{'arg':arg}))}
+        actionTrace = ActionTrace(action,arg)
         self.waitEvents(
-            [ ({'msg_type':'AcceptTrx', 'id':trx_id},                          {'accepted':True, 'implicit':False, 'scheduled':False}),
-              ({'msg_type':'ApplyTrx', 'id':trx_id},                           {'block_num':block_num, 'actions':AllItems(actionTrace(action,arg))}),
+            [ ({'msg_type':'AcceptTrx', 'id':trx_id},                          {'accepted':True, 'implicit':False, 'scheduled':False, 'trx':actionTrx}),
+              ({'msg_type':'ApplyTrx', 'id':trx_id},                           {'block_num':block_num, 'actions':AllItems(actionTrace), 'except':Missing()}),
               ({'msg_type':'AcceptBlock', 'block_num':block_num},              {'trxs':Unorder({'id':trx_id, 'status':'executed'})})
             ], block_num)
 
-#    def test_userSendDummyTransaction(self):
-#        result = pushAction('test', 'dummy', 'test', [5])
-#        print("Pushed transaction with %s" % result['transaction_id'])
-#        self.assertEqual(result['processed']['receipt']['status'], 'executed')
-#
-#        trx_id = result['transaction_id']
-#        block_num = result['processed']['block_num']
-#        self.waitEvents(
-#            [ ({'msg_type':'AcceptTrx', 'id':trx_id},                          {'accepted':True, 'implicit':False, 'scheduled':False}),
-#              ({'msg_type':'ApplyTrx', 'id':trx_id},                           {'block_num':block_num, 'actions':AllItems(checkTrace(arg))}),
-#              ({'msg_type':'AcceptBlock', 'block_num':block_num},              {'trxs':Unorder({'id':trx_id, 'status':'executed'})})
-#            ], block_num)
+    def test_userSendFailTransaction(self):
+        cases = (('Failure executed', 'check', 0, AssertException(), 'eosio_assert_message assertion failure'),
+                 ('Long executed', 'dummy', 5, UsageExceededException(), 'Transaction subjectively exceeded the current usage limit imposed on the transaction'),
+                )
+        for (name, action, arg, exc, regex) in cases:
+          with self.subTest(name = name):
+            info = json.loads(cleos('get info'))
+            with self.assertRaisesRegex(Exception, regex):
+               result = pushAction(testAccount, action, testAccount, [arg])
+    
+            # It's need to add check that:
+            #    a) events contains AcceptTrx/ApplyTrx about our transaction
+            #    b) block doesn't contains trx
+            params = {}
+            actionTrx = {'actions':AllItems(ActionData(action,{'arg':arg}))}
+            actionTrace = ActionTrace(action,arg)
+            self.waitEvents(
+                [ ({'msg_type':'AcceptTrx', 'accepted':False},                 {'id':Save(params,'trx_id'), 'trx':actionTrx}),
+                  ({'msg_type':'ApplyTrx', 'id':Load(params,'trx_id')},        {'block_num':Save(params,'block_num'), 'actions':AllItems(actionTrace), 'except':exc}),
+                  ({'msg_type':'AcceptBlock', 'block_num':Load(params,'block_num')}, {'trxs':[Missing({'id':Load(params,'trx_id')})]}),
+                ], info['head_block_num'] + 5)
+            self.assertLess(params['block_num'], info['head_block_num']+5)
 
     def test_userScheduleTransaction(self):
-        cases = (('Failure execucted', 'check', 0, 'hard_fail'),
-                 ('Success executed',  'check', 1, 'executed'),
-                 #('Expired',           'dummy', 1, 'expired'),
+        gproperty = json.loads(cleos('get table "" "" gproperty'))['rows'][0]
+        def_trx_expiration = gproperty['configuration']['deferred_trx_expiration_window']
+        self.assertLessEqual(def_trx_expiration, 300, 'Too much deferred transaction expiration window')
+
+        cases = (('Failure execucted', 'check', 0, 3, 'hard_fail', AssertException({'s':'Argument must be positive'})),
+                 ('Success executed',  'check', 1, 3, 'executed', Missing()),
+                 ('Expired',           'dummy', 1, 3, 'expired', DeadlineException()),
                 )
-        for (name, action, arg, status) in cases:
+        for (name, action, arg, delay, status, exc) in cases:
           with self.subTest(name=name):
-            result = pushAction('test', action, 'test', [arg], delay=10)
+            result = pushAction(testAccount, action, testAccount, [arg], delay=delay)
             print("Pushed transaction with id %s" % result['transaction_id'])
             self.assertEqual(result['processed']['receipt']['status'], 'delayed')
     
             trx_id = result['transaction_id']
             block_num = result['processed']['block_num']
-            exec_block_num = block_num + (10+2)//3
-            self.waitEvents(
-                [ ({'msg_type':'AcceptTrx', 'id':trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':False}),
-                  ({'msg_type':'ApplyTrx', 'id':trx_id},                       {'block_num':block_num, 'actions':Exactly([])}),
-                  ({'msg_type':'AcceptBlock', 'block_num':block_num},          {'trxs':Unorder({'id':trx_id, 'status':'delayed'})}),
-                  ({'msg_type':'AcceptTrx', 'id':trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':True}),
-                  ({'msg_type':'ApplyTrx', 'id':trx_id},                       {'block_num':exec_block_num, 'actions':[actionTrace(action, arg)]}),
-                  ({'msg_type':'AcceptBlock', 'trxs':[{'id':trx_id}]},         {'trxs':Unorder({'id':trx_id, 'status':status})}),
-                ], exec_block_num + 600//3+1)
+            exec_block_num = block_num + (delay+2)//3
+            exp_block_num = exec_block_num + def_trx_expiration//3 + 15
+            print("Wait for %d" % exp_block_num)
 
+            actionTrx = {'actions':AllItems(ActionData(action,{'arg':arg}))}
+            actionTrace = ActionTrace(action, arg)
+            actionExcept = exc
+
+            if status == 'executed' or status == 'hard_fail':
+                self.waitEvents(
+                    [ ({'msg_type':'AcceptTrx', 'id':trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':False, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':trx_id},                   {'block_num':block_num, 'actions':Exactly([]), 'except':Missing()}),
+                      ({'msg_type':'AcceptBlock', 'block_num':block_num},      {'trxs':Unorder({'id':trx_id, 'status':'delayed'})}),
+
+                      ({'msg_type':'AcceptTrx', 'id':trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':trx_id},                   {'block_num':exec_block_num, 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'AcceptBlock', 'trxs':[{'id':trx_id}]},     {'trxs':Unorder({'id':trx_id, 'status':status})}),
+                    ], exp_block_num)
+
+            elif status == 'expired':
+                params = {}
+                self.waitEvents(
+                    [ ({'msg_type':'AcceptTrx', 'id':trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':False, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':trx_id},                   {'block_num':block_num, 'actions':Exactly([]), 'except':Missing()}),
+
+                      ({'msg_type':'AcceptTrx', 'id':trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':trx_id},                   {'block_num':Save(params,'try1'), 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'AcceptBlock', 'block_num':Load(params,'try1')}, {'trxs':[Missing({'id':trx_id})]}),
+
+                      ({'msg_type':'AcceptTrx', 'id':trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':trx_id},                   {'block_num':Save(params,'try2'), 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'AcceptBlock', 'block_num':Load(params,'try2')}, {'trxs':[Missing({'id':trx_id})]}),
+
+                      ({'msg_type':'AcceptTrx', 'id':trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':trx_id},                   {'block_num':Save(params,'try3'), 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'AcceptBlock', 'block_num':Load(params,'try3')}, {'trxs':[Missing({'id':trx_id})]}),
+
+                      ({'msg_type':'AcceptTrx', 'id':trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':trx_id},                   {'block_num':Save(params,'try4'), 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'AcceptBlock', 'block_num':Load(params,'try4')}, {'trxs':[Missing({'id':trx_id})]}),
+
+                      ({'msg_type':'AcceptTrx', 'id':trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':trx_id},                   {'block_num':Save(params,'trx_block_num'), 'actions':Exactly([]), 'except':Missing()}),
+                      ({'msg_type':'AcceptBlock', 'block_num':Load(params,'trx_block_num')}, {'trxs':Unorder({'id':trx_id, 'status': 'expired'})}),
+                    ], exp_block_num)
+            else:
+                self.fail('Unexpected status %s' % status)
+
+    # There are several cases when different transactions fails:
+    # - transaction takes too long (transaction placed in blacklist in current node and try reexec 4 times)
+    # - transaction failed due not enough staked token (transaction placed in blacklist, reexec 4 times, doesn't check))
+    # - transaction failed due assert (transaction placed in blacklist, no reexec)
+    # - transaction takes too long time at the end of block (transaction rescheduled at next block, doesn't check)
     def test_contractScheduleTransaction(self):
-        cases = (('Failure execucted', 'check', 0, 5, 60, 12340, 'soft_fail'),
-                 ('Success executed',  'check', 1, 5, 60, 12341, 'executed'))
+        info = json.loads(cleos('get info'))
+        gproperty = json.loads(cleos('get table "" "" gproperty'))['rows'][0]
+        def_trx_expiration = gproperty['configuration']['deferred_trx_expiration_window']
+        self.assertLessEqual(def_trx_expiration, 300, 'Too much deferred transaction expiration window')
+
+        cases = (('Executed with assert',      'check', 0, 5, 60, 0, 'soft_fail'),
+                 ('Success executed',          'check', 1, 5, 60, 1, 'executed'),
+                 ('Transaction took too long', 'dummy', 1, 5, 60, 2, 'expired'),
+                )
         for (name, action, arg, delay, expiration, sender_id, status) in cases:
           with self.subTest(name=name):
-            result = pushAction('test', 'senddeferred', 'test', [action, arg, sender_id, delay, False, expiration])
+            sender_id += info['head_block_num']
+            result = pushAction(testAccount, 'senddeferred', testAccount, [action, arg, sender_id, delay, False, expiration])
             print("Pushed transaction with %s" % result['transaction_id'])
-            print(json.dumps(result, indent=4))
+            #print(json.dumps(result, indent=4))
             self.assertEqual(result['processed']['receipt']['status'], 'executed')
     
             trx_id = result['transaction_id']
@@ -333,72 +473,110 @@ class EventEngineTester(unittest.TestCase):
             exec_block_num = block_num + (delay+2)//3
     
             params = {}
+            scheduleTrx = {'actions':AllItems(ActionData('senddeferred',{'action':action,'arg':arg,'senderid':sender_id,'delay':delay,'replace':False,'expiration':expiration}))}
+            scheduleTrace = SendDeferredTrace(action, arg, sender_id, delay, False, params)
+
             self.waitEvents(
-                [ ({'msg_type':'AcceptTrx', 'id':trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':False}),
-                  ({'msg_type':'ApplyTrx', 'id':trx_id},                       {'block_num':block_num, 'actions':AllItems(sendDeferredTrace(action, arg, sender_id, delay, False, params))}),
+                [ ({'msg_type':'AcceptTrx', 'id':trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':False, 'trx':scheduleTrx}),
+                  ({'msg_type':'ApplyTrx', 'id':trx_id},                       {'block_num':block_num, 'actions':AllItems(scheduleTrace), 'except':Missing()}),
                   ({'msg_type':'AcceptBlock', 'block_num':block_num},          {'trxs':Unorder({'id':trx_id, 'status':'executed'})})
                 ], block_num)
     
             def_trx_id = params['def_trx_id']
             def_packed_trx = params['def_packed_trx']
+            print("Deferred transaction with %s" % def_trx_id)
+
+            actionTrx = {'actions':AllItems(ActionData(action,{'arg':arg}))}
+            actionTrace = ActionTrace(action, arg)
     
             if status == 'executed':
                 self.waitEvents(
-                    [ ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True}),
-                      ({'msg_type':'ApplyTrx', 'id':def_trx_id},               {'block_num':exec_block_num, 'actions':AllItems(actionTrace(action, arg))}),
+                    [ ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':def_trx_id},               {'block_num':exec_block_num, 'actions':AllItems(actionTrace), 'except':Missing()}),
                       ({'msg_type':'AcceptBlock', 'block_num':exec_block_num}, {'trxs':Unorder({'id':def_trx_id, 'status':status})})
                     ], exec_block_num)
+
             elif status == 'soft_fail':
-                onerror_id = {'receiver':'test', 'code':'cyber', 'action':'onerror', 'args':{'sender_id':sender_id}}
+                actionExcept = AssertException({'s':'Argument must be positive'})
+                onerror_id = {'receiver':testAccount, 'code':'cyber', 'action':'onerror', 'args':{'sender_id':sender_id}}
                 onerror_action = {
-                    'receiver':'test', 'code':'cyber', 'action':'onerror', 
-                    'auth':AllItems({'actor':'test', 'permission':'active'}), 
+                    'receiver':testAccount, 'code':'cyber', 'action':'onerror', 
+                    'auth':AllItems({'actor':testAccount, 'permission':'active'}), 
                     'args':{'sender_id':sender_id, 'sent_trx':def_packed_trx}, 
                     'events':Exactly([])}
                 self.waitEvents(
-                    [ ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True}),
+                    [ ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':def_trx_id},               {'block_num':exec_block_num, 'actions':AllItems(actionTrace), 'except':actionExcept}),
                       ({'msg_type':'ApplyTrx', 'actions':[onerror_id]},        {'id':Save(params,'onerror_trx_id'), 'actions':AllItems(onerror_action)}),
                       ({'msg_type':'AcceptBlock', 'block_num':exec_block_num}, {'trxs':Unorder({'id':def_trx_id, 'status':status})})
                     ], exec_block_num)
 
+            elif status == 'expired':
+                actionExcept = DeadlineException()
+                exp_block_num = block_num + (delay + def_trx_expiration + 2)//3
+                self.waitEvents(
+                    [ ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':def_trx_id},               {'block_num':Save(params,'try1'), 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':def_trx_id},               {'block_num':Save(params,'try2'), 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':def_trx_id},               {'block_num':Save(params,'try3'), 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':def_trx_id},               {'block_num':Save(params,'try4'), 'actions':AllItems(actionTrace), 'except':actionExcept}),
+        
+                      ({'msg_type':'AcceptTrx', 'id':def_trx_id},              {'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':def_trx_id},               {'block_num':Save(params,'trx_block_num'), 'actions':Exactly([]), 'except':Missing()}),
+                      ({'msg_type':'AcceptBlock', 'trxs':Unorder({'id':def_trx_id, 'status': 'expired'})}, {'block_num':Save(params,'exp_block_num')}),
+                    ], exp_block_num + 15)
+                self.assertEqual(params['trx_block_num'], params['exp_block_num'])
+                self.assertGreater(params['exp_block_num'], exp_block_num)
+            else:
+                self.fail('Unexpected status %s' % status)
+
     def test_contractCancelTransaction(self):
         (action, arg, delay, sender_id, expiration) = ('check', 10, 20, 123411, 60)
-        result = pushAction('test', 'senddeferred', 'test', [action, arg, sender_id, delay, False, expiration])
-        print(json.dumps(result, indent=4))
+        result = pushAction(testAccount, 'senddeferred', testAccount, [action, arg, sender_id, delay, False, expiration])
+        #print(json.dumps(result, indent=4))
         self.assertEqual(result['processed']['receipt']['status'], 'executed')
         trx_id = result['transaction_id']
         block_num = result['processed']['block_num']
         print("Pushed transaction with %s in block %d" % (trx_id, block_num))
 
         params = {}
+        scheduleTrx = {'actions':AllItems(ActionData('senddeferred',{'action':action,'arg':arg,'senderid':sender_id,'delay':delay,'replace':False,'expiration':expiration}))}
+        scheduleTrace = SendDeferredTrace(action, arg, sender_id, delay, False, params)
         self.waitEvents(
-            [ ({'msg_type':'AcceptTrx', 'id':trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':False}),
-              ({'msg_type':'ApplyTrx', 'id':trx_id},                       {'block_num':block_num, 'actions':AllItems(sendDeferredTrace(action, arg, sender_id, delay, False, params))}),
+            [ ({'msg_type':'AcceptTrx', 'id':trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':False, 'trx':scheduleTrx}),
+              ({'msg_type':'ApplyTrx', 'id':trx_id},                       {'block_num':block_num, 'actions':AllItems(scheduleTrace), 'except':Missing()}),
               ({'msg_type':'AcceptBlock', 'block_num':block_num},          {'trxs':Unorder({'id':trx_id, 'status':'executed'})})
             ], block_num)
 
-        result = pushAction('test', 'canceldefer', 'test', [sender_id])
+        result = pushAction(testAccount, 'canceldefer', testAccount, [sender_id])
         self.assertEqual(result['processed']['receipt']['status'], 'executed')
         cancel_trx_id = result['transaction_id']
         cancel_block_num = result['processed']['block_num']
         print("Pushed transaction with %s in block %d" % (cancel_trx_id, cancel_block_num))
 
+        cancelTrx = {'actions':AllItems(ActionData('canceldefer',{'senderid':sender_id}))}
+        cancelTrace = CancelDeferTrace(sender_id)
         self.waitEvents(
-            [ ({'msg_type':'AcceptTrx', 'id':cancel_trx_id},                   {'accepted':True, 'implicit':False, 'scheduled':False}),
-              ({'msg_type':'ApplyTrx', 'id':cancel_trx_id},                    {'block_num':cancel_block_num, 'actions':[cancelDeferTrace(sender_id)]}),
+            [ ({'msg_type':'AcceptTrx', 'id':cancel_trx_id},                   {'accepted':True, 'implicit':False, 'scheduled':False, 'trx':cancelTrx}),
+              ({'msg_type':'ApplyTrx', 'id':cancel_trx_id},                    {'block_num':cancel_block_num, 'actions':AllItems(cancelTrace), 'except':Missing()}),
               ({'msg_type':'AcceptBlock', 'block_num':cancel_block_num},       {'trxs':Unorder({'id':cancel_trx_id, 'status':'executed'})})
             ], cancel_block_num)
 
 
     def test_contractReplaceTransaction(self):
-        cases = (('Failure execucted', 10, 0, 60, 6, 60, 12340, 'soft_fail'),
-                 ('Success executed',  11, 5, 60, 6, 60, 12341, 'executed'))
+        info = json.loads(cleos('get info'))
+        cases = (('Failure execucted', 10, 0, 60, 6, 60, 0, 'soft_fail'),
+                 ('Success executed',  0, 5, 60, 6, 60, 1, 'executed'))
         for (name, arg, rep_arg, delay, rep_delay, expiration, sender_id, status) in cases:
           with self.subTest(name=name):
             action = 'check'
+            sender_id += info['head_block_num']
             print("Send original scheduled transaction")
-            result = pushAction('test', 'senddeferred', 'test', [action, arg, sender_id, delay, False, expiration])
-            print(json.dumps(result, indent=4))
+            result = pushAction(testAccount, 'senddeferred', testAccount, [action, arg, sender_id, delay, False, expiration])
+            #print(json.dumps(result, indent=4))
             self.assertEqual(result['processed']['receipt']['status'], 'executed')
             trx_id = result['transaction_id']
             block_num = result['processed']['block_num']
@@ -406,46 +584,60 @@ class EventEngineTester(unittest.TestCase):
     
             params = {}
             rep_params = {}
+            scheduleTrx = {'actions':AllItems(ActionData('senddeferred',{'action':action,'arg':arg,'senderid':sender_id,'delay':delay,'replace':False,'expiration':expiration}))}
+            scheduleTrace = SendDeferredTrace(action, arg, sender_id, delay, False, params)
             self.waitEvents(
-                [ ({'msg_type':'AcceptTrx', 'id':trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':False}),
-                  ({'msg_type':'ApplyTrx', 'id':trx_id},                       {'block_num':block_num, 'actions':[sendDeferredTrace(action, arg, sender_id, delay, False, params)]}),
+                [ ({'msg_type':'AcceptTrx', 'id':trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':False, 'trx':scheduleTrx}),
+                  ({'msg_type':'ApplyTrx', 'id':trx_id},                       {'block_num':block_num, 'actions':[scheduleTrace]}),
                   ({'msg_type':'AcceptBlock', 'block_num':block_num},          {'trxs':Unorder({'id':trx_id, 'status':'executed'})})
                 ], block_num)
+
+            print("Deferred transaction has %s id" % params['def_trx_id'])
     
             print("Replace scheduled transaction")
-            result = pushAction('test', 'senddeferred', 'test', [action, rep_arg, sender_id, rep_delay, True, expiration])
+            result = pushAction(testAccount, 'senddeferred', testAccount, [action, rep_arg, sender_id, rep_delay, True, expiration])
             self.assertEqual(result['processed']['receipt']['status'], 'executed')
             rep_trx_id = result['transaction_id']
             rep_block_num = result['processed']['block_num']
             exec_block_num = rep_block_num + (rep_delay+2)//3
             print("Pushed transaction with %s in block %d" % (trx_id, block_num))
     
+            rescheduleTrx = {'actions':AllItems(ActionData('senddeferred',{'action':action,'arg':rep_arg,'senderid':sender_id,'delay':rep_delay,'replace':True,'expiration':expiration}))}
+            rescheduleTrace = SendDeferredTrace(action, rep_arg, sender_id, rep_delay, True, rep_params)
             self.waitEvents(
-                [ ({'msg_type':'AcceptTrx', 'id':rep_trx_id},                      {'accepted':True, 'implicit':False, 'scheduled':False}),
-                  ({'msg_type':'ApplyTrx', 'id':rep_trx_id},                       {'block_num':rep_block_num, 'actions':[sendDeferredTrace(action, rep_arg, sender_id, rep_delay, True, rep_params)]}),
-                  ({'msg_type':'AcceptBlock', 'block_num':rep_block_num},          {'trxs':Unorder({'id':rep_trx_id, 'status':'executed'})})
+                [ ({'msg_type':'AcceptTrx', 'id':rep_trx_id},                  {'accepted':True, 'implicit':False, 'scheduled':False, 'trx':rescheduleTrx}),
+                  ({'msg_type':'ApplyTrx', 'id':rep_trx_id},                   {'block_num':rep_block_num, 'actions':AllItems(rescheduleTrace)}),
+                  ({'msg_type':'AcceptBlock', 'block_num':rep_block_num},      {'trxs':Unorder({'id':rep_trx_id, 'status':'executed'})})
                 ], rep_block_num)
     
+            print("Replace deferred transaction has %s id" % rep_params['def_trx_id'])
+    
             print("Wait execution of scheduled transaction")
-            self.assertEqual(rep_params['def_trx_id'], params['def_trx_id'])
+            self.assertNotEqual(rep_params['def_trx_id'], params['def_trx_id'])
             self.assertNotEqual(rep_params['def_packed_trx'], params['def_packed_trx'])
+
+            actionTrx = {'actions':AllItems(ActionData(action,{'arg':rep_arg}))}
+            actionTrace = ActionTrace(action, rep_arg)
 
             if status == 'executed':
                 self.waitEvents(
-                    [ #({'msg_type':'AcceptTrx', 'id':rep_params['def_trx_id']},        {'accepted':True, 'implicit':False, 'scheduled':True}),
-                      ({'msg_type':'ApplyTrx', 'id':rep_params['def_trx_id']},         {'block_num':exec_block_num, 'actions':AllItems(actionTrace(action, rep_arg))}),
-                      ({'msg_type':'AcceptBlock', 'block_num':exec_block_num},         {'trxs':Unorder({'id':rep_params['def_trx_id'], 'status':'executed'})})
+                    [ ({'msg_type':'AcceptTrx', 'id':rep_params['def_trx_id']},{'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':rep_params['def_trx_id']}, {'block_num':exec_block_num, 'actions':AllItems(actionTrace), 'except':Missing()}),
+                      ({'msg_type':'AcceptBlock', 'block_num':exec_block_num}, {'trxs':Unorder({'id':rep_params['def_trx_id'], 'status':'executed'})})
                     ], exec_block_num)
+
             elif status == 'soft_fail':
-                onerror_id = {'receiver':'test', 'code':'cyber', 'action':'onerror', 'args':{'sender_id':sender_id}}
-                onerror_action = {
-                    'receiver':'test', 'code':'cyber', 'action':'onerror', 
-                    'auth':AllItems({'actor':'test', 'permission':'active'}), 
+                actionExcept = AssertException({'s':'Argument must be positive'})
+                onerror_id = {'receiver':testAccount, 'code':'cyber', 'action':'onerror', 'args':{'sender_id':sender_id}}
+                onerrorTrace = {
+                    'receiver':testAccount, 'code':'cyber', 'action':'onerror', 
+                    'auth':AllItems({'actor':testAccount, 'permission':'active'}), 
                     'args':{'sender_id':sender_id, 'sent_trx':rep_params['def_packed_trx']}, 
                     'events':Exactly([])}
                 self.waitEvents(
-                    [ #({'msg_type':'AcceptTrx', 'id':rep_params['def_trx_id']},{'accepted':True, 'implicit':False, 'scheduled':True}),
-                      ({'msg_type':'ApplyTrx', 'actions':[onerror_id]},        {'id':Save(params,'onerror_trx_id'), 'actions':AllItems(onerror_action)}),
+                    [ ({'msg_type':'AcceptTrx', 'id':rep_params['def_trx_id']},{'accepted':True, 'implicit':False, 'scheduled':True, 'trx':actionTrx}),
+                      ({'msg_type':'ApplyTrx', 'id':rep_params['def_trx_id']}, {'block_num':exec_block_num, 'actions':AllItems(actionTrace), 'except':actionExcept}),
+                      ({'msg_type':'ApplyTrx', 'actions':[onerror_id]},        {'id':Save(params,'onerror_trx_id'), 'actions':AllItems(onerrorTrace)}),
                       ({'msg_type':'AcceptBlock', 'block_num':exec_block_num}, {'trxs':Unorder({'id':rep_params['def_trx_id'], 'status':status})})
                     ], exec_block_num)
 

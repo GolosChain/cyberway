@@ -14,16 +14,6 @@ using namespace int_arithmetic;
       ratio<T> make_ratio(T n, T d) {
          return ratio<T>{n, d};
       }
-
-      template<typename T>
-      T operator* (T value, const ratio<T>& r) {
-         EOS_ASSERT(r.numerator == T(0) || std::numeric_limits<T>::max() / r.numerator >= value, rate_limiting_state_inconsistent, "Usage exceeds maximum value representable after extending for precision");
-         return (value * r.numerator) / r.denominator;
-      }
-
-
-
-
       /**
        *  This class accumulates and exponential moving average based on inputs
        *  This accumulator assumes there are no drops in input data
@@ -69,12 +59,7 @@ using namespace int_arithmetic;
                EOS_ASSERT( ordinal > last_ordinal, resource_limit_exception, "new ordinal(${n}) cannot be less than the previous ordinal(${p})",("n", ordinal)("p", last_ordinal) );
                if( (uint64_t)last_ordinal + window_size > (uint64_t)ordinal ) {
                   const auto delta = ordinal - last_ordinal; // clearly 0 < delta < window_size
-                  const auto decay = make_ratio(
-                          (uint64_t)window_size - delta,
-                          (uint64_t)window_size
-                  );
-
-                  value_ex = value_ex * decay;
+                  value_ex = safe_prop(value_ex, (uint64_t)window_size - delta, (uint64_t)window_size);
                } else {
                   value_ex = 0;
                }

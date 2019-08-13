@@ -556,10 +556,10 @@ struct controller_impl {
    }
 
 
-    void read_genesis() {
+    void read_genesis(block_state_ptr &block) {
         if (conf.read_genesis) {
             cyberway::genesis::genesis_import reader(conf.genesis_file, self);
-            reader.import();
+            reader.import(block);
         }
     }
 
@@ -568,7 +568,7 @@ struct controller_impl {
     */
    void initialize_fork_db() {
       wlog( " Initializing new blockchain with genesis state                  " );
-      chaindb.drop_db();
+      chaindb.initialize_db();
       producer_schedule_type initial_schedule{ 0, {{config::system_account_name, conf.genesis.initial_key}} };
 
       block_header_state genheader;
@@ -582,12 +582,13 @@ struct controller_impl {
 
       head = std::make_shared<block_state>( genheader );
       head->block = std::make_shared<signed_block>(genheader.header);
-      fork_db.set( head );
       set_revision(head->block_num);
 
       bool need_native_accounts = !conf.read_genesis;
       initialize_database(need_native_accounts);
-      read_genesis();
+      read_genesis( head );
+
+      fork_db.set( head );
    }
 
    void initialize_caches() {
@@ -1711,7 +1712,7 @@ void controller::startup( std::function<bool()> shutdown, const snapshot_reader_
 //   }
 }
 
-const fork_database& controller::fork_db()const { return my->fork_db; }
+fork_database& controller::fork_db() const { return my->fork_db; }
 
 chaindb_controller& controller::chaindb() const { return my->chaindb; }
 

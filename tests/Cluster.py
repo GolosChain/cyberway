@@ -38,7 +38,7 @@ class Cluster(object):
     # pylint: disable=too-many-arguments
     # walletd [True|False] Is keosd running. If not load the wallet plugin
     def __init__(self, walletd=False, localCluster=True, host="localhost", port=8888, walletHost="localhost", walletPort=9899, enableMongo=False
-                 , mongoHost="localhost", mongoPort=27017, mongoDb="EOStest", defproduceraPrvtKey=None, defproducerbPrvtKey=None, staging=False):
+                 , mongoHost="localhost", mongoPort=27017, mongoDb="EOStest", defproduceraPrvtKey=None, defproducerbPrvtKey=None, staging=False, enableProducerAPI=False):
         """Cluster container.
         walletd [True|False] Is wallet keosd running. If not load the wallet plugin
         localCluster [True|False] Is cluster local to host.
@@ -59,6 +59,7 @@ class Cluster(object):
         self.wallet=None
         self.walletd=walletd
         self.enableMongo=enableMongo
+        self.enableProducerAPI=enableProducerAPI
         self.mongoHost=mongoHost
         self.mongoPort=mongoPort
         self.mongoDb=mongoDb
@@ -159,10 +160,15 @@ class Cluster(object):
         nodeosArgs="--max-transaction-time -1 --abi-serializer-max-time-ms 990000 --p2p-max-nodes-per-host %d" % (totalNodes)
         if not self.walletd:
             nodeosArgs += " --plugin eosio::wallet_api_plugin"
+        if self.enableProducerAPI:
+            nodeosArgs += " --plugin eosio::http_plugin"
+            nodeosArgs += " --plugin eosio::producer_api_plugin"
         if self.enableMongo:
             nodeosArgs += " --plugin eosio::mongo_db_plugin --mongodb-uri %s" % self.mongoUri
             if delMongoData:
                 nodeosArgs += " --delete-all-blocks --mongodb-wipe"
+        else:
+            nodeosArgs += " --plugin eosio::history_plugin --plugin eosio::history_api_plugin --filter-on \"*\""
         if extraNodeosArgs is not None:
             assert(isinstance(extraNodeosArgs, str))
             nodeosArgs += extraNodeosArgs
@@ -676,6 +682,7 @@ class Cluster(object):
         assert(isinstance(initialBalances, dict))
         assert(isinstance(transferAmount, int))
 
+        time.sleep(3)
         for node in self.nodes:
             if node.killed:
                 continue

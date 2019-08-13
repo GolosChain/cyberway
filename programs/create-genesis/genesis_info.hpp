@@ -60,13 +60,13 @@ struct genesis_info {
             return std::make_pair(parts[0], weight);
         }
 
-        std::vector<permission_level_weight> perm_levels(account_name code) const {
+        std::vector<permission_level_weight> perm_levels(account_name code, std::function<account_name(const std::string&)> name_resolver) const {
             std::vector<permission_level_weight> r;
             for (const auto& a: accounts) {
                 std::vector<string> parts;
                 auto perm_weight = split_weight(a);
                 split(parts, perm_weight.first, boost::algorithm::is_any_of("@"));
-                auto acc = parts[0].size() == 0 ? code : account_name(parts[0]);
+                auto acc = parts[0].size() == 0 ? code : name_resolver(parts[0]);
                 auto perm = account_name(parts.size() == 1 ? "" : parts[1].c_str());
                 r.emplace_back(permission_level_weight{permission_level{acc, perm}, perm_weight.second});
             }
@@ -82,8 +82,8 @@ struct genesis_info {
             return r;
         }
 
-        authority make_authority(const public_key_type& initial_key, account_name code) const {
-            return authority(threshold ? *threshold : 1, key_weights(initial_key), perm_levels(code), wait_weights());
+        authority make_authority(const public_key_type& initial_key, account_name code, std::function<account_name(const std::string&)> name_resolver) const {
+            return authority(threshold ? *threshold : 1, key_weights(initial_key), perm_levels(code, name_resolver), wait_weights());
         }
     };
 
@@ -200,10 +200,6 @@ struct genesis_info {
         int64_t depriving_window;
         int64_t min_own_staked_for_election = 0;
     };
-    struct hardfork_info {
-        uint32_t version;       // High byte is major version, next one is hardfork version, low 16bits are revision
-        time_point_sec time;
-    };
     struct funds_share {
         account_name name;
         // value multiplied to base CYBER supply. use num/denom to avoid floating point
@@ -212,9 +208,9 @@ struct genesis_info {
     };
 
     struct parameters {
+        uint8_t initial_prod_count = 0;
         stake_params stake;
         posting_rules posting_rules;
-        fc::optional<hardfork_info> require_hardfork;
         std::vector<funds_share> funds;
     } params;
 
@@ -262,9 +258,8 @@ FC_REFLECT(cyberway::genesis::genesis_info::golos_config,
     (domain)(names)(recovery)(max_supply)(sys_max_supply)(start_trx))
 FC_REFLECT(cyberway::genesis::genesis_info::stake_params,
     (enabled)(max_proxies)(depriving_window)(min_own_staked_for_election))
-FC_REFLECT(cyberway::genesis::genesis_info::hardfork_info, (version)(time))
 FC_REFLECT(cyberway::genesis::genesis_info::funds_share, (name)(numerator)(denominator))
-FC_REFLECT(cyberway::genesis::genesis_info::parameters, (stake)(posting_rules)(require_hardfork)(funds))
+FC_REFLECT(cyberway::genesis::genesis_info::parameters, (initial_prod_count)(stake)(posting_rules)(funds))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters::ee_history_days, (transfers)(withdraws)(rewards))
 FC_REFLECT(cyberway::genesis::genesis_info::ee_parameters, (history_days))
 FC_REFLECT(cyberway::genesis::genesis_info, (state_file)(genesis_json)(accounts)(auth_links)(transit_account_authorities)(delegateuse)(tables)(golos)(params)(ee_params))

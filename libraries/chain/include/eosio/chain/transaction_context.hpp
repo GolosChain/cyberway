@@ -99,7 +99,8 @@ namespace eosio { namespace chain {
          void resume_billing_timer();
          void reset_billing_timer();
          
-         uint32_t update_billed_cpu_time( fc::time_point now );
+         int64_t get_used_cpu_time(fc::time_point now) const;
+         uint32_t update_billed_cpu_time( fc::time_point now);
          uint64_t update_billed_ram_bytes();
 
          void add_storage_usage( const storage_payer_info& );
@@ -137,8 +138,6 @@ namespace eosio { namespace chain {
          };
          void schedule_transaction();
          void record_transaction( const transaction_id_type& id, fc::time_point_sec expire );
-
-         void validate_cpu_usage_to_bill( int64_t u, bool check_minimum = true )const;
 
       /// Fields:
       public:
@@ -179,7 +178,7 @@ namespace eosio { namespace chain {
          bool                          apply_context_free = true;
          
          fc::time_point                caller_set_deadline = fc::time_point::maximum();
-         fc::microseconds              leeway = fc::microseconds(3000); //TODO: remove it
+         fc::microseconds              leeway = fc::microseconds(0);
          int64_t                       billed_cpu_time_us = 0;
          bool                          explicit_billed_cpu_time = false;
 
@@ -199,12 +198,11 @@ namespace eosio { namespace chain {
          bool                          timer_off = false;    
          fc::time_point                pseudo_start;
          fc::microseconds              billed_time;
-         fc::microseconds get_billing_timer_duration_limit() {
+         fc::microseconds get_billing_timer_duration_limit()const {
              return fc::microseconds(std::min(available_resources.get_min_cpu_limit(), hard_limits[resource_limits::CPU].max));
          };
 
          deadline_timer                _deadline_timer;
-         fc::time_point get_current_time() const;
 
 // TODO: request bw, why provided?
 //         std::map<account_name, provided_bandwith> provided_bandwith_;
