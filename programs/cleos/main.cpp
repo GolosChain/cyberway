@@ -2631,29 +2631,37 @@ void get_account( const string& accountName, const string& coresym, bool json_fo
       std::cout << indent << std::left << std::setw(11) << "limit:"     << std::right << std::setw(18) << to_pretty_time( res.cpu_limit.max ) << "\n";
       std::cout << std::endl;
 
-      if( res.core_liquid_balance.valid() ) {
-         const auto owned = res.stake_info.staked - res.stake_info.provided;
-         const auto effective = res.stake_info.staked - res.stake_info.provided + res.stake_info.received;
 
-         std::cout << res.core_liquid_balance->get_symbol().name() << " balances: " << std::endl;
-         std::cout << indent << std::left << std::setw(11)
-                   << "liquid:" << std::right << std::setw(18) << *res.core_liquid_balance << std::endl;
-         std::cout << indent << std::left << std::setw(11)
-                   << "staked:" << std::right << std::setw(18) << res.stake_info.staked << std::endl;
-         std::cout << indent << std::left << std::setw(11)
-                   << "recieved:" << std::right << std::setw(18) << res.stake_info.received << std::endl;
-         std::cout << indent << std::left << std::setw(11)
-                   << "provided:" << std::right << std::setw(18) << res.stake_info.provided << std::endl;
-         std::cout << indent << std::left << std::setw(11)
-                   << "unstaking:" << std::right << std::setw(18) << chain::asset(0, res.stake_info.staked.get_symbol()) << std::endl;
-         std::cout << indent << std::left << std::setw(11)
-                   << "owned:" << std::right << std::setw(18) << owned << std::endl;
-         std::cout << indent << std::left << std::setw(11)
-                   << "effective:" << std::right << std::setw(18) << effective << std::endl;
-         std::cout << indent << std::left << std::setw(11)
-                   << "total:" << std::right << std::setw(18) << (*res.core_liquid_balance + effective) << std::endl;
-         std::cout << std::endl;
+      chain::asset liquid_balance;
+      std::string symbol_name;
+
+      if( res.core_liquid_balance.valid() ) {
+         liquid_balance = *res.core_liquid_balance;
+         symbol_name = res.core_liquid_balance->get_symbol().name() + " ";
       }
+
+      const auto owned = res.stake_info.staked - res.stake_info.provided;
+      const auto effective = res.stake_info.staked - res.stake_info.provided + res.stake_info.received;
+
+      std::cout << symbol_name << "balances: " << std::endl;
+      std::cout << indent << std::left << std::setw(11)
+                << "liquid:" << std::right << std::setw(18) << liquid_balance << std::endl;
+      std::cout << indent << std::left << std::setw(11)
+                << "staked:" << std::right << std::setw(18) << res.stake_info.staked << std::endl;
+      std::cout << indent << std::left << std::setw(11)
+                << "recieved:" << std::right << std::setw(18) << res.stake_info.received << std::endl;
+      std::cout << indent << std::left << std::setw(11)
+                << "provided:" << std::right << std::setw(18) << res.stake_info.provided << std::endl;
+      std::cout << indent << std::left << std::setw(11)
+                << "unstaking:" << std::right << std::setw(18) << chain::asset(0, res.stake_info.staked.get_symbol()) << std::endl;
+      std::cout << indent << std::left << std::setw(11)
+                << "owned:" << std::right << std::setw(18) << owned << std::endl;
+      std::cout << indent << std::left << std::setw(11)
+                << "effective:" << std::right << std::setw(18) << effective << std::endl;
+      std::cout << indent << std::left << std::setw(11)
+                << "total:" << std::right << std::setw(18) << (liquid_balance + effective) << std::endl;
+      std::cout << std::endl;
+
 
       if ( res.voter_info.is_object() ) {
          auto& obj = res.voter_info.get_object();

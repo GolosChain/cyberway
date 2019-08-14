@@ -3,8 +3,9 @@ FROM cyberway/builder:$builder as builder
 ARG branch=master
 ARG symbol=CYBER
 ARG compiletype=RelWithDebInfo
+ARG ref=heads/$branch
 
-ADD https://api.github.com/repos/cyberway/cyberway/git/refs/heads/$branch /etc/version.json
+ADD https://api.github.com/repos/cyberway/cyberway/git/refs/$ref /etc/version.json
 
 RUN git clone -b $branch https://github.com/cyberway/cyberway.git --recursive
 
