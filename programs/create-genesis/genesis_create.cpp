@@ -1320,18 +1320,19 @@ struct genesis_create::genesis_create_impl final {
         }
 
         std::sort(witnesses.begin(), witnesses.end(), [](const auto &lhs, const auto &rhs) {
-            return (lhs->hardfork_time_vote < rhs->hardfork_time_vote) ||
-                   (lhs->hardfork_time_vote == rhs->hardfork_time_vote && lhs->votes > rhs->votes);
+            return (lhs->transit_to_cyberway_vote < rhs->transit_to_cyberway_vote) ||
+                   (lhs->transit_to_cyberway_vote == rhs->transit_to_cyberway_vote && lhs->votes > rhs->votes);
         });
 
         std::vector<producer_key> producers;
         producers.reserve(_info.params.initial_prod_count);
-        for (int i = 0; i < _info.params.initial_prod_count; i++) {
+        for (int i = 0; producers.size() < _info.params.initial_prod_count; ++i) {
             const auto &witness = *witnesses[i];
             account_name account = name_by_acc(witness.owner);
             public_key_type pubkey = pubkey_from_golos(witness.signing_key);
-            EOS_ASSERT(pubkey != public_key_type(), genesis_exception, "Witness ${account} has empty signing key", ("account", account));
-            producers.push_back(producer_key{account, pubkey});
+            if (pubkey != public_key_type()) {
+                producers.push_back(producer_key{account, pubkey});
+            }
         }
         return producers;
     }
