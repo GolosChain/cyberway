@@ -615,7 +615,6 @@ struct controller_impl {
          }
       });
       chaindb.emplace<account_sequence_object>(name.value, [&](auto & a) { });
-
       const auto& owner_permission  = authorization.create_permission({}, name, config::owner_name, 0,
                                                                       owner, conf.genesis.initial_timestamp );
       const auto& active_permission = authorization.create_permission({}, name, config::active_name, owner_permission.id,
