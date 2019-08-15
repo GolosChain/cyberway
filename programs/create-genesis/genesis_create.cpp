@@ -1330,7 +1330,8 @@ struct genesis_create::genesis_create_impl final {
             const auto &witness = *witnesses[i];
             account_name account = name_by_acc(witness.owner);
             public_key_type pubkey = pubkey_from_golos(witness.signing_key);
-            if (pubkey != public_key_type()) {
+            if (pubkey != public_key_type() && witness.transit_to_cyberway_vote != (fc::time_point_sec(1476788400))) {
+                ilog("Add producer ${witness} to initial schedule", ("witness", account));
                 producers.push_back(producer_key{account, pubkey});
             }
         }
