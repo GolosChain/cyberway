@@ -825,7 +825,7 @@ void genesis_ee_builder::write_accounts() {
         acc["json_metadata"] = "";
         if (dump_metas) {
             auto meta = meta_index.find(account_name_type(acc["name"].as_string()));
-            if (meta == meta_index.end()) {
+            if (meta != meta_index.end()) {
                 dump_metas.seekg(meta->offset);
                 account_metadata_operation op;
                 read_operation(dump_metas, op);
