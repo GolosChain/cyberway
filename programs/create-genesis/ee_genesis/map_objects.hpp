@@ -36,6 +36,8 @@ struct comment_header : public chainbase::object<comment_header_object_type, com
     uint64_t hash;
     uint64_t parent_hash;
     boost::interprocess::vector<uint64_t, chainbase::allocator<uint64_t>> offsets;
+    uint64_t title_offset = 0;
+    uint64_t meta_offset = 0;
     operation_number create_op;
     operation_number last_delete_op;
     fc::time_point_sec created;

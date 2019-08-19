@@ -22,6 +22,7 @@ struct comment_operation : hashed_operation {
 
     string title;
     string body;
+    bool valid_meta;
     flat_set<string> tags;
     string language;
     fc::time_point_sec timestamp;
@@ -138,7 +139,7 @@ struct account_metadata_operation : operation {
 
 } } } // cyberway::golos::ee
 
-REFLECT_OP_HASHED(cyberway::golos::ee::comment_operation, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(tags)(language)(timestamp))
+REFLECT_OP_HASHED(cyberway::golos::ee::comment_operation, (parent_author)(parent_permlink)(author)(permlink)(title)(body)(valid_meta)(tags)(language)(timestamp))
 
 REFLECT_OP_HASHED(cyberway::golos::ee::delete_comment_operation, )
 

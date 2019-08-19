@@ -126,6 +126,15 @@ void genesis_ee_builder::process_comments() {
             parent_hash = fc::hash64(parent.c_str(), parent.length());
         }
 
+        auto fill_optionals = [&](auto& c) {
+            if (op.title.size()) {
+                c.title_offset = op.offset;
+            }
+            if (op.valid_meta) {
+                c.meta_offset = op.offset;
+            }
+        };
+
         auto comment = comments.find(op.hash);
         if (comment != comments.end()) {
             if (comment->last_delete_op > op.num) {
@@ -133,13 +142,11 @@ void genesis_ee_builder::process_comments() {
             }
 
             bool patch = false;
-            if (op.body.size()) {
-                try {
-                    if (diff_match_patch<std::wstring>().patch_fromText(utf8_to_wstring(op.body)).size()) {
-                        patch = true;
-                    }
-                } catch (...) {
+            try {
+                if (diff_match_patch<std::wstring>().patch_fromText(utf8_to_wstring(op.body)).size()) {
+                    patch = true;
                 }
+            } catch (...) {
             }
 
             maps_.modify(*comment, [&](auto& c) {
@@ -148,6 +155,7 @@ void genesis_ee_builder::process_comments() {
                     c.offsets.clear();
                 }
                 c.offsets.emplace_back(op.offset);
+                fill_optionals(c);
                 c.create_op = op.num;
                 if (c.created == fc::time_point_sec::min()) {
                     c.created = op.timestamp;
@@ -160,6 +168,7 @@ void genesis_ee_builder::process_comments() {
             c.hash = op.hash;
             c.parent_hash = parent_hash;
             c.offsets.emplace_back(op.offset);
+            fill_optionals(c);
             c.create_op = op.num;
             c.created = op.timestamp;
         });
@@ -509,6 +518,22 @@ comment_operation genesis_ee_builder::get_comment(const comment_header& comment)
     }
 
     op.body = body;
+
+    if (comment.title_offset) {
+        comment_operation opt;
+        dump_comments.seekg(comment.title_offset);
+        read_operation(dump_comments, opt);
+        op.title = opt.title;
+    }
+
+    if (comment.meta_offset) {
+        comment_operation opt;
+        dump_comments.seekg(comment.meta_offset);
+        read_operation(dump_comments, opt);
+        op.tags = opt.tags;
+        op.language = opt.language;
+    }
+
     return op;
 }
 
@@ -800,7 +825,7 @@ void genesis_ee_builder::write_accounts() {
         acc["json_metadata"] = "";
         if (dump_metas) {
             auto meta = meta_index.find(account_name_type(acc["name"].as_string()));
-            if (meta == meta_index.end()) {
+            if (meta != meta_index.end()) {
                 dump_metas.seekg(meta->offset);
                 account_metadata_operation op;
                 read_operation(dump_metas, op);
