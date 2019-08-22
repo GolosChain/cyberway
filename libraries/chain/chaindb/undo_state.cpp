@@ -811,7 +811,7 @@ namespace cyberway { namespace chaindb {
                     journal_.write_undo(ctx, write_operation::remove(state.revision(), obj.second.clone_service()));
 
                     ritr->second.service.undo_rec = undo_record::OldValue;
-                    journal_.write_undo(ctx, write_operation::update(obj.second.service.revision,  ritr->second));
+                    journal_.write_undo(ctx, write_operation::update(ritr->second));
 
                     prev_state.old_values_.emplace(std::move(*ritr));
                     prev_state.removed_values_.erase(ritr);

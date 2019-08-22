@@ -459,6 +459,8 @@ namespace cyberway { namespace chaindb {
         string sys_code_name_;
         mongocxx::client mongo_conn_;
         code_cursor_map code_cursor_map_;
+        // https://github.com/cyberway/cyberway/issues/1094
+        bool update_pk_with_revision_ = false;
 
         mongodb_driver_impl(journal& jrnl, string address, string sys_name)
         : journal_(jrnl),
@@ -933,6 +935,11 @@ namespace cyberway { namespace chaindb {
 
                     case write_operation::Remove:
                         build_find_document(pk_doc, *table_, op.object);
+
+                        // https://github.com/cyberway/cyberway/issues/1094
+                        if (impl_.update_pk_with_revision_ && op.find_revision >= start_revision) {
+                            pk_doc.append(kvp(names::revision_path, op.find_revision));
+                        }
                         break;
 
                     case write_operation::Unknown:
@@ -978,6 +985,7 @@ namespace cyberway { namespace chaindb {
                         "MongoDB driver returns empty result of bulk execution");
 
                     CYBERWAY_ASSERT(
+                        impl_.update_pk_with_revision_ ||
                         res->matched_count()  == info.op_cnt ||
                         res->inserted_count() == info.op_cnt ||
                         res->deleted_count()  == info.op_cnt ||
@@ -1015,6 +1023,16 @@ namespace cyberway { namespace chaindb {
     }
 
     mongodb_driver::~mongodb_driver() = default;
+
+    void mongodb_driver::enable_bad_update() const {
+        // https://github.com/cyberway/cyberway/issues/1094
+        impl_->update_pk_with_revision_ = true;
+    }
+
+    void mongodb_driver::disable_bad_update() const {
+        // https://github.com/cyberway/cyberway/issues/1094
+        impl_->update_pk_with_revision_ = false;
+    }
 
     std::vector<table_def> mongodb_driver::db_tables(const account_name& code) const {
         return impl_->db_tables(code);

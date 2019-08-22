@@ -1384,8 +1384,140 @@ struct controller_impl {
       } FC_LOG_AND_RETHROW( )
    }
 
+   struct lost_transaction final {
+       transaction_id_type id;
+       std::string data;
+   };
+
+   struct lost_block_transaction final {
+       block_id_type id;
+       std::vector<lost_transaction> transactions;
+   };
+
+   void prepare_lost_transactions(const block_state_ptr& head) {
+       // https://github.com/cyberway/cyberway/issues/1094
+
+       // Transactions from this methods will be rollbacks in prepare_block_with_bad_receipt()
+
+       static fc::flat_map<uint32_t, lost_block_transaction> blocks_with_lost_trxs = {
+           { uint32_t(189001), {
+               block_id_type("0002e24956da83fb638155a409e4fffde3f6ca10df847c50da5f22d634ded6b2"),
+               { {
+                   transaction_id_type("5e0b6aaaa9cf980ef8af6a31f9fc9164b8529827a129c80fce6ce50a16a75a08"),
+                 R"(
+{
+    "id": "5e0b6aaaa9cf980ef8af6a31f9fc9164b8529827a129c80fce6ce50a16a75a08"
+    "expiration": "2019-08-22T05:19:09.000",
+    "ref_block_num": 57924,
+    "ref_block_prefix": 1446147132,
+    "actions": [{
+        "account": "gls.publish",
+        "name": "upvote",
+        "authorization": [{
+            "actor": "rtvmqvz3i1vt",
+            "permission": "posting"
+        }],
+        "data": "907770e36f2b77be900a7cce5278777922666f746f6f6b686f74612d70746963792d3437352d313536363435313039303535320100"
+    }],
+}
+                     )"
+               } }
+           } },
+       };
+
+       auto itr = blocks_with_lost_trxs.find(head->block_num);
+       if (blocks_with_lost_trxs.end() == itr) {
+           return;
+       }
+
+       for (auto& t: itr->second.transactions) {
+           signed_transaction trn;
+           fc::from_variant(fc::json::from_string(t.data), trn);
+
+           transaction_context trx_context(self, trn, t.id, fc::time_point::now());
+           trx_context.caller_set_deadline = fc::time_point::maximum();
+           trx_context.explicit_billed_cpu_time = true;
+           trx_context.billed_cpu_time_us = 100;
+           trx_context.explicit_billed_ram_bytes = true;
+           trx_context.billed_ram_bytes = 100;
+           trx_context.init_for_input_trx( 100, 100, true);
+
+           trx_context.exec();
+           trx_context.finalize();
+           trx_context.squash();
+       }
+   }
+
+   struct bad_receipt_block final {
+       block_id_type id;
+       size_t transaction_limit = 10240;
+   };
+
+   void prepare_block_with_bad_receipt(const block_state_ptr& head) {
+       // https://github.com/cyberway/cyberway/issues/1094
+
+       // This method create a pending block with transaction from block with bad receipt and rollback it
+
+       static fc::flat_map<uint32_t, bad_receipt_block> blocks_with_bad_receipt = {
+           { uint32_t(121492), { block_id_type("0001da94bc481aea6ea437e20cc8e0460fb3a7cee597b95569dc536cd71e9c8a") } },
+           { uint32_t(129069), { block_id_type("0001f82d403d7c6545bd8c79899f497be7fdb4a3bf5ed0c1fbb43357838f31a4") } },
+           { uint32_t(189001), { block_id_type("0002e24956da83fb638155a409e4fffde3f6ca10df847c50da5f22d634ded6b2") } },
+           { uint32_t(195902), { block_id_type("0002fd3ea5bb7387278fbacbbdba531da54ef0d8af72a1e085ecf35b62c5d8da"), 2 } },
+       };
+
+       auto itr = blocks_with_bad_receipt.find(head->block_num);
+       if (blocks_with_bad_receipt.end() == itr) {
+           return;
+       }
+
+       EOS_ASSERT( head->id == itr->second.id, block_validate_exception,
+           "Bad ID (${head} != ${valid}) for the block ${num}",
+           ("head", head->id)("valid", itr->second.id)("num", head->block_num) );
+
+       chaindb.enable_bad_update();
+
+       auto& b = head->block;
+       auto  b_time = block_timestamp_type(b->timestamp.to_time_point() - fc::seconds(3));
+       start_block( b_time, b->confirmed, controller::block_status::incomplete, optional<block_id_type>() );
+
+       std::vector<transaction_metadata_ptr> packed_transactions;
+       packed_transactions.reserve( b->transactions.size() );
+       for( const auto& receipt : b->transactions ) {
+           if( receipt.trx.contains<packed_transaction>()) {
+               auto& pt = receipt.trx.get<packed_transaction>();
+               auto mtrx = std::make_shared<transaction_metadata>( std::make_shared<packed_transaction>( pt ) );
+               if( !self.skip_auth_check() ) {
+                   transaction_metadata::start_recover_keys( mtrx, thread_pool, chain_id, microseconds::maximum() );
+               }
+               packed_transactions.emplace_back( std::move( mtrx ) );
+           }
+       }
+
+
+       size_t packed_idx = 0;
+       for( const auto& receipt : b->transactions ) {
+           if (receipt.trx.contains<packed_transaction>()) {
+               push_transaction(packed_transactions.at(packed_idx++), fc::time_point::maximum(), {receipt});
+               if (packed_idx >= itr->second.transaction_limit) {
+                   break;
+               }
+           } else {
+               EOS_ASSERT(false, block_validate_exception, "encountered unexpected receipt type");
+           }
+       }
+
+       prepare_lost_transactions(head);
+
+       chaindb.apply_all_changes();
+       pending.reset();
+       chaindb.apply_all_changes();
+       chaindb.disable_bad_update();
+   }
+
    void maybe_switch_forks( controller::block_status s ) {
       auto new_head = fork_db.head();
+
+      prepare_block_with_bad_receipt(new_head);
 
       if( new_head->header.previous == head->id ) {
          try {
