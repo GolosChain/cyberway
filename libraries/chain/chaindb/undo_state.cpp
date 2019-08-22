@@ -588,13 +588,13 @@ namespace cyberway { namespace chaindb {
                 ("table", get_full_table_name(table.info()))("scope", table.scope()));
 
             auto ctx = journal_.create_ctx(table.info());
+            cache_.clear_unsuccess(table.info());
 
             for (auto& obj: head.old_values_) {
                 auto undo_pk = obj.second.clone_service();
 
                 restore_undo_state(obj.second);
                 verifier_.verify(table.info(), obj.second);
-                cache_.clear_unsuccess(table.info());
                 cache_.emplace(table.info(), obj.second);
 
                 journal_.write(ctx,
@@ -603,7 +603,6 @@ namespace cyberway { namespace chaindb {
             }
 
             for (auto& obj: head.new_values_) {
-                cache_.clear_unsuccess(table.info());
                 cache_.remove(table.info(), obj.first);
                 driver_.skip_pk(table.info(), obj.first);
                 journal_.write(ctx,
@@ -616,7 +615,6 @@ namespace cyberway { namespace chaindb {
 
                 restore_undo_state(obj.second);
                 verifier_.verify(table.info(), obj.second);
-                cache_.clear_unsuccess(table.info());
                 cache_.emplace(table.info(), obj.second);
 
                 journal_.write(ctx,
