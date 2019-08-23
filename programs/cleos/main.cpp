@@ -1232,10 +1232,6 @@ struct register_producer_subcommand {
 
          const auto account_permissions = get_account_permissions(tx_permission, {account, config::active_name});
 
-         if (proxy_level != 0) {
-             register_producer_actions.push_back(create_set_proxy_level_action(account_permissions, account, symbol, 0));
-         }
-
          try {
             public_key_type producer_key = public_key_type(producer_key_str);
             const auto setkey_var = fc::mutable_variant_object()("account", account)
@@ -1248,6 +1244,10 @@ struct register_producer_subcommand {
                                                                            ("min_own_staked", min_own_stake);
 
                 register_producer_actions.push_back(create_action(account_permissions, N(cyber.stake), N(setminstaked), min_own_stake_var));
+            }
+
+            if (proxy_level != 0) {
+                register_producer_actions.push_back(create_set_proxy_level_action(account_permissions, account, symbol, 0));
             }
 
             register_producer_actions.push_back(create_action(account_permissions, N(cyber.stake), N(setkey), setkey_var));

@@ -18,6 +18,9 @@ namespace cyberway { namespace chaindb {
     public:
         virtual ~driver_interface();
 
+        virtual void enable_bad_update() const = 0;
+        virtual void disable_bad_update() const = 0;
+
         virtual void drop_db() const = 0;
 
         virtual std::vector<table_def> db_tables(const account_name& code) const = 0;
