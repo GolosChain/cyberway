@@ -13,6 +13,16 @@ namespace cyberway { namespace chaindb {
 
     mongodb_driver::~mongodb_driver() = default;
 
+    void mongodb_driver::enable_bad_update() const {
+        // https://github.com/cyberway/cyberway/issues/1094
+        NOT_SUPPORTED;
+    }
+
+    void mongodb_driver::disable_bad_update() const {
+        // https://github.com/cyberway/cyberway/issues/1094
+        NOT_SUPPORTED;
+    }
+
     std::vector<table_def> mongodb_driver::db_tables(const account_name&) const {
         NOT_SUPPORTED;
     }

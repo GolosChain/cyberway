@@ -127,6 +127,10 @@ namespace cyberway { namespace chaindb {
         void drop_db() const;
         void push_cache() const;
 
+        // https://github.com/cyberway/cyberway/issues/1094
+        void enable_bad_update() const;
+        void disable_bad_update() const;
+
         void close(const cursor_request&) const;
         void close_code_cursors(const account_name&) const;
 

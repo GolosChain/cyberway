@@ -778,6 +778,16 @@ namespace cyberway { namespace chaindb {
         impl_->cache_.push(revision());
     }
 
+    void chaindb_controller::enable_bad_update() const {
+        // https://github.com/cyberway/cyberway/issues/1094
+        impl_->driver_.enable_bad_update();
+    }
+
+    void chaindb_controller::disable_bad_update() const {
+        // https://github.com/cyberway/cyberway/issues/1094
+        impl_->driver_.disable_bad_update();
+    }
+
     void chaindb_controller::close(const cursor_request& request) const {
         impl_->driver_.close(request);
     }

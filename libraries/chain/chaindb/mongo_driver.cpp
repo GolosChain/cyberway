@@ -459,6 +459,8 @@ namespace cyberway { namespace chaindb {
         string sys_code_name_;
         mongocxx::client mongo_conn_;
         code_cursor_map code_cursor_map_;
+        // https://github.com/cyberway/cyberway/issues/1094
+        bool update_pk_with_revision_ = false;
 
         mongodb_driver_impl(journal& jrnl, string address, string sys_name)
         : journal_(jrnl),
@@ -842,10 +844,10 @@ namespace cyberway { namespace chaindb {
 
                 bulk_group_t_() = default;
 
-                bulk_group_t_(bulk_info_t_& info)
-                : remove(&info),
-                  update(&info),
-                  insert(&info) {
+                bulk_group_t_(write_ctx_t_& ctx, collection& undo_table)
+                : remove(&ctx.create_bulk_info(undo_table)),
+                  update(&ctx.create_bulk_info(undo_table)),
+                  insert(&ctx.create_bulk_info(undo_table)) {
                 }
             }; // struct bulk_group_t_;
 
@@ -853,8 +855,8 @@ namespace cyberway { namespace chaindb {
             write_ctx_t_(mongodb_driver_impl& impl)
             : impl_(impl),
               undo_table_(impl_.get_undo_db_table()),
-              complete_undo_bulk_(create_bulk_info(undo_table_)),
-              prepare_undo_bulk_(create_bulk_info(undo_table_)) {
+              complete_undo_bulk_(*this, undo_table_),
+              prepare_undo_bulk_(*this, undo_table_) {
             }
 
             void start_table(const table_info& table) {
@@ -933,7 +935,9 @@ namespace cyberway { namespace chaindb {
 
                     case write_operation::Remove:
                         build_find_document(pk_doc, *table_, op.object);
-                        if (op.find_revision >= start_revision) {
+
+                        // https://github.com/cyberway/cyberway/issues/1094
+                        if (impl_.update_pk_with_revision_ && op.find_revision >= start_revision) {
                             pk_doc.append(kvp(names::revision_path, op.find_revision));
                         }
                         break;
@@ -975,7 +979,23 @@ namespace cyberway { namespace chaindb {
 
                 // no reasons to do reconnect, exception can happen after writing and it will fail whole writing-process
                 try {
-                    info.bulk.execute();
+                    auto res = info.bulk.execute();
+
+                    CYBERWAY_ASSERT(res, driver_open_exception,
+                        "MongoDB driver returns empty result of bulk execution");
+
+                    CYBERWAY_ASSERT(
+                        impl_.update_pk_with_revision_ ||
+                        res->matched_count()  == info.op_cnt ||
+                        res->inserted_count() == info.op_cnt ||
+                        res->deleted_count()  == info.op_cnt ||
+                        res->modified_count() == info.op_cnt ||
+                        res->upserted_count() == info.op_cnt, driver_open_exception,
+                        "MongoDB driver returns bad result of bulk execution",
+                        ("op_cnt", info.op_cnt)("matched", res->matched_count())
+                        ("inserted", res->inserted_count())("modified", res->modified_count())
+                        ("deleted", res->deleted_count())("upserted", res->upserted_count()));
+
                 } catch (const mongocxx::bulk_write_exception& e) {
                     elog("MongoDB error on bulk write: ${code}, ${what}", ("code", e.code().value())("what", e.what()));
 
@@ -1003,6 +1023,16 @@ namespace cyberway { namespace chaindb {
     }
 
     mongodb_driver::~mongodb_driver() = default;
+
+    void mongodb_driver::enable_bad_update() const {
+        // https://github.com/cyberway/cyberway/issues/1094
+        impl_->update_pk_with_revision_ = true;
+    }
+
+    void mongodb_driver::disable_bad_update() const {
+        // https://github.com/cyberway/cyberway/issues/1094
+        impl_->update_pk_with_revision_ = false;
+    }
 
     std::vector<table_def> mongodb_driver::db_tables(const account_name& code) const {
         return impl_->db_tables(code);
