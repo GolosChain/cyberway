@@ -1453,7 +1453,7 @@ struct controller_impl {
        size_t transaction_limit = 10240;
    };
 
-   void prepare_block_with_bad_receipt(const block_state_ptr& head) {
+   void prepare_block_with_bad_receipt(const block_state_ptr& head, controller::block_status s) {
        // https://github.com/cyberway/cyberway/issues/1094
 
        // This method create a pending block with transaction from block with bad receipt and rollback it
@@ -1473,6 +1473,11 @@ struct controller_impl {
        EOS_ASSERT( head->id == itr->second.id, block_validate_exception,
            "Bad ID (${head} != ${valid}) for the block ${num}",
            ("head", head->id)("valid", itr->second.id)("num", head->block_num) );
+
+       auto skip_sessions = self.skip_db_sessions(s);
+       if (skip_sessions) {
+           set_revision(head->block_num - 1);
+       }
 
        chaindb.enable_bad_update();
 
@@ -1512,12 +1517,16 @@ struct controller_impl {
        pending.reset();
        chaindb.apply_all_changes();
        chaindb.disable_bad_update();
+
+       if (skip_sessions) {
+           set_revision(head->block_num);
+       }
    }
 
    void maybe_switch_forks( controller::block_status s ) {
       auto new_head = fork_db.head();
 
-      prepare_block_with_bad_receipt(new_head);
+      prepare_block_with_bad_receipt(new_head, s);
 
       if( new_head->header.previous == head->id ) {
          try {
