@@ -378,7 +378,7 @@ struct controller_impl {
          }
          replay_push_block( next, controller::block_status::irreversible );
          if( next->block_num() % 500 == 0 ) {
-            if( next->block_num() % 10000 && skip_session ) {
+            if( (next->block_num() % 10000) == 0 && skip_session ) {
                chaindb.apply_all_changes();
             }
             ilog( "${n} of ${head}", ("n", next->block_num())("head", blog_head->block_num()) );
