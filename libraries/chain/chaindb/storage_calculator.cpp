@@ -168,6 +168,8 @@ namespace cyberway { namespace chaindb {
         int size = get_fixed_storage_usage(info, var);
         if (size) {
             return size;
+        } else if (is_fake_code(info.code)) {
+            return 0;
         }
 
         constexpr static int base_size  = 256; /* memory usage of structures in RAM */

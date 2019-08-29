@@ -59,6 +59,10 @@ namespace cyberway { namespace chaindb {
         return (code.empty()) || (code.value == config::system_account_name);
     }
 
+    inline bool is_fake_code(const account_name& code) {
+        return !code.empty() && ((N(z) & code.value) == N(.));
+    }
+
     inline string get_code_name(string name, const account_name& code) {
         if (!is_system_code(code)) name.append(db_name_to_string(code.value));
         return name;
