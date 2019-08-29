@@ -49,8 +49,10 @@ struct config_reader {
     bfs::path out_file;
     bfs::path ee_directory;
     bfs::path op_dump_dir;
+    bfs::path permlinks_file;
     uint32_t last_block;
 
+    bool dump_closed_permlinks = false;
     bool create_ee_genesis = false;
 
     genesis_info info;
@@ -71,6 +73,9 @@ void config_reader::set_program_options(options_description& cli) {
             "operation dump dir from Golos (absolute path or relative to the current directory).")
         ("last-block,l", bpo::value<uint32_t>(&last_block)->default_value(UINT32_MAX),
             "last block num to read operations from dump and write them to Event-Engine genesis.")
+        ("dump-closed-permlinks",
+            bpo::value<bfs::path>(&permlinks_file)->implicit_value("closed-permlinks.dat")->default_value(""),
+            "the file to dump closed permlinks to (absolute or relative path); if set, no other actions performed")
         ("help,h", "Print this help message and exit.")
         ;
 }
@@ -141,6 +146,11 @@ void config_reader::read_config(const variables_map& options) {
     make_absolute(info_file, "Info");
     make_absolute(out_file, "Output", false);
 
+    dump_closed_permlinks = !permlinks_file.empty();
+    if (dump_closed_permlinks) {
+        make_absolute(permlinks_file, "Permlinks", false);
+    }
+
     create_ee_genesis = !options["ee-output-directory"].as<bfs::path>().empty();
     if (create_ee_genesis) {
         make_dir_absolute(ee_directory, "Events", false);
@@ -196,7 +206,11 @@ int main(int argc, char** argv) {
 
 
         genesis_create builder{};
-        builder.read_state(cr.info.state_file);
+        builder.read_state(cr.info.state_file, cr.dump_closed_permlinks);
+        if (cr.dump_closed_permlinks) {
+            builder.dump_closed_permlinks(cr.permlinks_file);
+            return 0;
+        }
         builder.write_genesis(cr.out_file, cr.info, cr.genesis, cr.contracts);
 
         const auto ee_shared_name = "shared_memory";
