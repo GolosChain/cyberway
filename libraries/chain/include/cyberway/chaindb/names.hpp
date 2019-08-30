@@ -21,6 +21,7 @@ namespace cyberway { namespace chaindb {
 
         static const string next_pk_field;
         static const string undo_pk_field;
+        static const string undo_rev_field;
         static const string undo_rec_field;
         static const string undo_payer_field;
         static const string undo_size_field;
