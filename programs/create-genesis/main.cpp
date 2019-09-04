@@ -160,7 +160,12 @@ void config_reader::read_config(const variables_map& options) {
     }
 
     info = fc::json::from_file(info_file).as<genesis_info>();
-    make_absolute(info.state_file, "Golos state");
+    if (!info.state_file.empty()) {
+        make_absolute(info.state_file, "Golos state");
+    } else {
+        EOS_ASSERT(!dump_closed_permlinks, genesis_exception, "cannot dump closed permlinks without Golos state");
+        EOS_ASSERT(!create_ee_genesis, genesis_exception, "cannot create EE-genesis without Golos state");
+    }
     make_absolute(info.genesis_json, "Genesis json");
     genesis = fc::json::from_file(info.genesis_json).as<genesis_state>();
 
@@ -206,10 +211,12 @@ int main(int argc, char** argv) {
 
 
         genesis_create builder{};
-        builder.read_state(cr.info.state_file, cr.dump_closed_permlinks);
-        if (cr.dump_closed_permlinks) {
-            builder.dump_closed_permlinks(cr.permlinks_file);
-            return 0;
+        if (!cr.info.state_file.empty()) {
+            builder.read_state(cr.info.state_file, cr.dump_closed_permlinks);
+            if (cr.dump_closed_permlinks) {
+                builder.dump_closed_permlinks(cr.permlinks_file);
+                return 0;
+            }
         }
         builder.write_genesis(cr.out_file, cr.info, cr.genesis, cr.contracts);
 

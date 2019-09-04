@@ -74,6 +74,7 @@ struct genesis_create::genesis_create_impl final {
     vector<string> _plnk_map;
 
     state_object_visitor _visitor;
+    bool _has_golos_state = false;
     asset _total_staked = asset();
     asset _sys_supply = asset();
 
@@ -1299,7 +1300,10 @@ struct genesis_create::genesis_create_impl final {
     }
 
     void prepare_writer(const bfs::path& out_file, const genesis_ext_header &ext_hdr) {
-        const int n_sections = static_cast<int>(stored_contract_tables::_max) + _info.tables.size();
+        int n_sections = static_cast<int>(sys_contract_tables::_max) + _info.tables.size();
+        if (_has_golos_state) {
+            n_sections += static_cast<int>(contract_tables::_max);
+        }
         db.start(out_file, n_sections, ext_hdr);
         db.prepare_serializers(_contracts);
     };
@@ -1370,6 +1374,7 @@ void genesis_create::read_state(const bfs::path& state_file, bool dump_closed_pe
     state_reader reader{state_file, _impl->_accs_map, _impl->_plnk_map};
     _impl->_visitor.dump_closed_permlinks = dump_closed_permlinks;
     reader.read_state(_impl->_visitor);
+    _impl->_has_golos_state = true;
 }
 
 
@@ -1390,28 +1395,34 @@ void genesis_create::write_genesis(
     }
 
     genesis_ext_header ext_hdr;
-    ext_hdr.producers = _impl->get_producers();
+    if (_impl->_has_golos_state) {
+        ext_hdr.producers = _impl->get_producers();
+    }
 
     _impl->prepare_writer(out_file, ext_hdr);
     _impl->store_contracts();
     _impl->store_auth_links();
     _impl->store_custom_tables();
 
-    _impl->store_accounts();
-    _impl->store_bandwidth();
-    _impl->store_posts();   // also pool and votes
-    _impl->store_balances();
-    _impl->store_stakes();
-    _impl->store_delegation_records();
-    _impl->store_withdrawals();
-    _impl->store_witnesses();
-    _impl->store_memo_keys();
-    _impl->schedule_emit();
+    if (_impl->_has_golos_state) {
+        _impl->store_accounts();
+        _impl->store_bandwidth();
+        _impl->store_posts();   // also pool and votes
+        _impl->store_balances();
+        _impl->store_stakes();
+        _impl->store_delegation_records();
+        _impl->store_withdrawals();
+        _impl->store_witnesses();
+        _impl->store_memo_keys();
+        _impl->schedule_emit();
+    }
 
     _impl->db.finalize();
 
-    _impl->_exp_info.conv_gbg = &_impl->_visitor.conv_gbg;
-    _impl->_exp_info.conv_gls = &_impl->_visitor.conv_gls;
+    if (_impl->_has_golos_state) {
+        _impl->_exp_info.conv_gbg = &_impl->_visitor.conv_gbg;
+        _impl->_exp_info.conv_gls = &_impl->_visitor.conv_gls;
+    }
 }
 
 const genesis_info& genesis_create::get_info() const {
