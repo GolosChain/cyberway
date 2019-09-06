@@ -21,6 +21,7 @@ namespace cyberway { namespace chaindb {
 
         static const string next_pk_field;
         static const string undo_pk_field;
+        static const string undo_rev_field;
         static const string undo_rec_field;
         static const string undo_payer_field;
         static const string undo_size_field;
@@ -57,6 +58,10 @@ namespace cyberway { namespace chaindb {
 
     inline bool is_system_code(const account_name& code) {
         return (code.empty()) || (code.value == config::system_account_name);
+    }
+
+    inline bool is_fake_code(const account_name& code) {
+        return !code.empty() && ((N(z) & code.value) == N(.));
     }
 
     inline string get_code_name(string name, const account_name& code) {

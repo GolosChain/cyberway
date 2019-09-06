@@ -515,6 +515,9 @@ BOOST_FIXTURE_TEST_CASE( test_deferred_failure, currency_tester ) try {
       BOOST_REQUIRE_EQUAL(1, index.size());
       BOOST_REQUIRE_EQUAL(false, chain_has_transaction(deferred_id));
    }
+   // onerror handler is removed in CyberWay
+   return;
+
 
    fc::time_point expected_redelivery = control->pending_block_time() + fc::seconds(10);
    // First deferred transaction should be retired in this block.

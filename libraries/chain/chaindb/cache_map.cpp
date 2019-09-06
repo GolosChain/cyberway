@@ -1007,6 +1007,9 @@ namespace cyberway { namespace chaindb {
         }
 
         bool is_system_object(const cache_object& cache_obj) const {
+            if (is_fake_code(cache_obj.service().code)) {
+                return false;
+            }
             return !cache_obj.service().payer;
         }
 
@@ -1150,7 +1153,7 @@ namespace cyberway { namespace chaindb {
             }
 
             auto delta = state.object_ptr->service().size;
-            CYBERWAY_CACHE_ASSERT(UINT64_MAX - commited_size >= delta, "Commiting delta would overflow UINT64_MAX");
+            CYBERWAY_CACHE_ASSERT(!delta || UINT64_MAX - commited_size >= delta, "Commiting delta would overflow UINT64_MAX");
             commited_size += delta;
         }
 
@@ -1339,7 +1342,9 @@ namespace cyberway { namespace chaindb {
     ) const {
         assert(value);
         assert(size);
-        impl_->emplace_unsuccess(index, value, size, rpk);
+        if (!is_fake_code(index.code)) {
+            impl_->emplace_unsuccess(index, value, size, rpk);
+        }
     }
 
     void cache_map::clear_unsuccess(const table_info& table) const {

@@ -89,8 +89,13 @@ namespace resource_limits {
 
          std::vector<uint64_t> get_account_usage(const account_name& account) const;
 
+         void validate_storage_price(bool value) {
+             _validate_storage_price = value;
+         }
+
       private:
          chaindb_controller& _chaindb;
+         bool _validate_storage_price = false;
    };
 } } } /// eosio::chain
 

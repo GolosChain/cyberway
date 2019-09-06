@@ -322,6 +322,12 @@ namespace cyberway { namespace chaindb {
                             state.undo_rec = static_cast<undo_record>(itm.get_int32().value);
                             break;
                         }
+                        case 'v': {
+                            validate_field_name(names::undo_rev_field == key, src, itm);
+                            --field_cnt; // skip to count it
+                            state.undo_revision = itm.get_int64().value;
+                            break;
+                        }
                         default: {
                             validate_field_name(names::undo_ram_field == key, src, itm);
                             --field_cnt; // skip to count it
@@ -714,6 +720,7 @@ namespace cyberway { namespace chaindb {
         doc.append(kvp(names::service_field, [&](sub_document serv_doc) {
             serv_doc.append(kvp(names::undo_pk_field, to_decimal128(obj.service.undo_pk)));
             serv_doc.append(kvp(names::undo_rec_field, static_cast<int32_t>(obj.service.undo_rec)));
+            serv_doc.append(kvp(names::undo_rev_field, obj.service.undo_revision));
             serv_doc.append(kvp(names::undo_payer_field, to_decimal128(obj.service.undo_payer)));
             serv_doc.append(kvp(names::undo_size_field, static_cast<int32_t>(obj.service.undo_size)));
             serv_doc.append(kvp(names::code_field, to_decimal128(obj.service.code)));

@@ -38,9 +38,6 @@ namespace cyberway { namespace chaindb {
 
     struct undo_state final {
         undo_state(table_undo_stack& table, revision_t rev): table_(table), revision_(rev) {
-            new_values_.reserve(32);
-            old_values_.reserve(32);
-            removed_values_.reserve(32);
         }
 
         void set_next_pk(primary_key_t, primary_key_t);
@@ -64,7 +61,7 @@ namespace cyberway { namespace chaindb {
             --revision_;
         }
 
-        using pk_value_map_t_ = fc::flat_map<primary_key_t, object_value>;
+        using pk_value_map_t_ = std::map<primary_key_t, object_value>;
 
         table_undo_stack& table_;
         pk_value_map_t_   new_values_;
@@ -82,7 +79,7 @@ namespace cyberway { namespace chaindb {
         revision_t revision_ = impossible_revision; // <- part of state machine - changes via actions
         std::deque<undo_state> stack_;              // <- access depends on state machine
 
-        fc::flat_map<revision_t, primary_key_t> undo_next_pk_map_; // <- map of undo_next_pk_ by revision
+        std::map<revision_t, primary_key_t> undo_next_pk_map_; // <- map of undo_next_pk_ by revision
 
     public:
         table_undo_stack() = delete;
@@ -559,7 +556,14 @@ namespace cyberway { namespace chaindb {
 
             driver_.drop_index(index);
 
-            if (revision_ != tail_revision_) stage_ = undo_stage::Stack;
+            if (revision_ != tail_revision_) {
+                stage_ = undo_stage::Stack;
+
+                for (auto& const_table: tables_) if (const_table.revision() != revision_) {
+                    auto& table = const_cast<table_undo_stack&>(const_table); // not critical
+                    table.start_session(revision_);
+                }
+            }
         } catch (const session_exception&) {
             throw;
         } catch (const std::exception& e) {

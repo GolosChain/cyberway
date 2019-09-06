@@ -83,6 +83,7 @@ namespace cyberway { namespace chaindb {
     const string names::undo_size_field  = "usz";
     const string names::undo_ram_field   = "urm";
     const string names::undo_rec_field   = "uct";
+    const string names::undo_rev_field   = "uvs";
     const string names::revision_field   = "rev";
 
     const string names::payer_field      = "payer";
