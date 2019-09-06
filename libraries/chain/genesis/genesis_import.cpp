@@ -31,9 +31,8 @@ struct genesis_import::impl final {
     }
 
     void apply_db_changes(bool force = false) {
-        if (force || (++db_updates & 0xFFF) == 0) {
+        if (force || (++db_updates % 10000) == 0) {
             db.apply_all_changes();
-            db.push_cache();
         }
     }
 
