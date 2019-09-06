@@ -860,6 +860,47 @@ struct controller_impl {
 //        return {trx_context.get_provided_bandwith(), trx_context.get_net_usage(), trx_context.get_cpu_usage()};
 //    }
 
+   bool is_softfail_transaction( const transaction_trace& trace ) const {
+       struct soft_fail_block {
+           block_id_type block_id;
+           fc::flat_set<transaction_id_type> trx_ids;
+       };
+
+       static fc::flat_map<uint32_t, soft_fail_block> blocks_with_soft_fail = {
+           { uint32_t(508310), {
+               block_id_type("0007c1967213d961df9d1934cc73ff9cacd68fe5c460e9fcae4fc019d3ec8b62"),
+               { transaction_id_type("f811650021f1048738b3c7c653c7459c529e3f95da2ae5ecad4bd9307187f56a")}}},
+           { uint32_t(528192), {
+               block_id_type("00080f40a2c957bd3fc039d8d88f06ea39517ae26ccd681e9f1caed4346e0b52"),
+               { transaction_id_type("a88270bb59e6933ca1b400d24c75917b656483abfde677c62cab17d026e9b99b")}}},
+           { uint32_t(542256), {
+               block_id_type("00084630b3a3c3bf8facac9f753613e1de85bf80332f40ad7a2a3c4778330928"),
+               { transaction_id_type("3766bcbf214bf7a8e8192c693e71e9b678638723c7be3daab7b675f11636918f")}}},
+           { uint32_t(542259), {
+               block_id_type("000846336f2f0053b6e4d0d6947cd443f5daabd8d682f5c6f87c714825aaa6ba"),
+               { transaction_id_type("81ff40bff8af6660043507356484d9cf4724d1c26c6752454c2dcca4e6abd47a")}}},
+           { uint32_t(551879), {
+               block_id_type("00086bc72fa03e2aad959ad3ef666f68c8e7d298c88e17e690d047f8c006501a"),
+               { transaction_id_type("ecd2badd55c72c14c7d86051bdf0c860013e6801b573c8b68e4021beed32c9dc")}}}
+       };
+
+       auto itr = blocks_with_soft_fail.find(trace.block_num);
+       if (blocks_with_soft_fail.end() == itr) {
+           return false;
+       }
+
+       EOS_ASSERT( *self.pending_producer_block_id() == itr->second.block_id, block_validate_exception,
+            "Bad ID (${head} != ${valid}) for the block ${num}",
+            ("head", head->id)("valid", itr->second.block_id)("num", *self.pending_producer_block_id()) );
+
+       auto ttr = itr->second.trx_ids.find(trace.id);
+       if (itr->second.trx_ids.end() == ttr) {
+           return false;
+       }
+
+       return true;
+   }
+
    transaction_trace_ptr push_scheduled_transaction( const generated_transaction_object& gto, fc::time_point deadline, const billed_bw_usage& billed )
    try {
       maybe_session undo_session;
@@ -919,7 +960,20 @@ struct controller_impl {
       trx_context.explicit_billed_ram_bytes = billed.explicit_usage;
       trx_context.billed_ram_bytes = billed.ram_bytes;
       trace = trx_context.trace;
+
+      // CyberWay speccific for disabled onerror handler
+      const bool is_softfailed_trx = is_softfail_transaction(*trace);
+      if (is_softfailed_trx) {
+          resource_limits.validate_storage_price(true);
+      }
+
       try {
+         auto restore_storage_price = fc::make_scoped_exit([&is_softfailed_trx, this](){
+            if( is_softfailed_trx ) {
+               resource_limits.validate_storage_price(false);
+            }
+         });
+
          //TODO: request bw, why provided?
          //auto bandwith_request_result = get_provided_bandwith(dtrx.actions, deadline);
          //trx_context.set_provided_bandwith(std::move(bandwith_request_result.bandwith));
@@ -963,7 +1017,11 @@ struct controller_impl {
 
       // Only subjective OR soft OR hard failure logic below:
 
-      if( gtrx.sender != account_name() && !controller::failure_is_subjective(*trace->except)) {
+// Disabled in CyberWay
+// the result receipt contains resource usage from two different transactions with different actors
+//   as result there is no way to validate the account resources on a validator node.
+//
+      if( is_softfailed_trx ) {
          // Attempt error handling for the generated transaction.
 
          auto error_trace = apply_onerror( gtrx, trx_context, deadline,

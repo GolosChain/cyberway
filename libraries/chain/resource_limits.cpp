@@ -211,7 +211,7 @@ void resource_limits_manager::add_storage_usage(
       _chaindb.modify( usage, [&]( auto& u ) {
           u.accumulators[STORAGE].add(a.second, time_slot, config.account_usage_average_windows[STORAGE]);
       });
-      if( validate ) {
+      if( validate && (a.second > 0 || _validate_storage_price)) {
          get_account_balance(pending_block_time, a.first, prices, true);
       }
    }
