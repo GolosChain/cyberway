@@ -30,8 +30,9 @@ public:
     genesis_create();
     ~genesis_create();
 
-    void read_state(const bfs::path& state_file);
+    void read_state(const bfs::path& state_file, bool dump_closed_permlinks);
     void write_genesis(const bfs::path& out_file, const genesis_info&, const genesis_state&, const contracts_map&);
+    void dump_closed_permlinks(const bfs::path& out_file);
 
     // ee interface
     const genesis_info& get_info() const;

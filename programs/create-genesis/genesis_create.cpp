@@ -1304,6 +1304,28 @@ struct genesis_create::genesis_create_impl final {
         db.prepare_serializers(_contracts);
     };
 
+    void dump_closed_permlinks(const bfs::path& out_file) {
+        ilog("Dumping permlinks of closed posts...");
+
+        bfs::ofstream out;
+        out.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+        out.open(out_file, std::ios_base::binary);
+
+        for (const auto& cp : _visitor.closed_permlinks) {
+            const auto& c = cp.second;
+            std::string parent_permlink(name_by_idx(c.parent_author) == name() ? "" : _plnk_map[c.parent_permlink]);
+            out
+                << name_by_idx(c.author) << ';'
+                << _plnk_map[c.permlink] << ';'
+                << name_by_idx(c.parent_author) << ';'
+                << parent_permlink << ';'
+                << c.depth << ';'
+                << c.children << '\n';
+        }
+        _visitor.closed_permlinks.clear();
+        ilog("Done.");
+    }
+
     std::vector<producer_key> get_producers() {
         if (_info.params.initial_prod_count == 0) {
             return {};
@@ -1344,9 +1366,15 @@ genesis_create::genesis_create(): _impl(new genesis_create_impl()) {
 genesis_create::~genesis_create() {
 }
 
-void genesis_create::read_state(const bfs::path& state_file) {
+void genesis_create::read_state(const bfs::path& state_file, bool dump_closed_permlinks) {
     state_reader reader{state_file, _impl->_accs_map, _impl->_plnk_map};
+    _impl->_visitor.dump_closed_permlinks = dump_closed_permlinks;
     reader.read_state(_impl->_visitor);
+}
+
+
+void genesis_create::dump_closed_permlinks(const bfs::path& out_file) {
+    _impl->dump_closed_permlinks(out_file);
 }
 
 void genesis_create::write_genesis(

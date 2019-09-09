@@ -88,6 +88,8 @@ struct state_object_visitor {
     fc::flat_map<acc_idx,post_bw_info> post_bws;
     fc::flat_map<uint64_t,golos::comment_object> comments;  // id:comment
     fc::flat_map<uint64_t,post_permlink> permlinks;         // id:permlink
+    bool dump_closed_permlinks;
+    fc::flat_map<uint64_t,post_permlink> closed_permlinks;  // id:permlink
     std::vector<golos::comment_vote_object> votes;
 
     fc::flat_map<acc_idx, share_type> reputations;
@@ -199,18 +201,22 @@ struct state_object_visitor {
         if (active) {
             comments.emplace(c.id, std::move(c));
         }
+        post_permlink p{
+            .author = c.author.id,
+            .permlink = c.permlink.id,
+            .parent_author = c.parent_author.id,
+            .parent_permlink = c.parent_permlink.id,
+            .depth = static_cast<uint16_t>(c.depth.value),
+            .children = c.children.value
+        };
 #ifndef STORE_CLOSED_PERMLINKS
         if (active)
 #endif
         {
-            permlinks.emplace(c.id, post_permlink{
-                .author = c.author.id,
-                .permlink = c.permlink.id,
-                .parent_author = c.parent_author.id,
-                .parent_permlink = c.parent_permlink.id,
-                .depth = static_cast<uint16_t>(c.depth.value),
-                .children = c.children.value
-            });
+            permlinks.emplace(c.id, p);
+        }
+        if (!active && dump_closed_permlinks) {
+            closed_permlinks.emplace(c.id, p);
         }
     }
 
