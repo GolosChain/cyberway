@@ -138,11 +138,15 @@ namespace eosio { namespace chain {
 
       my->head = *my->index.get<by_lib_block_num>().begin();
 
-      auto lib    = my->head->dpos_irreversible_blocknum;
-      auto oldest = *my->index.get<by_block_num>().begin();
+      auto lib = my->head->dpos_irreversible_blocknum;
+      for (int i = 0; i < 10; ++i) {
+         auto oldest = *my->index.get<by_block_num>().begin();
 
-      if( oldest->block_num < lib ) {
-         prune( oldest );
+         if( oldest->block_num < lib ) {
+            prune( oldest );
+         } else {
+            break;
+         }
       }
 
       return n;
