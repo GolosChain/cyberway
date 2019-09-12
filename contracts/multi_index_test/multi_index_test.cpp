@@ -1,6 +1,7 @@
 #include <eosiolib/eosio.hpp>
 #include <eosiolib/dispatcher.hpp>
 #include <eosiolib/multi_index.hpp>
+#include <eosiolib/asset.hpp>
 
 using namespace eosio;
 
@@ -16,18 +17,14 @@ struct limit_order {
       auto primary_key()const { return id; }
       uint64_t get_expiration()const { return expiration; }
       uint128_t get_price()const { return price; }
-
-      EOSLIB_SERIALIZE( limit_order, (id)(price)(expiration)(owner) )
    };
 
-   struct test_k256 {
+   struct test_asset {
       uint64_t     id;
-      key256      val;
+      asset        val;
 
       auto primary_key()const { return id; }
-      key256 get_val()const { return val; }
-
-      EOSLIB_SERIALIZE( test_k256, (id)(val) )
+      asset get_val()const { return val; }
    };
 
    class snapshot_test {
@@ -96,26 +93,26 @@ struct limit_order {
 
                }
                break;
-               case 1: // Test key265 secondary index
+               case 1: // Test asset secondary index
                {
-                  print("Testing key256 secondary index.\n");
-                  eosio::multi_index<N(test1), test_k256,
-                     indexed_by< N(byval), const_mem_fun<test_k256, key256, &test_k256::get_val> >
+                  print("Testing asset secondary index.\n");
+                  eosio::multi_index<N(test1), test_asset,
+                     indexed_by< N(byval), const_mem_fun<test_asset, asset, &test_asset::get_val> >
                   > testtable( N(multitest), N(exchange) ); // Code must be same as the receiver? Scope doesn't have to be.
 
                   testtable.emplace( payer, [&]( auto& o ) {
                      o.id = 1;
-                     o.val = key256::make_from_word_sequence<uint64_t>(0ULL, 0ULL, 0ULL, 42ULL);
+                     o.val = asset(42);
                   });
 
                   testtable.emplace( payer, [&]( auto& o ) {
                      o.id = 2;
-                     o.val = key256::make_from_word_sequence<uint64_t>(1ULL, 2ULL, 3ULL, 4ULL);
+                     o.val = asset(1234);
                   });
 
                   testtable.emplace( payer, [&]( auto& o ) {
                      o.id = 3;
-                     o.val = key256::make_from_word_sequence<uint64_t>(0ULL, 0ULL, 0ULL, 42ULL);
+                     o.val = asset(42);
                   });
 
                   auto itr = testtable.find( 2 );
@@ -127,10 +124,10 @@ struct limit_order {
 
                   auto validx = testtable.get_index<N(byval)>();
 
-                  auto lower1 = validx.lower_bound(key256::make_from_word_sequence<uint64_t>(0ULL, 0ULL, 0ULL, 40ULL));
+                  auto lower1 = validx.lower_bound(asset(40));
                   print("First entry with a val of at least 40 has ID=", lower1->id, ".\n");
 
-                  auto lower2 = validx.lower_bound(key256::make_from_word_sequence<uint64_t>(0ULL, 0ULL, 0ULL, 50ULL));
+                  auto lower2 = validx.lower_bound(asset(50));
                   print("First entry with a val of at least 50 has ID=", lower2->id, ".\n");
 
                   if( testtable.iterator_to(*lower2) == itr ) {
@@ -142,7 +139,7 @@ struct limit_order {
                      print(" ID=", item.primary_key(), ", val=", item.val, "\n");
                   }
 
-                  auto upper = validx.upper_bound(key256::make_from_word_sequence<uint64_t>(0ULL, 0ULL, 0ULL, 42ULL));
+                  auto upper = validx.upper_bound(asset(42));
 
                   print("First entry with a val greater than 42 has ID=", upper->id, ".\n");
 

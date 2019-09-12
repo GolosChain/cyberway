@@ -1,7 +1,27 @@
 {
-  "version": "eosio::abi/1.0",
+  "version": "cyberway::abi/1.0",
   "types": [],
-  "structs": [{
+  "structs": [
+   {
+      "name": "limit_order",
+      "base": "",
+      "fields": [
+         {"name": "id",   "type": "uint64"},
+         {"name": "padding",   "type": "uint64"},
+         {"name": "price",   "type": "uint128"},
+         {"name": "expiration",   "type": "uint64"},
+         {"name": "owner",   "type": "name"}
+      ]
+   },
+   {
+      "name": "test_asset",
+      "base": "",
+      "fields": [
+         {"name": "id",   "type": "uint64"},
+         {"name": "val",   "type": "asset"}
+      ]
+   },
+   {
       "name": "trigger",
       "base": "",
       "fields": [
@@ -11,10 +31,37 @@
   ],
   "actions": [{
       "name": "trigger",
-      "type": "trigger",
-      "ricaridian_contract": ""
+      "type": "trigger"
     }
   ],
-  "tables": [],
+  "tables": [{
+      "name": "orders",
+      "type": "limit_order",
+      "indexes": [{
+          "name": "primary",
+          "unique": true,
+          "orders": [{"field": "id", "order": "asc"}]
+      }, {
+          "name": "byexp",
+          "unique": false,
+          "orders": [{"field": "expiration", "order": "asc"}]
+      }, {
+          "name": "byprice",
+          "unique": false,
+          "orders": [{"field": "price", "order": "asc"}]
+      }]
+    }, {
+      "name": "test1",
+      "type": "test_asset",
+      "indexes": [{
+          "name": "primary",
+          "unique": true,
+          "orders": [{"field": "id", "order": "asc"}]
+      }, {
+          "name": "byval",
+          "unique": false,
+          "orders": [{"field": "val", "order": "asc"}]
+      }]
+    }],
   "abi_extensions": []
 }
