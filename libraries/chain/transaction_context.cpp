@@ -658,7 +658,7 @@ namespace bacc = boost::accumulators;
             EOS_ASSERT( actor  != nullptr, transaction_exception,
                         "action's authorizing actor '${account}' does not exist", ("account", auth.actor) );
             EOS_ASSERT( auth_manager.find_permission(auth) != nullptr, transaction_exception,
-                        "action's authorizations include a non-existent permission: {permission}",
+                        "action's authorizations include a non-existent permission: ${permission}",
                         ("permission", auth) );
          }
       }
