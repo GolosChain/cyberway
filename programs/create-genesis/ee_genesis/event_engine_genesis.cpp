@@ -211,6 +211,11 @@ static abi_def create_accounts_abi() {
     abi_def abi;
     abi.version = ABI_VERSION;
 
+    // copied just for "copy-paste" compatibility with eosio_contract_abi.cpp
+    abi.types.push_back( type_def{"account_name", "name"} );
+    abi.types.push_back( type_def{"permission_name", "name"} );
+    abi.types.push_back( type_def{"weight_type", "uint16"} );
+
     abi.structs.emplace_back( struct_def {
         "domain_info", "", {
             {"owner", "name"},
@@ -219,21 +224,47 @@ static abi_def create_accounts_abi() {
         }
     });
 
-    abi.structs.emplace_back( struct_def {
-       "key_weight", "", {
-            {"key", "public_key"},
-            {"weight", "uint16"}
-        }
-    });
+   abi.structs.emplace_back( struct_def {
+      "permission_level", "", {
+         {"actor", "account_name"},
+         {"permission", "permission_name"}
+      }
+   });
+   abi.structs.emplace_back( struct_def {
+      "key_weight", "", {
+         {"key", "public_key"},
+         {"weight", "weight_type"}
+      }
+   });
+   abi.structs.emplace_back( struct_def {
+      "permission_level_weight", "", {
+         {"permission", "permission_level"},
+         {"weight", "weight_type"}
+      }
+   });
+   abi.structs.emplace_back( struct_def {
+      "wait_weight", "", {
+         {"wait_sec", "uint32"},
+         {"weight", "weight_type"}
+      }
+   });
+   abi.structs.emplace_back( struct_def {
+      "authority", "", {
+         {"threshold", "uint32"},
+         {"keys", "key_weight[]"},
+         {"accounts", "permission_level_weight[]"},
+         {"waits", "wait_weight[]"}
+      }
+   });
 
     abi.structs.emplace_back( struct_def {
         "account_info", "", {
             {"creator", "name"},
             {"owner", "name"},
             {"name", "string"},
-            {"owner_keys", "key_weight[]"},
-            {"active_keys", "key_weight[]"},
-            {"posting_keys", "key_weight[]"},
+            {"owner_auth", "authority"},
+            {"active_auth", "authority"},
+            {"posting_auth", "authority"},
             {"created", "time_point_sec"},
             {"last_update", "time_point_sec"},
             {"reputation", "int64"},
