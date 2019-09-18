@@ -37,6 +37,10 @@ class CleosWithWalletTest(WalletTestCase):
         self.verifier.verifyContractAbi(self.cleos.exec("get", "abi", "cyber.stake"), "cyber.stake")
 
 
+    def test_4_createTestAccount(self):
+        testKey = self.wallet.createKeys("alice test key")
+        self.verifier.verifyAccountCreated(self.cleos.exec("create", "account", "cyber", "alice", testKey))
+        self.verifier.verifyGetAccount(self.cleos.exec("get", "account", "alice"), testKey)
 
 if __name__ == '__main__':
     WalletTestSuite().execute()

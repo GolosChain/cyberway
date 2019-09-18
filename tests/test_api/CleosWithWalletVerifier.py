@@ -44,4 +44,20 @@ class CleosWithWalletVerifier:
                 if sourceTable['name'] == testTable['name']:
                     self.testCase.assertEqual(sourceTable['type'], testTable['type'])
 
+    def verifyGetAccount(self, output, testKey):
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+owner[ ]+1:[ ]+1 " + testKey)
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+active[ ]+1:[ ]+1 " + testKey)
+        self.verifyAccountLiquidBalance(output, "0.0000 CYBER")
+        self.verifyAccountStakeBalance(output, "0.0000 CYBER")
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+recieved:[ ]+0.0000 CYBER")
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+provided:[ ]+0.0000 CYBER")
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+unstaking:[ ]+0.0000 CYBER")
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+owned:[ ]+0.0000 CYBER")
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+effective:[ ]+0.0000 CYBER")
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+total:[ ]+0.0000 CYBER")
 
+
+    def verifyAccountLiquidBalance(self, output, amount):
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+liquid:[ ]+" + amount)
+    def verifyAccountStakeBalance(self, output, amount):
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+staked:[ ]+" + amount)
