@@ -57,8 +57,48 @@ class CleosWithWalletTest(WalletTestCase):
 
         getAccountOutput = self.cleos.exec("get", "account", "alice")
         self.verifier.verifyAccountStakeBalance(getAccountOutput, "400.0000 CYBER")
+        self.verifier.verifyAccountEffectiveBalance(getAccountOutput, "400.0000 CYBER")
         self.verifier.verifyAccountLiquidBalance(getAccountOutput, "600.0000 CYBER")
         self.verifier.verifyAccountTotalBalance(getAccountOutput, "1000.0000 CYBER")
+
+    def test_8_delegateStake(self):
+        self.cleos.exec("create", "account", "cyber", "bob", self.wallet.createKeys("bob test key"))
+        self.verifier.verifyStakeOpened(self.cleos.exec("push", "action", "cyber.stake", "open", "{ \"owner\" : bob, \"token_code\" : \"CYBER\" }", "-p", "bob@active"), "bob")
+
+        self.verifier.verifyStakeDelegated(self.cleos.exec("system", "delegatebw", "alice", "bob", "100.0000 CYBER"), "alice", "bob", "100.0000 CYBER")
+
+        getAliceAccountOutput = self.cleos.exec("get", "account", "alice")
+        self.verifier.verifyAccountStakeBalance(getAliceAccountOutput, "400.0000 CYBER")
+        self.verifier.verifyAccountOwnedBalance(getAliceAccountOutput, "300.0000 CYBER")
+        self.verifier.verifyAccountProvidedBalance(getAliceAccountOutput, "100.0000 CYBER")
+        self.verifier.verifyAccountLiquidBalance(getAliceAccountOutput, "600.0000 CYBER")
+        self.verifier.verifyAccountEffectiveBalance(getAliceAccountOutput, "300.0000 CYBER")
+        self.verifier.verifyAccountTotalBalance(getAliceAccountOutput, "900.0000 CYBER")
+
+        getBobAccountOutput = self.cleos.exec("get", "account", "bob")
+        self.verifier.verifyAccountStakeBalance(getBobAccountOutput, "0.0000 CYBER")
+        self.verifier.verifyAccountOwnedBalance(getBobAccountOutput, "0.0000 CYBER")
+        self.verifier.verifyAccountProvidedBalance(getBobAccountOutput, "0.0000 CYBER")
+        self.verifier.verifyAccountReceivedBalance(getBobAccountOutput, "100.0000 CYBER")
+        self.verifier.verifyAccountLiquidBalance(getBobAccountOutput, "0.0000 CYBER")
+        self.verifier.verifyAccountEffectiveBalance(getBobAccountOutput, "100.0000 CYBER")
+        self.verifier.verifyAccountTotalBalance(getBobAccountOutput, "100.0000 CYBER")
+
+    def test_9_delegateStake(self):
+        self.cleos.exec("create", "account", "cyber", "clara", self.wallet.createKeys("clara test key"))
+        self.cleos.exec("push", "action", "cyber.token", "issue", "[clara, \"300.0000 CYBER\", \"\"]", "-p", "cyber@active")
+        self.cleos.exec("system", "stake", "clara", "200.0000 CYBER")
+
+        self.cleos.exec("system", "delegatebw", "clara", "alice", "80.0000 CYBER")
+
+        getAliceAccountOutput = self.cleos.exec("get", "account", "alice")
+        self.verifier.verifyAccountLiquidBalance(getAliceAccountOutput, "600.0000 CYBER")
+        self.verifier.verifyAccountStakeBalance(getAliceAccountOutput, "400.0000 CYBER")
+        self.verifier.verifyAccountOwnedBalance(getAliceAccountOutput, "300.0000 CYBER")
+        self.verifier.verifyAccountProvidedBalance(getAliceAccountOutput, "100.0000 CYBER")
+        self.verifier.verifyAccountReceivedBalance(getAliceAccountOutput, "80.0000 CYBER")
+        self.verifier.verifyAccountEffectiveBalance(getAliceAccountOutput, "380.0000 CYBER")
+        self.verifier.verifyAccountTotalBalance(getAliceAccountOutput, "980.0000 CYBER")
 
 if __name__ == '__main__':
     WalletTestSuite().execute()
