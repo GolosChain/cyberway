@@ -48,5 +48,17 @@ class CleosWithWalletTest(WalletTestCase):
         getAccountOutput = self.cleos.exec("get", "account", "alice")
         self.verifier.verifyAccountLiquidBalance(getAccountOutput,  "1000.0000 CYBER")
         self.verifier.verifyAccountTotalBalance(getAccountOutput,  "1000.0000 CYBER")
+
+    def test_6_createStake(self):
+        self.verifier.verifyStakeCreated(self.cleos.exec("push", "action", "cyber.stake", "create", "[\"4,CYBER\", [20, 16, 13], 30, 50, 0]", "-p", "cyber@active"), "4,CYBER")
+
+    def test_7_stakeTokens(self):
+        self.verifier.verifyTokensStaked(self.cleos.exec("system", "stake", "alice", "400.0000 CYBER"), "alice", "400.0000 CYBER")
+
+        getAccountOutput = self.cleos.exec("get", "account", "alice")
+        self.verifier.verifyAccountStakeBalance(getAccountOutput, "400.0000 CYBER")
+        self.verifier.verifyAccountLiquidBalance(getAccountOutput, "600.0000 CYBER")
+        self.verifier.verifyAccountTotalBalance(getAccountOutput, "1000.0000 CYBER")
+
 if __name__ == '__main__':
     WalletTestSuite().execute()

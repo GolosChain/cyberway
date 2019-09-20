@@ -64,5 +64,20 @@ class CleosWithWalletVerifier:
 
     def verifyAccountLiquidBalance(self, output, amount):
         self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+liquid:[ ]+" + amount)
+
+    def verifyAccountTotalBalance(self, output, amount):
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+total:[ ]+" + amount)
+
+    def verifyStakeCreated(self, output, symbol):
+        self.testCase.verifyCleosOutputContainsRegex(output, "#[ ]+cyber.stake <= cyber.stake::create[ ]+{\"token_symbol\":\"" + symbol)
+
+    def verifyTokensStaked(self, output, stakeHolder, amount):
+        self.testCase.verifyCleosOutputContainsRegex(output,
+                                                     "#[ ]+cyber.token <= cyber.token::transfer[ ]+{\"from\":\"" + stakeHolder + "\",\"to\":\"cyber.stake\",\"quantity\":\"" + amount + "\",\"memo\":\"\"}")
+        self.testCase.verifyCleosOutputContainsRegex(output,
+                                                     "#[ ]+alice <= cyber.token::transfer[ ]+{\"from\":\"" + stakeHolder + "\",\"to\":\"cyber.stake\",\"quantity\":\"" + amount + "\",\"memo\":\"\"}")
+        self.testCase.verifyCleosOutputContainsRegex(output,
+                                                     "#[ ]+cyber.stake <= cyber.token::transfer[ ]+{\"from\":\"" + stakeHolder + "\",\"to\":\"cyber.stake\",\"quantity\":\"" + amount + "\",\"memo\":\"\"")
+
     def verifyAccountStakeBalance(self, output, amount):
         self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+staked:[ ]+" + amount)
