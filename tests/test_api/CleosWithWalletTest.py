@@ -42,5 +42,11 @@ class CleosWithWalletTest(WalletTestCase):
         self.verifier.verifyAccountCreated(self.cleos.exec("create", "account", "cyber", "alice", testKey))
         self.verifier.verifyGetAccount(self.cleos.exec("get", "account", "alice"), testKey)
 
+    def test_5_issueTokens(self):
+        self.verifier.verifyTokenIssued(self.cleos.exec("push", "action", "cyber.token", "issue", "[alice, \"1000.0000 CYBER\", \"\"]", "-p", "cyber@active"), "alice",  "1000.0000 CYBER")
+
+        getAccountOutput = self.cleos.exec("get", "account", "alice")
+        self.verifier.verifyAccountLiquidBalance(getAccountOutput,  "1000.0000 CYBER")
+        self.verifier.verifyAccountTotalBalance(getAccountOutput,  "1000.0000 CYBER")
 if __name__ == '__main__':
     WalletTestSuite().execute()

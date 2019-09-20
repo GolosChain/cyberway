@@ -56,6 +56,11 @@ class CleosWithWalletVerifier:
         self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+effective:[ ]+0.0000 CYBER")
         self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+total:[ ]+0.0000 CYBER")
 
+    def verifyTokenIssued(self, output, receiver, amount):
+        self.testCase.verifyCleosOutputContainsRegex(output, "#[ ]+cyber.token <= cyber.token::issue[ ]+{\"to\":\"" + receiver + "\",\"quantity\":\"" + amount + "\",\"memo\":\"\"}")
+        self.testCase.verifyCleosOutputContainsRegex(output, "#[ ]+cyber.token <= cyber.token::transfer[ ]+{\"from\":\"cyber\",\"to\":\"" + receiver + "\",\"quantity\":\"" + amount + "\",\"memo\":\"\"}")
+        self.testCase.verifyCleosOutputContainsRegex(output, "#[ ]+cyber <= cyber.token::transfer[ ]+{\"from\":\"cyber\",\"to\":\"" + receiver + "\",\"quantity\":\"" + amount + "\",\"memo\":\"\"}")
+        self.testCase.verifyCleosOutputContainsRegex(output, "#[ ]+alice <= cyber.token::transfer[ ]+{\"from\":\"cyber\",\"to\":\"" + receiver + "\",\"quantity\":\"" + amount + "\",\"memo\":\"\"}")
 
     def verifyAccountLiquidBalance(self, output, amount):
         self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+liquid:[ ]+" + amount)
