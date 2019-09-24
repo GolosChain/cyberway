@@ -1764,8 +1764,6 @@ BOOST_FIXTURE_TEST_CASE( getcode_checks, TESTER ) try {
 } FC_LOG_AND_RETHROW()
 
 
-// TODO: restore net_usage_tests
-#if 0
 BOOST_FIXTURE_TEST_CASE(net_usage_tests, tester ) try {
    int count = 0;
    auto check = [&](int coderepeat, int max_net_usage)-> bool {
@@ -1813,10 +1811,11 @@ BOOST_FIXTURE_TEST_CASE(net_usage_tests, tester ) try {
    };
    BOOST_REQUIRE_EQUAL(true, check(1024, 0)); // default behavior
    BOOST_REQUIRE_EQUAL(false, check(1024, 100)); // transaction max_net_usage too small
-   BOOST_REQUIRE_EQUAL(false, check(10240, 0)); // larger than global maximum
+   BOOST_REQUIRE_EQUAL(false, check(1024000, 0)); // larger than global maximum
 
 } FC_LOG_AND_RETHROW()
 
+#if 0
 BOOST_FIXTURE_TEST_CASE(weighted_net_usage_tests, tester ) try {
    account_name account = N(f_tests);
    account_name acc2 = N(acc2);
