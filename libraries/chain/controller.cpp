@@ -1394,25 +1394,6 @@ struct controller_impl {
       } );
    }
 
-   bool has_bad_transaction(const signed_block_ptr& block) const {
-      // TODO: Remove after network recovering
-
-      if (block->block_num() < 553022 || block->block_num() > 563023) {
-         return false;
-      }
-
-      for (auto& receipt: block->transactions) {
-         if( receipt.trx.contains<transaction_id_type>() &&
-            receipt.status == transaction_receipt_header::soft_fail &&
-            receipt.trx.get<transaction_id_type>() == transaction_id_type("b98c90c35804a78f78f0ad1ab08434123afbabd413d1981ffb5dec540373cf51")
-         ) {
-            return true;
-         }
-      }
-
-      return false;
-   }
-
    void push_block( std::future<block_state_ptr>& block_state_future ) {
       controller::block_status s = controller::block_status::complete;
       EOS_ASSERT(!pending, block_validate_exception, "it is not valid to push a block when there is a pending block");
@@ -1423,10 +1404,6 @@ struct controller_impl {
       try {
          block_state_ptr new_header_state = block_state_future.get();
          auto& b = new_header_state->block;
-         if (has_bad_transaction(b)) {
-            // TODO: Remove after network recovering
-            return;
-         }
 
          emit( self.pre_accepted_block, b );
 
