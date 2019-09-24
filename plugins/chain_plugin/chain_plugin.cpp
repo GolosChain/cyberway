@@ -429,8 +429,11 @@ void chain_plugin::set_program_options(options_description& cli, options_descrip
          ("chaindb_sys_name", bpo::value<string>()->default_value("_CYBERWAY_"),
           "Prefix for database names")
          ("genesis-data", bpo::value<bfs::path>(),
-             "The location of the Genesis state file (absolute path or relative to the current directory)")
-         ("trusted-producer", bpo::value<vector<string>>()->composing(), "Indicate a producer whose blocks headers signed by it will be fully validated, but transactions in those validated blocks will be trusted.")
+          "The location of the Genesis state file (absolute path or relative to the current directory)")
+         ("trusted-producer", bpo::value<vector<string>>()->composing(),
+          "Indicate a producer whose blocks headers signed by it will be fully validated, but transactions in those validated blocks will be trusted.")
+         ("skip-bad-blocks-check", bpo::bool_switch()->default_value(false),
+          "skip checking on bad blocks from MainNet, useful for TestNets")
          ;
 
 // TODO: rate limiting
@@ -851,6 +854,10 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       my->chain.emplace( *my->chain_config );
       my->chain_id.emplace( my->chain->get_chain_id());
       std::cout << "chain_id: " << my->chain_id->str() << std::endl;
+
+      if ( options.count("skip-bad-blocks-check") ) {
+         my->chain->skip_bad_blocks_check();
+      }
 
       // set up method providers
       my->get_block_by_number_provider = app().get_method<methods::get_block_by_number>().register_provider(

@@ -169,6 +169,7 @@ struct controller_impl {
    bool                           trusted_producer_light_validation = false;
    uint32_t                       snapshot_head_block = 0;
    boost::asio::thread_pool       thread_pool;
+   bool                           skip_bad_blocks_check = false;
 
    typedef pair<scope_name,action_name>                   handler_key;
    map< account_name, map<handler_key, apply_handler> >   apply_handlers;
@@ -861,6 +862,10 @@ struct controller_impl {
 //    }
 
    bool is_softfail_transaction( const transaction_trace& trace ) const {
+       if (skip_bad_blocks_check) {
+           return false;
+       }
+
        struct soft_fail_block {
            block_id_type block_id;
            fc::flat_set<transaction_id_type> trx_ids;
@@ -1466,20 +1471,24 @@ struct controller_impl {
       } FC_LOG_AND_RETHROW( )
    }
 
-   struct lost_transaction final {
-       transaction_id_type id;
-       std::string data;
-   };
-
-   struct lost_block_transaction final {
-       block_id_type id;
-       std::vector<lost_transaction> transactions;
-   };
-
    void prepare_lost_transactions(const block_state_ptr& head) {
+       if (skip_bad_blocks_check) {
+           return;
+       }
+
        // https://github.com/cyberway/cyberway/issues/1094
 
        // Transactions from this methods will be rollbacks in prepare_block_with_bad_receipt()
+
+       struct lost_transaction final {
+           transaction_id_type id;
+           std::string data;
+       };
+
+       struct lost_block_transaction final {
+           block_id_type id;
+           std::vector<lost_transaction> transactions;
+       };
 
        static fc::flat_map<uint32_t, lost_block_transaction> blocks_with_lost_trxs = {
            { uint32_t(189001), {
@@ -1530,15 +1539,19 @@ struct controller_impl {
        }
    }
 
-   struct bad_receipt_block final {
-       block_id_type id;
-       size_t transaction_limit = 10240;
-   };
-
    void prepare_block_with_bad_receipt(const block_state_ptr& head, controller::block_status s) {
+       if (skip_bad_blocks_check) {
+           return;
+       }
+
        // https://github.com/cyberway/cyberway/issues/1094
 
        // This method create a pending block with transaction from block with bad receipt and rollback it
+
+       struct bad_receipt_block final {
+           block_id_type id;
+           size_t transaction_limit = 10240;
+       };
 
        static fc::flat_map<uint32_t, bad_receipt_block> blocks_with_bad_receipt = {
            { uint32_t(121492), { block_id_type("0001da94bc481aea6ea437e20cc8e0460fb3a7cee597b95569dc536cd71e9c8a") } },
@@ -2359,6 +2372,10 @@ bool controller::is_known_unexpired_transaction( const transaction_id_type& id) 
 
 void controller::set_subjective_cpu_leeway(fc::microseconds leeway) {
    my->subjective_cpu_leeway = leeway;
+}
+
+void controller::skip_bad_blocks_check() {
+   my->skip_bad_blocks_check = true;
 }
 
 } } /// eosio::chain
