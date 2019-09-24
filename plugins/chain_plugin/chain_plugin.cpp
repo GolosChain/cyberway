@@ -855,7 +855,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       my->chain_id.emplace( my->chain->get_chain_id());
       std::cout << "chain_id: " << my->chain_id->str() << std::endl;
 
-      if ( options.count("skip-bad-blocks-check") ) {
+      if ( options.at("skip-bad-blocks-check").as<bool>() ) {
          my->chain->skip_bad_blocks_check();
       }
 
