@@ -62,8 +62,9 @@ namespace eosio { namespace chain {
 
          static const uint64_t npos = std::numeric_limits<uint64_t>::max();
 
+         static fc::path repair_log(const fc::path& data_dir, uint32_t truncate_at_block = 0);
+
          // TODO: removed by CyberWay
-         //static fc::path repair_log( const fc::path& data_dir, uint32_t truncate_at_block = 0 );
          //static genesis_state extract_genesis_state( const fc::path& data_dir );
 
       private:

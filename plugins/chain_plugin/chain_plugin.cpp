@@ -675,27 +675,27 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          clear_directory_contents( my->chain_config->state_dir );
          fc::remove_all( my->blocks_dir );
       } else if( options.at( "hard-replay-blockchain" ).as<bool>()) {
-         ilog( "--hard-replay-blockchain doesn't work now");
-//         ilog( "Hard replay requested: deleting state database" );
-//         my->drop_db = true;
-//         clear_directory_contents( my->chain_config->state_dir );
-//         auto backup_dir = block_log::repair_log( my->blocks_dir, options.at( "truncate-at-block" ).as<uint32_t>());
-//         if( fc::exists( backup_dir / config::reversible_blocks_dir_name ) ||
-//             options.at( "fix-reversible-blocks" ).as<bool>()) {
-//            // Do not try to recover reversible blocks if the directory does not exist, unless the option was explicitly provided.
-//            if( !recover_reversible_blocks( backup_dir / config::reversible_blocks_dir_name,
-//                                            my->chain_config->reversible_cache_size,
-//                                            my->chain_config->blocks_dir / config::reversible_blocks_dir_name,
-//                                            options.at( "truncate-at-block" ).as<uint32_t>())) {
-//               ilog( "Reversible blocks database was not corrupted. Copying from backup to blocks directory." );
-//               fc::copy( backup_dir / config::reversible_blocks_dir_name,
-//                         my->chain_config->blocks_dir / config::reversible_blocks_dir_name );
+         ilog( "Hard replay requested: deleting state database" );
+         my->drop_db = true;
+         clear_directory_contents( my->chain_config->state_dir );
+         auto backup_dir = block_log::repair_log( my->blocks_dir, options.at( "truncate-at-block" ).as<uint32_t>());
+         if( fc::exists( backup_dir / config::reversible_blocks_dir_name ) ||
+             options.at( "fix-reversible-blocks" ).as<bool>()) {
+            // Do not try to recover reversible blocks if the directory does not exist, unless the option was explicitly provided.
+            if( !recover_reversible_blocks( backup_dir / config::reversible_blocks_dir_name,
+                                            my->chain_config->reversible_cache_size,
+                                            my->chain_config->blocks_dir / config::reversible_blocks_dir_name,
+                                            options.at( "truncate-at-block" ).as<uint32_t>())) {
+               ilog( "Reversible blocks database was not corrupted. Copying from backup to blocks directory." );
+               fc::copy( backup_dir / config::reversible_blocks_dir_name,
+                         my->chain_config->blocks_dir / config::reversible_blocks_dir_name );
+// TODO: Removed by CyberWay
 //               fc::copy( backup_dir / config::reversible_blocks_dir_name / "shared_memory.bin",
 //                         my->chain_config->blocks_dir / config::reversible_blocks_dir_name / "shared_memory.bin" );
 //               fc::copy( backup_dir / config::reversible_blocks_dir_name / "shared_memory.meta",
 //                         my->chain_config->blocks_dir / config::reversible_blocks_dir_name / "shared_memory.meta" );
-//            }
-//         }
+            }
+         }
       } else if( options.at( "replay-blockchain" ).as<bool>()) {
          ilog( "Replay requested: deleting state database" );
          if( options.at( "truncate-at-block" ).as<uint32_t>() > 0 )
