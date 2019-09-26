@@ -35,5 +35,6 @@ class Nodeos:
 
 
     def stop(self):
+        self.nodeos.kill()
         self.nodeos.wait()
         self.clearWorkingDir()

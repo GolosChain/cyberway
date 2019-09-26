@@ -7,6 +7,7 @@ from testing_suite.Cleos import Cleos
 from testing_suite.Wallet import Wallet
 from testing_suite.ApiClient import ApiClient
 from testing_suite.ContractsManager import ContractsManager
+import atexit
 
 class NodeosApiTest:
     instance = None
@@ -32,6 +33,7 @@ class NodeosApiTest:
             return
 
         self.nodeos = Nodeos(args.nodeos, args.mongo, args.nodeosOutput)
+        atexit.register(self.nodeos.stop)
 
         if len(args.contracts) % 2 != 0:
             raise NameError("Wrong --contract-dir parameter format: must be --contract dir <name> <path> [<name> <path>]")
@@ -49,8 +51,6 @@ class NodeosApiTest:
         sys.argv = [sys.argv[0]]
         sys.argv.extend(args)
         unittest.main()
-        self.nodeos.stop()
-
 
 class CleosTestSuite(NodeosApiTest):
     def __init__(self):
