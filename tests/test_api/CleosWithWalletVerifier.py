@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 
 class CleosWithWalletVerifier:
     def __init__(self, testCase):
@@ -51,7 +52,7 @@ class CleosWithWalletVerifier:
         self.verifyAccountStakeBalance(output, "0.0000 CYBER")
         self.verifyAccountReceivedBalance(output, "0.0000 CYBER")
         self.verifyAccountProvidedBalance(output, "0.0000 CYBER")
-        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+unstaking:[ ]+0.0000 CYBER")
+        self.verifyAccountUnstakingBalance(output, "0.0000 CYBER")
         self.verifyAccountOwnedBalance(output, "0.0000 CYBER")
         self.verifyAccountEffectiveBalance(output, "0.0000 CYBER")
         self.verifyAccountTotalBalance(output, "0.0000 CYBER")
@@ -70,6 +71,9 @@ class CleosWithWalletVerifier:
 
     def verifyAccountEffectiveBalance(self, output, amount):
         self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+effective:[ ]+" + amount)
+
+    def verifyAccountUnstakingBalance(self, output, amount):
+        self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+unstaking:[ ]+" + amount)
 
     def verifyAccountOwnedBalance(self, output, amount):
         self.testCase.verifyCleosOutputContainsRegex(output, "[ ]+owned:[ ]+" + amount)
@@ -104,3 +108,67 @@ class CleosWithWalletVerifier:
         self.testCase.verifyCleosOutputContainsRegex(output,
                                                      "#[ ]+cyber.stake <= cyber.token::transfer[ ]+{\"from\":\"" + stakeHolder + "\",\"to\":\"cyber.stake\",\"quantity\":\"" + amount + "\",\"memo\":\"\"")
 
+
+    def verifyStakeEnabled(self, output):
+        self.testCase.verifyCleosOutputContainsRegex(output, "#[ ]+cyber.stake <= cyber.stake::enable[ ]+{\"token_symbol\":\"4,CYBER\"}")
+
+    def verifyResoursesStakeEndowment(self, output):
+        effective = self.getEffectiveBalance(output)
+
+        memoryStaked = self.getResourceStaked(output, "memory")
+        storageStaked = self.getResourceStaked(output, "storage")
+        netStaked = self.getResourceStaked(output, "net bandwidth")
+        cpuStaked = self.getResourceStaked(output, "cpu bandwidth")
+
+        received = self.getReceivedBalance(output)
+
+        memoryReceived = self.getResourceReceived(output, "memory")
+        storageReceived = self.getResourceReceived(output, "storage")
+        netReceived = self.getResourceReceived(output, "net bandwidth")
+        cpuReceived = self.getResourceReceived(output, "cpu bandwidth")
+
+        resourcesReceived = memoryReceived + storageReceived + netReceived + cpuReceived
+        resourcesStaked = memoryStaked + storageStaked + netStaked + cpuStaked
+        resourcesEffective = resourcesStaked + resourcesReceived
+
+        self.testCase.assertTrue(effective - resourcesEffective <= 1)
+        self.testCase.assertTrue(received - resourcesReceived <= 1)
+
+    def getEffectiveBalance(self, output):
+        return self.getBalance(output, "effective")
+
+    def getReceivedBalance(self, output):
+        return self.getBalance(output, "recieved")
+
+    def getBalance(self, output, type):
+        balances = False
+        for line in output:
+            if balances == False and re.match("CYBER[ ]+balances:", line):
+                balances = True
+
+            if balances == True and re.match("[ ]+" + type + ":[ ]+[0-9.]+ CYBER", line) :
+                return self.getBalanceValue(line)
+
+    def getResourceStaked(self, output, resource):
+        return self.getResourceCost(output, resource, "staked")
+
+    def getResourceReceived(self, output, resource):
+        return self.getResourceCost(output, resource, "delegated")
+
+    def getResourceCost(self, output, resource, type):
+        resourceFound = False
+        for line in output:
+            if resourceFound == False and re.match(resource + ":", line):
+                resourceFound = True
+
+            if resourceFound == True and re.match("[ ]+" + type + ":[ ]+[0-9.]+ CYBER", line) :
+                return self.getBalanceValue(line)
+
+    def getBalanceValue(self, string):
+        value = re.findall("[0-9.]+", string)[0]
+
+        return int(re.sub('\.', '', value))
+
+    def verifyResoursesStakeUsage(self, output):
+        #implement stake usage calculation in the api
+        return

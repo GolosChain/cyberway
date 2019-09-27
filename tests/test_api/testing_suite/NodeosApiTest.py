@@ -26,12 +26,12 @@ class NodeosApiTest:
 
 
     def prepareExecutables(self):
-        print("Starting a nodeos instance...")
         args, unknown = self.argParser.parse_known_args()
 
         if args.nodeos == None:
             return
 
+        print("Starting a nodeos instance...")
         self.nodeos = Nodeos(args.nodeos, args.mongo, args.nodeosOutput)
         atexit.register(self.nodeos.stop)
 
