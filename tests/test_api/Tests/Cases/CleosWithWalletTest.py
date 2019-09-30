@@ -105,7 +105,7 @@ class CleosWithWalletTest(WalletTestCase):
         verifyAccountTotalBalance(getAliceAccountOutput, "980.0000 CYBER")
 
     def test_10_unstakeTokens(self):
-        self.cleos.exec("push", "action", "cyber.stake", "withdraw", "[\"alice\", \"100.0000 CYBER\"]", "-p", "alice")
+        verifyTokenUnstaked(self.cleos.exec("push", "action", "cyber.stake", "withdraw", "[\"alice\", \"100.0000 CYBER\"]", "-p", "alice"), "alice", "100.0000 CYBER")
 
         getAliceAccountOutput = self.cleos.exec("get", "account", "alice")
         verifyAccountLiquidBalance(getAliceAccountOutput, "700.0000 CYBER")
@@ -126,6 +126,47 @@ class CleosWithWalletTest(WalletTestCase):
         verifyResoursesStakeEndowment(output)
         verifyResoursesStakeUsage(output)
 
-    
+    def test_13_stakeForAnotherAccount(self):
+        verifyTokensStaked(self.cleos.exec("system", "stake", "alice", "200.0000 CYBER", "--beneficiary", "bob"), "alice", "200.0000 CYBER", "bob")
+
+        getAliceAccountOutput = self.cleos.exec("get", "account", "alice")
+
+        verifyAccountLiquidBalance(getAliceAccountOutput, "500.0000 CYBER")
+        verifyAccountStakeBalance(getAliceAccountOutput, "300.0000 CYBER")
+        verifyAccountProvidedBalance(getAliceAccountOutput, "100.0000 CYBER")
+        verifyAccountReceivedBalance(getAliceAccountOutput, "80.0000 CYBER")
+        verifyAccountEffectiveBalance(getAliceAccountOutput, "280.0000 CYBER")
+        verifyAccountTotalBalance(getAliceAccountOutput, "780.0000 CYBER")
+
+        getBobAccountOutput = self.cleos.exec("get", "account", "bob")
+        verifyAccountLiquidBalance(getBobAccountOutput, "0.0000 CYBER")
+        verifyAccountStakeBalance(getBobAccountOutput, "200.0000 CYBER")
+        verifyAccountProvidedBalance(getBobAccountOutput, "0.0000 CYBER")
+        verifyAccountReceivedBalance(getBobAccountOutput, "100.0000 CYBER")
+        verifyAccountEffectiveBalance(getBobAccountOutput, "300.0000 CYBER")
+        verifyAccountTotalBalance(getBobAccountOutput, "300.0000 CYBER")
+
+
+    def test_14_transferBandwitdth(self):
+        verifyStakeTransfered(self.cleos.exec("system", "delegatebw", "alice", "bob", "100.0000 CYBER", "--transfer"), "alice", "bob", "100.0000 CYBER")
+
+        getAliceAccountOutput = self.cleos.exec("get", "account", "alice")
+
+        verifyAccountLiquidBalance(getAliceAccountOutput, "500.0000 CYBER")
+        verifyAccountStakeBalance(getAliceAccountOutput, "200.0000 CYBER")
+        verifyAccountProvidedBalance(getAliceAccountOutput, "100.0000 CYBER")
+        verifyAccountReceivedBalance(getAliceAccountOutput, "80.0000 CYBER")
+        verifyAccountEffectiveBalance(getAliceAccountOutput, "180.0000 CYBER")
+        verifyAccountTotalBalance(getAliceAccountOutput, "680.0000 CYBER")
+
+        getBobAccountOutput = self.cleos.exec("get", "account", "bob")
+        verifyAccountLiquidBalance(getBobAccountOutput, "0.0000 CYBER")
+        verifyAccountStakeBalance(getBobAccountOutput, "300.0000 CYBER")
+        verifyAccountProvidedBalance(getBobAccountOutput, "0.0000 CYBER")
+        verifyAccountReceivedBalance(getBobAccountOutput, "100.0000 CYBER")
+        verifyAccountEffectiveBalance(getBobAccountOutput, "400.0000 CYBER")
+        verifyAccountTotalBalance(getBobAccountOutput, "400.0000 CYBER")
+
+
 if __name__ == '__main__':
     WalletTestSuite().execute()
