@@ -1,4 +1,4 @@
-from Tests.CasesVerification.OutputBaseVerification import *
+from Tests.Verificators.OutputBaseVerificator import *
 
 def verifyAccountCreated(output):
     verifyOutputContains(output, "cyber <= cyber::newaccount")

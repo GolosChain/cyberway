@@ -2,9 +2,8 @@ from Suite.Framework.WalletTestCase import WalletTestCase
 from Suite.Framework.NodeosApiTest import WalletTestSuite
 from abc import abstractmethod
 
-from Tests.CasesVerification.TransactionExecutionVerification import *
-from Tests.CasesVerification.GetAccountVerification import *
-
+from Tests.Verificators.TransactionExecutionVerificator import *
+from Tests.Verificators.GetAccountVerificator import *
 
 class CleosWithWalletTest(WalletTestCase):
     @abstractmethod
