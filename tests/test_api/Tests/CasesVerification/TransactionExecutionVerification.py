@@ -1,4 +1,4 @@
-from CleosOutputVerification import *
+from Tests.CasesVerification.OutputBaseVerification import *
 
 def verifyAccountCreated(output):
     verifyOutputContains(output, "cyber <= cyber::newaccount")

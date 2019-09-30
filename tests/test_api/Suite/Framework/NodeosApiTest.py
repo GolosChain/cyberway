@@ -2,11 +2,11 @@ import sys
 import unittest
 import argparse
 
-from testing_suite.Nodeos import Nodeos
-from testing_suite.Cleos import Cleos
-from testing_suite.Wallet import Wallet
-from testing_suite.ApiClient import ApiClient
-from testing_suite.ContractsManager import ContractsManager
+from Suite.Tools.Nodeos import Nodeos
+from Suite.Tools.Cleos import Cleos
+from Suite.Tools.Wallet import Wallet
+from Suite.Tools.ApiClient import ApiClient
+from Suite.Tools.ContractsManager import ContractsManager
 import atexit
 
 class NodeosApiTest:

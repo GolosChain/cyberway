@@ -1,9 +1,10 @@
-from testing_suite.WalletTestCase import WalletTestCase
-from testing_suite.NodeosApiTest import WalletTestSuite
+from Suite.Framework.WalletTestCase import WalletTestCase
+from Suite.Framework.NodeosApiTest import WalletTestSuite
 from abc import abstractmethod
 
-from GetAccountTestVerifier import *
-from TransactionExecutionVerifier import *
+from Tests.CasesVerification.TransactionExecutionVerification import *
+from Tests.CasesVerification.GetAccountVerification import *
+
 
 class CleosWithWalletTest(WalletTestCase):
     @abstractmethod
@@ -126,5 +127,6 @@ class CleosWithWalletTest(WalletTestCase):
         verifyResoursesStakeEndowment(output)
         verifyResoursesStakeUsage(output)
 
+    
 if __name__ == '__main__':
     WalletTestSuite().execute()

@@ -1,7 +1,7 @@
 import unittest
 from abc import abstractmethod
 
-from testing_suite.NodeosApiTest import NodeosApiTest
+from Suite.Framework.NodeosApiTest import NodeosApiTest
 
 class NodeosApiTestCase(unittest.TestCase):
     def setUp(self) -> None:

@@ -1,6 +1,6 @@
-from testing_suite.NodeosApiTestCase import NodeosApiTestCase
+from Suite.Framework.NodeosApiTestCase import NodeosApiTestCase
 from abc import abstractmethod
-from testing_suite.NodeosApiTest import WalletTestSuite
+from Suite.Framework.NodeosApiTest import WalletTestSuite
 
 class WalletTestCase(NodeosApiTestCase):
     @abstractmethod

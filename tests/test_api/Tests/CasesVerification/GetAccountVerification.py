@@ -1,4 +1,4 @@
-from CleosOutputVerification import *
+from Tests.CasesVerification.OutputBaseVerification import *
 
 import unittest
 import hashlib
