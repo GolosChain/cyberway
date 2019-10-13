@@ -13,13 +13,21 @@ namespace cyberway { namespace chaindb {
 
     mongodb_driver::~mongodb_driver() = default;
 
-    void mongodb_driver::enable_bad_update() const {
+    void mongodb_driver::enable_rev_bad_update() const {
         // https://github.com/cyberway/cyberway/issues/1094
         NOT_SUPPORTED;
     }
 
-    void mongodb_driver::disable_bad_update() const {
+    void mongodb_driver::disable_rev_bad_update() const {
         // https://github.com/cyberway/cyberway/issues/1094
+        NOT_SUPPORTED;
+    }
+
+    void mongodb_driver::enable_undo_restore() const {
+        NOT_SUPPORTED;
+    }
+
+    void mongodb_driver::disable_undo_restore() const {
         NOT_SUPPORTED;
     }
 

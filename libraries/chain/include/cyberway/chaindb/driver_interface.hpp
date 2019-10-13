@@ -18,8 +18,11 @@ namespace cyberway { namespace chaindb {
     public:
         virtual ~driver_interface();
 
-        virtual void enable_bad_update() const = 0;
-        virtual void disable_bad_update() const = 0;
+        virtual void enable_rev_bad_update() const = 0;
+        virtual void disable_rev_bad_update() const = 0;
+
+        virtual void enable_undo_restore() const = 0;
+        virtual void disable_undo_restore() const = 0;
 
         virtual void drop_db() const = 0;
 

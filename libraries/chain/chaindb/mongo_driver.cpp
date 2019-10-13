@@ -26,13 +26,10 @@ namespace cyberway { namespace chaindb {
     using bsoncxx::builder::basic::sub_document;
     using bsoncxx::builder::basic::kvp;
 
-    using mongocxx::bulk_write;
-    using mongocxx::model::insert_one;
-    using mongocxx::model::replace_one;
-    using mongocxx::model::update_one;
-    using mongocxx::model::delete_one;
     using mongocxx::database;
     using mongocxx::collection;
+
+    namespace model   = mongocxx::model;
     namespace options = mongocxx::options;
 
     using document_view = bsoncxx::document::view;
@@ -459,6 +456,8 @@ namespace cyberway { namespace chaindb {
         string sys_code_name_;
         mongocxx::client mongo_conn_;
         code_cursor_map code_cursor_map_;
+        bool skip_op_cnt_checking_ = false;
+
         // https://github.com/cyberway/cyberway/issues/1094
         bool update_pk_with_revision_ = false;
 
@@ -768,7 +767,7 @@ namespace cyberway { namespace chaindb {
         }
 
         collection get_db_table(const table_info& table) const {
-            return mongo_conn_.database(get_code_name(sys_code_name_, table.code)).collection(get_table_name(table));
+            return get_db_table(table.code, table.table_name());
         }
 
     private:
@@ -777,8 +776,8 @@ namespace cyberway { namespace chaindb {
             return instance;
         }
 
-        collection get_undo_db_table() const {
-            return mongo_conn_.database(get_code_name(sys_code_name_, account_name())).collection(names::undo_table);
+        collection get_db_table(const account_name_t code, const table_name_t table) const {
+            return mongo_conn_.database(get_code_name(sys_code_name_, code)).collection(get_table_name(table));
         }
 
         cursor_t get_next_cursor_id(code_cursor_map::iterator itr) {
@@ -824,59 +823,52 @@ namespace cyberway { namespace chaindb {
 
         class write_ctx_t_ final {
             struct bulk_info_t_ final {
-                bulk_write bulk;
-                int op_cnt = 0;
-
-                bulk_info_t_(bulk_write b)
-                : bulk(std::move(b)) {
-                }
-
-                template <typename... Args> void append(Args&&... args) {
-                    op_cnt++;
-                    bulk.append(std::forward<Args>(args)...);
-                }
-            }; // struct bulk_info_t_;
+                document pk;
+                document data;
+            }; // struct bulk_info_t_
 
             struct bulk_group_t_ final {
-                bulk_info_t_* remove = nullptr;
-                bulk_info_t_* update = nullptr;
-                bulk_info_t_* insert = nullptr;
+                const account_name_t code  = account_name_t();
+                const table_name_t   table = table_name_t();
+
+                std::deque<bulk_info_t_> remove;
+                std::deque<bulk_info_t_> update;
+                std::deque<bulk_info_t_> revision;
+                std::deque<bulk_info_t_> insert;
 
                 bulk_group_t_() = default;
 
-                bulk_group_t_(write_ctx_t_& ctx, collection& undo_table)
-                : remove(&ctx.create_bulk_info(undo_table)),
-                  update(&ctx.create_bulk_info(undo_table)),
-                  insert(&ctx.create_bulk_info(undo_table)) {
+                bulk_group_t_(const table_info& info)
+                : code(info.code),
+                  table(info.table_name()) {
+                }
+
+                bulk_group_t_(const table_name_t& name)
+                : table(name) {
                 }
             }; // struct bulk_group_t_;
 
         public:
             write_ctx_t_(mongodb_driver_impl& impl)
             : impl_(impl),
-              undo_table_(impl_.get_undo_db_table()),
-              complete_undo_bulk_(*this, undo_table_),
-              prepare_undo_bulk_(*this, undo_table_) {
+              complete_undo_bulk_(N(undo)),
+              prepare_undo_bulk_(N(undo)) {
             }
 
             void start_table(const table_info& table) {
                 auto old_table = table_;
                 table_ = &table;
-                if (BOOST_LIKELY(
-                        old_table != nullptr &&
-                        table.code == old_table->code &&
-                        table.table_name() == old_table->table_name()))
-                    return;
 
-                auto db_table = impl_.get_db_table(table);
-
-                data_bulk_.remove = &create_bulk_info(db_table);
-                data_bulk_.update = &create_bulk_info(db_table);
-                data_bulk_.insert = &create_bulk_info(db_table);
+                if (old_table == nullptr ||
+                    table.code != old_table->code ||
+                    table.table_name() != old_table->table_name()
+                ) {
+                    bulk_list_.emplace_back(table);
+                }
             }
 
             void add_data(const write_operation& op) {
-                append_bulk(build_find_pk_document, build_service_document, data_bulk_, op);
+                append_bulk(build_find_pk_document, build_service_document, bulk_list_.back(), op);
             }
 
             void add_prepare_undo(const write_operation& op) {
@@ -888,57 +880,62 @@ namespace cyberway { namespace chaindb {
             }
 
             void write() {
-                auto itr = bulk_list_.begin();
-                auto etr = bulk_list_.end();
-                for (++itr /* skip complete undo */; etr != itr; ++itr) {
-                    execute_bulk(*itr);
+                execute_bulk(prepare_undo_bulk_);
+
+                for (auto& group: bulk_list_) {
+                    execute_bulk(group);
                 }
-                execute_bulk(bulk_list_.front() /* complete undo */);
+
+                execute_bulk(complete_undo_bulk_);
 
                 CYBERWAY_ASSERT(error_.empty(), driver_duplicate_exception, error_);
             }
 
         private:
             mongodb_driver_impl& impl_;
-            collection undo_table_;
-            std::deque<bulk_info_t_> bulk_list_;
+            std::deque<bulk_group_t_> bulk_list_;
             bulk_group_t_ complete_undo_bulk_;
             bulk_group_t_ prepare_undo_bulk_;
-            bulk_group_t_ data_bulk_;
 
             std::string error_;
             const table_info* table_ = nullptr;
-
-            bulk_info_t_& create_bulk_info(collection& db_table) {
-                static options::bulk_write opts(options::bulk_write().ordered(false));
-                bulk_list_.emplace_back(db_table.create_bulk_write(opts));
-                return bulk_list_.back();
-            }
 
             template <typename BuildFindDocument, typename BuildServiceDocument>
             void append_bulk(
                 BuildFindDocument&& build_find_document, BuildServiceDocument&& build_service_document,
                 bulk_group_t_& group, const write_operation& op
             ) {
-                assert(group.insert && group.update && group.remove);
+                bulk_info_t_& dst = [&]() -> bulk_info_t_& {
+                    switch(op.operation) {
+                        case write_operation::Unknown:
+                        case write_operation::Insert:
+                            return group.insert.emplace_back();
 
-                document data_doc;
-                document pk_doc;
+                        case write_operation::Update:
+                            return group.update.emplace_back();
+
+                        case write_operation::Revision:
+                            return group.revision.emplace_back();
+
+                        case write_operation::Remove:
+                            return group.remove.emplace_back();
+                    }
+                }();
 
                 switch (op.operation) {
                     case write_operation::Insert:
                     case write_operation::Update:
-                        build_document(data_doc, op.object);
+                        build_document(dst.data, op.object);
 
                     case write_operation::Revision:
-                        build_service_document(data_doc, *table_, op.object);
+                        build_service_document(dst.data, *table_, op.object);
 
                     case write_operation::Remove:
-                        build_find_document(pk_doc, *table_, op.object);
+                        build_find_document(dst.pk, *table_, op.object);
 
                         // https://github.com/cyberway/cyberway/issues/1094
                         if (impl_.update_pk_with_revision_ && op.find_revision >= start_revision) {
-                            pk_doc.append(kvp(names::revision_path, op.find_revision));
+                            dst.pk.append(kvp(names::revision_path, op.find_revision));
                         }
                         break;
 
@@ -951,50 +948,61 @@ namespace cyberway { namespace chaindb {
                             ("pk", op.object.pk()));
                         return;
                 }
-
-                switch(op.operation) {
-                    case write_operation::Insert:
-                        group.insert->append(insert_one(data_doc.view()));
-                        break;
-
-                    case write_operation::Update:
-                        group.update->append(replace_one(pk_doc.view(), data_doc.view()));
-                        break;
-
-                    case write_operation::Revision:
-                        group.update->append(update_one(pk_doc.view(), make_document(kvp("$set", data_doc))));
-                        break;
-
-                    case write_operation::Remove:
-                        group.remove->append(delete_one(pk_doc.view()));
-                        break;
-
-                    case write_operation::Unknown:
-                        break;
-                }
             }
 
-            void execute_bulk(bulk_info_t_& info) {
-                if (!info.op_cnt) return;
+            void execute_bulk(bulk_group_t_& group) {
+                static options::bulk_write opts(options::bulk_write().ordered(false));
+                auto remove_bulk = impl_.get_db_table(group.code, group.table).create_bulk_write(opts);
+                int  remove_cnt  = 0;
+                auto update_bulk = impl_.get_db_table(group.code, group.table).create_bulk_write(opts);
+                int  update_cnt  = 0;
+
+                for (auto& src: group.remove) {
+                    remove_bulk.append(model::delete_one(src.pk.view()));
+                    ++remove_cnt;
+                }
+
+                for (auto& src: group.update) {
+                    update_bulk.append(model::replace_one(src.pk.view(), src.data.view()));
+                    ++update_cnt;
+                }
+
+                for (auto& src: group.revision) {
+                    update_bulk.append(model::update_one(
+                        src.pk.view(), make_document(kvp("$set", src.data))));
+                    ++update_cnt;
+                }
+
+                for (auto& src: group.insert) {
+                    update_bulk.append(model::insert_one(src.data.view()));
+                    ++update_cnt;
+                }
+
+                execute_bulk(group, remove_cnt, remove_bulk);
+                execute_bulk(group, update_cnt, update_bulk);
+            }
+
+            void execute_bulk(bulk_group_t_& group, const int op_cnt, mongocxx::bulk_write& bulk) {
+                if (!op_cnt) {
+                    return;
+                }
 
                 // no reasons to do reconnect, exception can happen after writing and it will fail whole writing-process
                 try {
-                    auto res = info.bulk.execute();
-
+                    auto res = bulk.execute();
                     CYBERWAY_ASSERT(res, driver_open_exception,
-                        "MongoDB driver returns empty result of bulk execution");
+                        "MongoDB driver returns empty result on bulk execution");
 
                     CYBERWAY_ASSERT(
-                        impl_.update_pk_with_revision_ ||
-                        res->matched_count()  == info.op_cnt ||
-                        res->inserted_count() == info.op_cnt ||
-                        res->deleted_count()  == info.op_cnt ||
-                        res->modified_count() == info.op_cnt ||
-                        res->upserted_count() == info.op_cnt, driver_open_exception,
-                        "MongoDB driver returns bad result of bulk execution",
-                        ("op_cnt", info.op_cnt)("matched", res->matched_count())
-                        ("inserted", res->inserted_count())("modified", res->modified_count())
-                        ("deleted", res->deleted_count())("upserted", res->upserted_count()));
+                        impl_.skip_op_cnt_checking_ ||
+                        (res->matched_count() + res->inserted_count()) == op_cnt ||
+                        res->deleted_count()  == op_cnt,
+                        driver_open_exception,
+                        "MongoDB driver returns bad result on bulk execution to the table ${table}",
+                        ("table", get_full_table_name(group.code, group.table))
+                            ("op_cnt", op_cnt)("matched", res->matched_count())
+                            ("inserted", res->inserted_count())("modified", res->modified_count())
+                            ("deleted", res->deleted_count())("upserted", res->upserted_count()));
 
                 } catch (const mongocxx::bulk_write_exception& e) {
                     elog("MongoDB error on bulk write: ${code}, ${what}", ("code", e.code().value())("what", e.what()));
@@ -1024,14 +1032,24 @@ namespace cyberway { namespace chaindb {
 
     mongodb_driver::~mongodb_driver() = default;
 
-    void mongodb_driver::enable_bad_update() const {
+    void mongodb_driver::enable_rev_bad_update() const {
         // https://github.com/cyberway/cyberway/issues/1094
         impl_->update_pk_with_revision_ = true;
+        enable_undo_restore();
     }
 
-    void mongodb_driver::disable_bad_update() const {
+    void mongodb_driver::disable_rev_bad_update() const {
         // https://github.com/cyberway/cyberway/issues/1094
         impl_->update_pk_with_revision_ = false;
+        disable_undo_restore();
+    }
+
+    void mongodb_driver::enable_undo_restore() const {
+        impl_->skip_op_cnt_checking_ = true;
+    }
+
+    void mongodb_driver::disable_undo_restore() const {
+        impl_->skip_op_cnt_checking_ = false;
     }
 
     std::vector<table_def> mongodb_driver::db_tables(const account_name& code) const {

@@ -1551,7 +1551,7 @@ struct controller_impl {
            set_revision(head->block_num - 1);
        }
 
-       chaindb.enable_bad_update();
+       chaindb.enable_rev_bad_update();
 
        auto& b = head->block;
        auto  b_time = block_timestamp_type(b->timestamp.to_time_point() - fc::seconds(3));
@@ -1588,7 +1588,7 @@ struct controller_impl {
        chaindb.apply_all_changes();
        pending.reset();
        chaindb.apply_all_changes();
-       chaindb.disable_bad_update();
+       chaindb.disable_rev_bad_update();
 
        if (skip_sessions) {
            set_revision(head->block_num);
