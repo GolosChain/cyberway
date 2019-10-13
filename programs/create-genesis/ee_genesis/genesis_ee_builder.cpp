@@ -119,12 +119,25 @@ void genesis_ee_builder::process_comments() {
     const auto& comments = maps_.get_index<comment_header_index, by_hash>();
 
     comment_operation op;
+    int ox = 0;
     while (read_operation(dump_comments, op)) {
         uint64_t parent_hash = 0;
         if (op.parent_author.size() != 0) {
             auto parent = std::string(op.parent_author) + "/" + op.parent_permlink;
             parent_hash = fc::hash64(parent.c_str(), parent.length());
         }
+        auto secse = op.timestamp.sec_since_epoch();
+if (secse < 1514764800) {
+    continue;
+}
+
+if (secse > 1527811199) {
+    break;
+}
+ox++;
+//if (ox > 100000) {
+//    break;
+//}
 
         auto fill_optionals = [&](auto& c) {
             if (op.title.size()) {
@@ -162,6 +175,10 @@ void genesis_ee_builder::process_comments() {
                 }
             });
             continue;
+        }
+
+        if (op.offset % 1000000) {
+            wlog(std::to_string(op.offset) + " - read messages");
         }
 
         maps_.create<comment_header>([&](auto& c) {
@@ -214,14 +231,25 @@ void genesis_ee_builder::process_votes() {
     const auto& votes = maps_.get_index<vote_header_index, by_hash_voter>();
 
     vote_operation op;
+    int c = 0;
+    int ox = 0;
     while (read_operation(dump_votes, op)) {
+        auto secse = op.timestamp.sec_since_epoch();
+
+if (secse < 1514764800) {
+    continue;
+}
+ox++;
+//if (ox > 100000) {
+//    break;
+//}
         auto vote = votes.find(std::make_tuple(op.hash, op.voter));
         if (vote != votes.end()) {
             maps_.modify(*vote, [&](auto& v) {
                 v.op_num = op.num;
-                v.weight = op.weight;
-                v.rshares = op.rshares;
-                v.timestamp = op.timestamp;
+                v.updated = op.timestamp;
+                v.rshares_end = op.rshares;
+                v.weight_end = op.weight;
             });
             continue;
         }
@@ -230,10 +258,21 @@ void genesis_ee_builder::process_votes() {
             v.hash = op.hash;
             v.voter = op.voter;
             v.op_num = op.num;
-            v.weight = op.weight;
-            v.rshares = op.rshares;
-            v.timestamp = op.timestamp;
+            v.offset = op.offset;
+            v.created = op.timestamp;
+            v.rshares_start = op.rshares;
+            v.weight_start = op.weight;
+                v.updated = op.timestamp;
+                v.rshares_end = op.rshares;
+                v.weight_end = op.weight;
+            v.vote_effective_vs = op.vote_effective_vs;
+            v.vote_total_vs = op.vote_total_vs;
+            v.vote_total_vs_steem = op.vote_total_vs_steem;
         });
+
+        if (op.offset % 1000000) {
+            wlog(std::to_string(op.offset) + " - read votes");
+        }
     }
 }
 
@@ -422,6 +461,7 @@ void genesis_ee_builder::read_operation_dump(const bfs::path& in_dump_dir) {
     process_comments();
     process_rewards();
     process_votes();
+    return;
     process_reblogs();
     process_delete_reblogs();
     process_transfers();
@@ -443,8 +483,13 @@ void genesis_ee_builder::write_contracts_abis() {
     }
 }
 
-void genesis_ee_builder::build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created) {
-    const auto& vote_idx = maps_.get_index<vote_header_index, by_hash_voter>();
+void genesis_ee_builder::build_votes(uint64_t msg_hash, operation_number msg_created, uint32_t post_created, account_name_type au, std::string perm) {
+    const auto& vote_idx = maps_.get_index<vote_header_index, by_hash>();
+
+    std::ofstream ofs;
+    ofs.open("vote_assets.csv", std::ofstream::app);
+
+    auto prevv = post_created;
 
     auto vote_itr = vote_idx.lower_bound(msg_hash);
     for (; vote_itr != vote_idx.end() && vote_itr->hash == msg_hash; ++vote_itr) {
@@ -454,17 +499,26 @@ void genesis_ee_builder::build_votes(std::vector<vote_info>& votes, uint64_t msg
             continue;
         }
 
-        votes.emplace_back([&](auto& v) {
-            v.voter = generate_name(vote.voter);
-            v.weight = vote.weight;
-            v.time = vote.timestamp;
-            v.rshares = vote.rshares;
-        }, 0);
+        // votes.emplace_back([&](auto& v) {
+        //     v.voter = generate_name(vote.voter);
+        //     v.weight = vote.weight;
+        //     v.time = vote.timestamp;f
+        //     v.rshares = vote.rshares;
+        // }, 0);
 
-        std::sort(votes.begin(), votes.end(), [&](const auto& a, const auto& b) {
-            return a.rshares > b.rshares;
-        });
+        // std::sort(votes.begin(), votes.end(), [&](const auto& a, const auto& b) {
+        //     return a.rshares > b.rshares;
+        // });
+
+        ofs << vote.voter << ";" << au << ";" << perm;
+        ofs << ";" << vote.weight_start << ";" << vote.weight_end << ";" << vote.created.sec_since_epoch();
+        ofs << ";" << (vote.created.sec_since_epoch() - prevv) << ";" << vote.updated.sec_since_epoch() << ";" << post_created;
+        ofs << ";" << vote.rshares_start << ";" << vote.rshares_end << ";" << vote.vote_effective_vs << ";" << vote.vote_total_vs << ";" << vote.vote_total_vs_steem << "\n";
+
+        prevv = vote.created.sec_since_epoch();
     }
+
+    ofs.close();
 }
 
 void genesis_ee_builder::build_reblogs(std::vector<reblog_info>& reblogs, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs) {
@@ -482,16 +536,16 @@ void genesis_ee_builder::build_reblogs(std::vector<reblog_info>& reblogs, uint64
             continue;
         }
 
-        dump_reblogs.seekg(reblog.offset);
-        reblog_operation op;
-        read_operation(dump_reblogs, op);
+        // dump_reblogs.seekg(reblog.offset);
+        // reblog_operation op;
+        // read_operation(dump_reblogs, op);
 
-        reblogs.emplace_back([&](auto& r) {
-            r.account = generate_name(reblog.account);
-            r.title = op.title;
-            r.body = op.body;
-            r.time = op.timestamp;
-        }, 0);
+        // reblogs.emplace_back([&](auto& r) {
+        //     r.account = generate_name(reblog.account);
+        //     r.title = op.title;
+        //     r.body = op.body;
+        //     r.time = op.timestamp;
+        // }, 0);
     }
 }
 
@@ -546,53 +600,31 @@ void genesis_ee_builder::write_messages() {
     auto& out = out_.get_serializer(event_engine_genesis::messages);
     out.start_section(info_.golos.names.posting, N(message), "message_info");
 
-    auto to_gls = genesis_.get_gbg_to_golos_converter();
+    std::ofstream ofs;
+    ofs.open("vote_assets.csv");
+    ofs << "voter;author;permlink;weight_start;weight_end;created;offset;updated;msg_created;rshares_start;rshares_end;vote_effective_vs;total_vs;total_vs_steem\n";
+    ofs.close();
 
-    const auto& comment_idx = maps_.get_index<comment_header_index, by_parent_hash>();
+    const auto& comment_idx = maps_.get_index<comment_header_index, by_created>();
 
-    std::function<void(uint64_t)> build_children = [&](uint64_t parent_hash) {
-        auto comment_itr = comment_idx.lower_bound(parent_hash);
-        for (; comment_itr != comment_idx.end() && comment_itr->parent_hash == parent_hash; ++comment_itr) {
+        auto comment_itr = comment_idx.upper_bound(fc::time_point_sec::min());
+        for (; comment_itr != comment_idx.end(); ++comment_itr) {
             auto& comment = *comment_itr;
             comment_operation op = get_comment(comment);
 
-            out.emplace<comment_info>([&](auto& c) {
-                c.parent_author = generate_name(op.parent_author);
-                c.parent_permlink = op.parent_permlink;
-                c.author = generate_name(op.author);
-                c.permlink = op.permlink;
-                c.title = op.title;
-                c.body = op.body;
-                c.tags = op.tags;
-                c.language = op.language;
-                c.created = comment.created;
-                c.last_update = op.timestamp;
-                c.net_rshares = comment.net_rshares;
-                c.author_reward = asset(comment.author_reward, symbol(GLS));
-                c.benefactor_reward = asset(comment.benefactor_reward, symbol(GLS));
-                c.curator_reward = asset(comment.curator_reward, symbol(GLS));
-                build_votes(c.votes, comment.hash, comment.last_delete_op);
-                build_reblogs(c.reblogs, comment.hash, comment.last_delete_op, dump_reblogs);
-                const auto active_itr = exp_info_.active_comments.find(comment.hash);
-                if (active_itr != exp_info_.active_comments.end()) {
-                    auto& active = active_itr->second;
-                    c.archived = false;
-                    for (const auto& b: active.beneficiaries) {
-                        c.benefics_prcnt += b.weight;
-                    }
-                    c.rewardweight = active.reward_weight;
-                    c.max_payout = to_gls.convert(active.max_accepted_payout);
-                    c.curators_prcnt = active.curation_rewards_percent;
-                    c.tokenprop = active.percent_steem_dollars / 2;
-                    c.net_rshares = active.net_rshares;
-                }
-            });
+auto secse = comment.created.sec_since_epoch();
 
-            build_children(comment.hash);
+if (secse < 1514764800) {
+    continue;
+}
+
+if (secse > 1527811199) {
+    break;
+}
+
+            build_votes(comment.hash, comment.last_delete_op, secse, op.author, op.permlink);
+
         }
-    };
-
-    build_children(0);
 }
 
 void genesis_ee_builder::write_transfers() {
@@ -902,6 +934,8 @@ void genesis_ee_builder::build(const bfs::path& out_dir) {
 
     write_contracts_abis();
     write_messages();
+    out_.finalize();
+    std::exit(1);
     write_transfers();
     write_withdraws();
     write_delegations();

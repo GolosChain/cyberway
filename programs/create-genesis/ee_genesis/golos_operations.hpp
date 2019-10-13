@@ -37,6 +37,9 @@ struct vote_operation : hashed_operation {
     string permlink;
     int16_t weight = 0;
     int64_t rshares;
+    int64_t vote_effective_vs;
+    int64_t vote_total_vs;
+    int64_t vote_total_vs_steem;
     fc::time_point_sec timestamp;
 };
 
@@ -143,7 +146,7 @@ REFLECT_OP_HASHED(cyberway::golos::ee::comment_operation, (parent_author)(parent
 
 REFLECT_OP_HASHED(cyberway::golos::ee::delete_comment_operation, )
 
-REFLECT_OP_HASHED(cyberway::golos::ee::vote_operation, (voter)(author)(permlink)(weight)(rshares)(timestamp))
+REFLECT_OP_HASHED(cyberway::golos::ee::vote_operation, (voter)(author)(permlink)(weight)(rshares)(vote_effective_vs)(vote_total_vs)(vote_total_vs_steem)(timestamp))
 
 REFLECT_OP_HASHED(cyberway::golos::ee::reblog_operation, (account)(author)(permlink)(title)(body)(timestamp))
 

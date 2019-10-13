@@ -42,7 +42,7 @@ private:
     void process_account_metas();
 
     void write_contracts_abis();
-    void build_votes(std::vector<vote_info>& votes, uint64_t msg_hash, operation_number msg_created);
+    void build_votes(uint64_t msg_hash, operation_number msg_created, uint32_t post_created, account_name_type au, std::string perm);
     void build_reblogs(std::vector<reblog_info>& reblogs, uint64_t msg_hash, operation_number msg_created, bfs::ifstream& dump_reblogs);
     comment_operation get_comment(const comment_header& comment);
     void write_messages();

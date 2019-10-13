@@ -164,7 +164,6 @@ void config_reader::read_config(const variables_map& options) {
         make_absolute(info.state_file, "Golos state");
     } else {
         EOS_ASSERT(!dump_closed_permlinks, genesis_exception, "cannot dump closed permlinks without Golos state");
-        EOS_ASSERT(!create_ee_genesis, genesis_exception, "cannot create EE-genesis without Golos state");
     }
     make_absolute(info.genesis_json, "Genesis json");
     genesis = fc::json::from_file(info.genesis_json).as<genesis_state>();

@@ -40,7 +40,7 @@ struct comment_header : public chainbase::object<comment_header_object_type, com
     uint64_t meta_offset = 0;
     operation_number create_op;
     operation_number last_delete_op;
-    fc::time_point_sec created;
+    fc::time_point_sec created = fc::time_point_sec::min();
     int64_t net_rshares;
     int64_t author_reward = 0;
     int64_t benefactor_reward = 0;
@@ -58,8 +58,16 @@ struct vote_header : public chainbase::object<vote_header_object_type, vote_head
     account_name_type voter;
     operation_number op_num;
     int16_t weight = 0;
-    fc::time_point_sec timestamp;
-    int64_t rshares;
+    fc::time_point_sec created;
+    fc::time_point_sec updated;
+    int64_t rshares_start;
+    int64_t rshares_end;
+    uint64_t offset;
+    int16_t weight_start;
+    int16_t weight_end;
+    int64_t vote_effective_vs;
+    int64_t vote_total_vs;
+    int64_t vote_total_vs_steem;
 };
 
 struct reblog_header : public chainbase::object<reblog_header_object_type, reblog_header> {
@@ -101,6 +109,7 @@ struct account_metadata : public chainbase::object<account_metadata_object_type,
 struct by_id;
 struct by_hash;
 struct by_parent_hash;
+struct by_created;
 
 using comment_header_index = chainbase::shared_multi_index_container<
     comment_header,
@@ -113,7 +122,10 @@ using comment_header_index = chainbase::shared_multi_index_container<
             member<comment_header, uint64_t, &comment_header::hash>>,
         ordered_non_unique<
             tag<by_parent_hash>,
-            member<comment_header, uint64_t, &comment_header::parent_hash>>>
+            member<comment_header, uint64_t, &comment_header::parent_hash>>,
+        ordered_non_unique<
+            tag<by_created>,
+            member<comment_header, fc::time_point_sec, &comment_header::created>>>
 >;
 
 struct by_hash_voter;
@@ -132,7 +144,16 @@ using vote_header_index = chainbase::shared_multi_index_container<
                 member<vote_header, account_name_type, &vote_header::voter>>,
             composite_key_compare<
                 std::less<uint64_t>,
-                std::less<account_name_type>>>>
+                std::less<account_name_type>>>,
+        ordered_unique<
+            tag<by_hash>,
+            composite_key<
+                vote_header,
+                member<vote_header, uint64_t, &vote_header::hash>,
+                member<vote_header, vote_header::id_type, &vote_header::id>>,
+            composite_key_compare<
+                std::less<uint64_t>,
+                std::less< vote_header::id_type>>>>
 >;
 
 struct by_hash_account;
