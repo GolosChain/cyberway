@@ -127,9 +127,6 @@ void genesis_ee_builder::process_comments() {
             parent_hash = fc::hash64(parent.c_str(), parent.length());
         }
         auto secse = op.timestamp.sec_since_epoch();
-if (secse < 1514764800) {
-    continue;
-}
 
 if (secse > 1527811199) {
     break;
@@ -236,9 +233,6 @@ void genesis_ee_builder::process_votes() {
     while (read_operation(dump_votes, op)) {
         auto secse = op.timestamp.sec_since_epoch();
 
-if (secse < 1514764800) {
-    continue;
-}
 ox++;
 //if (ox > 100000) {
 //    break;
@@ -498,7 +492,14 @@ void genesis_ee_builder::build_votes(uint64_t msg_hash, operation_number msg_cre
         if (vote.op_num < msg_created) {
             continue;
         }
+        auto secse = vote.created.sec_since_epoch();
+if (secse < 1514764800) {
+    continue;
+}
 
+if (secse > 1527811199) {
+    continue;
+}
         // votes.emplace_back([&](auto& v) {
         //     v.voter = generate_name(vote.voter);
         //     v.weight = vote.weight;
