@@ -1,5 +1,6 @@
 import subprocess
-import shlex
+
+from Suite.Framework.eprint import *
 
 class Cleos:
     def __init__(self, path, remoteHost, printDialog):
@@ -34,4 +35,4 @@ class Cleos:
         for element in execTuple:
             printString += element + " "
 
-        print(printString)
+        eprint(printString)

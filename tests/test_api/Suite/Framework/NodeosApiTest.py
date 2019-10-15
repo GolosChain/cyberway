@@ -1,6 +1,9 @@
-import sys
 import unittest
 import argparse
+import re
+
+from os import listdir
+from os.path import isfile
 
 from Suite.Tools.Nodeos import Nodeos
 from Suite.Tools.Cleos import Cleos
@@ -8,6 +11,7 @@ from Suite.Tools.Wallet import Wallet
 from Suite.Tools.ApiClient import ApiClient
 from Suite.Tools.ContractsManager import ContractsManager
 import atexit
+from Suite.Framework.eprint import *
 
 class NodeosApiTest:
     instance = None
@@ -24,6 +28,13 @@ class NodeosApiTest:
         self.argParser.add_argument('--contracts', dest='contracts', default=[], nargs='+',
                                     help='Contracts neccessary for testing. Syntax: --contract-dir <contract name used by test> <path>.')
 
+        self.argParser.add_argument('--skip', dest='skip', default=[], nargs='+',
+                                    help='A list of tests to skip.')
+
+    def execute(self, path):
+        args, unknown = self.prepareExecutables()
+        self.tests = self.getTests(path)
+        self.startUnitTests(unknown)
 
     def prepareExecutables(self):
         args, unknown = self.argParser.parse_known_args()
@@ -31,7 +42,7 @@ class NodeosApiTest:
         if args.nodeos == None:
             return
 
-        print("Starting a nodeos instance...")
+        eprint("Starting a nodeos instance...")
         self.nodeos = Nodeos(args.nodeos, args.mongo, args.nodeosOutput)
         atexit.register(self.nodeos.stop)
 
@@ -40,17 +51,40 @@ class NodeosApiTest:
 
         self.contractsManager = ContractsManager(args.contracts)
         self.apiClient = ApiClient("127.0.0.1", 8888, args.apiClientDialog)
-        print("The nodeos is ready")
+        self.skip = args.skip
+        eprint("The nodeos is ready")
         return args, unknown
 
-    def execute(self):
-        args, unknown = self.prepareExecutables()
-        self.startUnitTests(unknown)
+    def getTests(self, path):
+        content = listdir(path)
+
+        tests = []
+        for file in content:
+            if isfile(path + '/' + file) and re.fullmatch('[a-zA-Z0-9.]*Test.py', file):
+                test = file[:-3]
+                if self.skipTest(test):
+                    eprint("Skipped test: " + file[:-3])
+                else :
+                    tests.append(test)
+                    eprint("Found test: " + file[:-3])
+
+        return tests
+
+    def skipTest(self, test):
+        return test in self.skip
 
     def startUnitTests(self, args):
         sys.argv = [sys.argv[0]]
         sys.argv.extend(args)
-        unittest.main()
+
+        for test in self.tests:
+            eprint("Starting test: " + test)
+
+            try:
+                unittest.main(module=test, exit=False)
+            except ModuleNotFoundError:
+                eprint("Could not execute test: " + test)
+
 
 class CleosTestSuite(NodeosApiTest):
     def __init__(self):
@@ -74,8 +108,8 @@ class WalletTestSuite(CleosTestSuite):
 
     def prepareExecutables(self):
         args, unknown = CleosTestSuite.prepareExecutables(self)
-        print("Preparing a wallet...")
+        eprint("Preparing a wallet...")
         self.wallet = Wallet(self.cleos)
-        print("The wallet is ready")
+        eprint("The wallet is ready")
         return args, unknown
 

@@ -3,6 +3,8 @@ import subprocess
 import shutil
 import os
 
+from Suite.Framework.eprint import *
+
 
 class Nodeos:
     workingDir = "./"
@@ -28,7 +30,7 @@ class Nodeos:
             stringLine = line.decode("UTF-8")
 
             if self.enableOutput == True:
-                print(stringLine)
+                eprint(stringLine)
 
             if "Produced block" in stringLine:
                 return
