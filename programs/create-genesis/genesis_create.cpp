@@ -1084,117 +1084,119 @@ struct genesis_create::genesis_create_impl final {
 
         primary_key_t pool_date = 0;
 
-        // first create lookup table to find author by post id
-        fc::flat_map<uint64_t, name> authors;           // post_id:name
-        for (const auto& c : _visitor.comments) {
-            authors[c.second.id] = name_by_acc(c.second.author);
-        }
-
-        // store votes
-        fc::flat_map<uint64_t, uint64_t> vote_weights_sum;
-        db.start_section(_info.golos.names.posting, N(vote), "voteinfo", _visitor.votes.size());
-        primary_key_t pk = 0;
-        for (const auto& v: _visitor.votes) {
-            std::vector<mvo> delegators;
-            for (const auto& d: v.delegator_vote_interest_rates) {
-                delegators.emplace_back(mvo
-                    ("delegator", name_by_acc(d.account))
-                    ("interest_rate", d.interest_rate)
-                );
-            }
-            auto cid = v.comment;
-            uint64_t w = v.orig_rshares <= 0 ? 0 : v.rshares;
-            vote_weights_sum[cid] += w;
-            if (v.num_changes != 0) {
-                w = 0;
-            } else if (w > 0) {
-                uint64_t auction_window = _visitor.comments[cid].active.auction_window_size;
-                if (v.auction_time != auction_window) {
-                    w = int_arithmetic::safe_prop(w, static_cast<uint64_t>(v.auction_time), auction_window);
-                }
-            }
-            auto vname = name_by_id(v.voter);
-            db.insert(pk, authors[cid], vname, mvo
-                ("id", pk)
-                ("message_id", cid)
-                ("voter", vname)
-                ("weight", v.vote_percent)
-                ("time", time_point(v.last_update).time_since_epoch().count())
-                ("count", v.num_changes)
-                ("delegators", delegators)
-                ("curatorsw", w)
-                ("rshares", v.rshares)
-                ("paid_amount", 0)
-            );
-            pk++;
-        }
-        // store messages
-        const int n = _visitor.comments.size();     // messages count
-        db.start_section(_info.golos.names.posting, N(permlink), "permlink", _visitor.permlinks.size());
-        auto key = [](acc_idx a, plk_idx p) { return uint64_t(a) << 32 | p; };
-        std::unordered_map<uint64_t, uint64_t> post_ids;
-        post_ids.reserve(_visitor.permlinks.size());
-        for (const auto& cp : _visitor.permlinks) {
-            const auto& c = cp.second;
-            pk = cp.first;
-            db.insert(pk, name_by_idx(c.author), mvo
-                ("id", pk)
-                ("parentacc", name_by_idx(c.parent_author))
-                ("parent_id", post_ids[key(c.parent_author, c.parent_permlink)])
-                ("value", _plnk_map[c.permlink])
-                ("level", c.depth)
-                ("childcount", c.children)
-            );
-            post_ids[key(c.author, c.permlink)] = pk;
-        }
-        post_ids.clear();
-        _visitor.permlinks.clear();
-
-        auto to_gls = get_gbg_to_golos_converter();
-        db.start_section(_info.golos.names.posting, N(message), "message", n);
+//        // first create lookup table to find author by post id
+//        fc::flat_map<uint64_t, name> authors;           // post_id:name
+//        for (const auto& c : _visitor.comments) {
+//            authors[c.second.id] = name_by_acc(c.second.author);
+//        }
+//
+//        // store votes
+//        fc::flat_map<uint64_t, uint64_t> vote_weights_sum;
+//        db.start_section(_info.golos.names.posting, N(vote), "voteinfo", _visitor.votes.size());
+//        primary_key_t pk = 0;
+//        for (const auto& v: _visitor.votes) {
+//            std::vector<mvo> delegators;
+//            for (const auto& d: v.delegator_vote_interest_rates) {
+//                delegators.emplace_back(mvo
+//                    ("delegator", name_by_acc(d.account))
+//                    ("interest_rate", d.interest_rate)
+//                );
+//            }
+//            auto cid = v.comment;
+//            uint64_t w = v.orig_rshares <= 0 ? 0 : v.rshares;
+//            vote_weights_sum[cid] += w;
+//            if (v.num_changes != 0) {
+//                w = 0;
+//            } else if (w > 0) {
+//                uint64_t auction_window = _visitor.comments[cid].active.auction_window_size;
+//                if (v.auction_time != auction_window) {
+//                    w = int_arithmetic::safe_prop(w, static_cast<uint64_t>(v.auction_time), auction_window);
+//                }
+//            }
+//            auto vname = name_by_id(v.voter);
+//            db.insert(pk, authors[cid], vname, mvo
+//                ("id", pk)
+//                ("message_id", cid)
+//                ("voter", vname)
+//                ("weight", v.vote_percent)
+//                ("time", time_point(v.last_update).time_since_epoch().count())
+//                ("count", v.num_changes)
+//                ("delegators", delegators)
+//                ("curatorsw", w)
+//                ("rshares", v.rshares)
+//                ("paid_amount", 0)
+//            );
+//            pk++;
+//        }
+//        // store messages
+//        const int n = _visitor.comments.size();     // messages count
+//        db.start_section(_info.golos.names.posting, N(permlink), "permlink", _visitor.permlinks.size());
+//        auto key = [](acc_idx a, plk_idx p) { return uint64_t(a) << 32 | p; };
+//        std::unordered_map<uint64_t, uint64_t> post_ids;
+//        post_ids.reserve(_visitor.permlinks.size());
+//        for (const auto& cp : _visitor.permlinks) {
+//            const auto& c = cp.second;
+//            pk = cp.first;
+//            db.insert(pk, name_by_idx(c.author), mvo
+//                ("id", pk)
+//                ("parentacc", name_by_idx(c.parent_author))
+//                ("parent_id", post_ids[key(c.parent_author, c.parent_permlink)])
+//                ("value", _plnk_map[c.permlink])
+//                ("level", c.depth)
+//                ("childcount", c.children)
+//            );
+//            post_ids[key(c.author, c.permlink)] = pk;
+//        }
+//        post_ids.clear();
+//        _visitor.permlinks.clear();
+//
+//        auto to_gls = get_gbg_to_golos_converter();
+//        db.start_section(_info.golos.names.posting, N(message), "message", n);
         uint128_t sum_net_rshares = 0;
         uint128_t sum_net_positive = 0;
-        using beneficiary = std::pair<name,uint16_t>;
-        for (const auto& cp : _visitor.comments) {
-            const auto& c = cp.second;
-            std::vector<beneficiary> beneficiaries;
-            const auto sz = c.active.beneficiaries.size();
-            if (sz) {
-                beneficiaries.reserve(sz);
-                for (const auto& b: c.active.beneficiaries) {
-                    beneficiaries.emplace_back(beneficiary{name_by_acc(b.account), b.weight});
-                }
-            }
-            pk = c.id;
-            db.insert(pk, _info.golos.names.posting, mvo
-                ("author", name_by_acc(c.author))
-                ("id", pk)
-                ("date", time_point(c.active.created).time_since_epoch().count())
-                ("pool_date", pool_date)
-                ("tokenprop", c.active.percent_steem_dollars / 2)
-                ("beneficiaries", beneficiaries)
-                ("rewardweight", c.active.reward_weight)
-                ("state", mvo
-                    ("netshares", c.active.net_rshares)
-                    ("voteshares", c.active.vote_rshares)
-                    ("sumcuratorsw", vote_weights_sum[c.id]))
-                ("curators_prcnt", c.active.curation_rewards_percent)
-                ("cashout_time", std::max(time_point(c.active.cashout_time), _conf.initial_timestamp).time_since_epoch().count())
-                ("mssg_reward", asset(0, symbol(GLS)))
-                ("max_payout", to_gls.convert(c.active.max_accepted_payout))
-                ("paid_amount", 0)
-            );
-            sum_net_rshares += c.active.net_rshares;
-            sum_net_positive += (c.active.net_rshares > 0) ? c.active.net_rshares : 0;
-            if (c.mode != cyberway::golos::comment_mode::archived) {
-                auto id = std::string(_accs_map[c.author.id]) + "/" + _plnk_map[c.permlink.id];
-                auto hash = fc::hash64(id.c_str(), id.length());
-                _exp_info.active_comments[hash] = c.active;
-            }
-        }
+//        using beneficiary = std::pair<name,uint16_t>;
+//        for (const auto& cp : _visitor.comments) {
+//            const auto& c = cp.second;
+//            std::vector<beneficiary> beneficiaries;
+//            const auto sz = c.active.beneficiaries.size();
+//            if (sz) {
+//                beneficiaries.reserve(sz);
+//                for (const auto& b: c.active.beneficiaries) {
+//                    beneficiaries.emplace_back(beneficiary{name_by_acc(b.account), b.weight});
+//                }
+//            }
+//            pk = c.id;
+//            db.insert(pk, _info.golos.names.posting, mvo
+//                ("author", name_by_acc(c.author))
+//                ("id", pk)
+//                ("date", time_point(c.active.created).time_since_epoch().count())
+//                ("pool_date", pool_date)
+//                ("tokenprop", c.active.percent_steem_dollars / 2)
+//                ("beneficiaries", beneficiaries)
+//                ("rewardweight", c.active.reward_weight)
+//                ("state", mvo
+//                    ("netshares", c.active.net_rshares)
+//                    ("voteshares", c.active.vote_rshares)
+//                    ("sumcuratorsw", vote_weights_sum[c.id]))
+//                ("curators_prcnt", c.active.curation_rewards_percent)
+//                ("cashout_time", std::max(time_point(c.active.cashout_time), _conf.initial_timestamp).time_since_epoch().count())
+//                ("mssg_reward", asset(0, symbol(GLS)))
+//                ("max_payout", to_gls.convert(c.active.max_accepted_payout))
+//                ("paid_amount", 0)
+//            );
+//            sum_net_rshares += c.active.net_rshares;
+//            sum_net_positive += (c.active.net_rshares > 0) ? c.active.net_rshares : 0;
+//            if (c.mode != cyberway::golos::comment_mode::archived) {
+//                auto id = std::string(_accs_map[c.author.id]) + "/" + _plnk_map[c.permlink.id];
+//                auto hash = fc::hash64(id.c_str(), id.length());
+//                _exp_info.active_comments[hash] = c.active;
+//            }
+//        }
         // invariant
         const auto& gp = _visitor.gpo;
-        uint128_t total_rshares = fix_fc128(gp.total_reward_shares2);
+        const int n = 0;
+        uint128_t total_rshares = 0;
+//        uint128_t total_rshares = fix_fc128(gp.total_reward_shares2);
         EOS_ASSERT(total_rshares == sum_net_positive, genesis_exception,
             "GPO total rshares ${t} do not match to sum from posts ${s}", ("t", total_rshares)("s", sum_net_positive));
 
