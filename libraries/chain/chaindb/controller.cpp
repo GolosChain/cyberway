@@ -538,8 +538,14 @@ namespace cyberway { namespace chaindb {
         }
 
         void undo_revision(const revision_t revision) {
+            auto reset_undo_restorer = fc::make_scoped_exit([this](){
+                driver_.disable_undo_restore();
+            });
+
+            driver_.enable_undo_restore();
             undo_.undo(revision);
             cache_.undo_session(revision);
+            driver_.apply_all_changes();
         }
 
         void commit_revision(const revision_t revision) {
@@ -778,14 +784,14 @@ namespace cyberway { namespace chaindb {
         impl_->cache_.push(revision());
     }
 
-    void chaindb_controller::enable_bad_update() const {
+    void chaindb_controller::enable_rev_bad_update() const {
         // https://github.com/cyberway/cyberway/issues/1094
-        impl_->driver_.enable_bad_update();
+        impl_->driver_.enable_rev_bad_update();
     }
 
-    void chaindb_controller::disable_bad_update() const {
+    void chaindb_controller::disable_rev_bad_update() const {
         // https://github.com/cyberway/cyberway/issues/1094
-        impl_->driver_.disable_bad_update();
+        impl_->driver_.disable_rev_bad_update();
     }
 
     void chaindb_controller::close(const cursor_request& request) const {

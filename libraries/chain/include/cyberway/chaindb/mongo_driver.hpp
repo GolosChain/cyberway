@@ -17,8 +17,11 @@ namespace cyberway { namespace chaindb {
         ~mongodb_driver();
 
         // https://github.com/cyberway/cyberway/issues/1094
-        void enable_bad_update() const override;
-        void disable_bad_update() const override;
+        void enable_rev_bad_update() const override;
+        void disable_rev_bad_update() const override;
+
+        void enable_undo_restore() const override;
+        void disable_undo_restore() const override;
 
         std::vector<table_def> db_tables(const account_name& code) const override;
         void create_index(const index_info&) const override;
