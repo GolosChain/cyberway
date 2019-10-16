@@ -33,8 +33,8 @@ enum class stored_contract_tables: int {
     witness_vote,   witness_info,
     reward_pool,
     bandwidths,
-    messages,       permlinks,
-    votes,
+//    messages,       permlinks,
+//    votes,
 
     stake_agents,   stake_cands,
     stake_grants,   stake_provisions,

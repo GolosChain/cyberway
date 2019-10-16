@@ -1093,7 +1093,7 @@ struct genesis_create::genesis_create_impl final {
 //        // store votes
 //        fc::flat_map<uint64_t, uint64_t> vote_weights_sum;
 //        db.start_section(_info.golos.names.posting, N(vote), "voteinfo", _visitor.votes.size());
-//        primary_key_t pk = 0;
+        primary_key_t pk = 0;
 //        for (const auto& v: _visitor.votes) {
 //            std::vector<mvo> delegators;
 //            for (const auto& d: v.delegator_vote_interest_rates) {
@@ -1209,7 +1209,7 @@ struct genesis_create::genesis_create_impl final {
             ("state", mvo
                 ("msgs", n)
                 ("funds", gp.total_reward_fund_steem)
-                ("rshares", sum_net_rshares)
+                ("rshares", sum_netalshares)
                 ("rsharesfn", total_rshares)
             )
         );
