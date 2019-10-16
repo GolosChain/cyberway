@@ -1209,7 +1209,7 @@ struct genesis_create::genesis_create_impl final {
             ("state", mvo
                 ("msgs", n)
                 ("funds", gp.total_reward_fund_steem)
-                ("rshares", sum_netalshares)
+                ("rshares", sum_net_rshares)
                 ("rsharesfn", total_rshares)
             )
         );
