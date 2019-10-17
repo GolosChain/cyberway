@@ -1,36 +1,26 @@
-import glob
+from os import listdir
 
 class ContractsManager:
     def __init__(self, contracts):
         self.contractsMap={}
-        contractName = ""
-        for i in range(len(contracts)):
-            if i % 2 == 0:
-                contractName = contracts[i]
-            if i % 2 == 1:
-                directory = contracts[i]
-                wasm, abi = self.getWasmAndAbi(directory)
-                self.contractsMap[contractName] = dict(directory=directory, wasm=wasm, abi=abi)
-                contractName = ""
 
-    def getWasmAndAbi(self, directory):
-        wasmFiles = glob.glob(directory + "/*.wasm")
-        abiFiles = glob.glob(directory + "/*.abi")
-        return self.getWasmFile(directory, wasmFiles), self.getAbiFile(directory, abiFiles)
+        for contract in contracts:
+            self.addContract(contract)
 
-    def getWasmFile(self, directory, filesInDirectory):
-        return self.getFile(directory, filesInDirectory, 'wasm')
 
-    def getAbiFile(self, directory, filesInDirectory):
-        return self.getFile(directory, filesInDirectory, 'abi')
+    def addContract(self, directory):
+        pathSegments = directory.split('/')
+        files = listdir(directory)
 
-    def getFile(self,  directory, filesInDirectory, ext):
-        for file in filesInDirectory:
-            pathItems = file.split('/')
-            if pathItems[len(pathItems) - 1 ] == (pathItems[len(pathItems) - 2 ] + "." + ext):
-                return file
+        while len(pathSegments) != 0:
+            segment = pathSegments.pop()
+            abi = segment + '.abi'
+            wasm = segment + '.wasm'
+            if len(segment) != 0 and abi in files and wasm in files :
+                self.contractsMap[segment] = {'directory' : directory, 'abi' : directory + '/' + abi, 'wasm' : directory + '/' + wasm}
+                return
 
-        raise NameError("No correct \'" + ext + "\' file in the directory: " + directory)
+        raise NameError("No correct 'abi' or 'wasm' file in the directory: " + directory)
 
     def getContractPath(self, contractName):
         return self.contractsMap[contractName]['directory']
