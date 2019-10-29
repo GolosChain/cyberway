@@ -1,7 +1,7 @@
 import requests
 import json
 
-from Suite.Framework.eprint import *
+from Suite.Framework.Utils import *
 
 class ApiClient:
     def __init__(self, host, port, apiClientDialog):

@@ -1,4 +1,6 @@
 from Suite.Framework.WalletTestCase import WalletTestCase
+from Suite.Framework.Utils import jsonArg
+
 from abc import abstractmethod
 
 from Tests.Verificators.TransactionExecutionVerificator import *
@@ -18,14 +20,16 @@ class GetAccountTest(WalletTestCase):
         verifyGetNewAccount(self.cleos.exec('get account alice'), key)
 
     def test_05_issueTokens(self):
-        verifyTokenIssued(self.cleos.exec('push action cyber.token issue \'[alice, "1000.0000 CYBER", ""]\' -p cyber@active'), 'alice',  '1000.0000 CYBER')
+        args = jsonArg(["alice", "1000.0000 CYBER", ""])
+        verifyTokenIssued(self.cleos.exec('push action cyber.token issue {args} -p cyber@active'.format(args=args)), 'alice',  '1000.0000 CYBER')
 
         getAccountOutput = self.cleos.exec('get account alice')
         verifyAccountLiquidBalance(getAccountOutput,  '1000.0000 CYBER')
         verifyAccountTotalBalance(getAccountOutput,  '1000.0000 CYBER')
 
     def test_06_createStake(self):
-        verifyStakeCreated(self.cleos.exec('push action cyber.stake create \'["4,CYBER", [20, 16, 13], 30, 50, 0]\' -p cyber@active'), '4,CYBER')
+        args = jsonArg(["4,CYBER", [20, 16, 13], 30, 50, 0])
+        verifyStakeCreated(self.cleos.exec('push action cyber.stake create {args} -p cyber@active'.format(args = args)), '4,CYBER')
 
     def test_07_stakeTokens(self):
         verifyTokensStaked(self.cleos.exec('system stake alice "400.0000 CYBER"'), 'alice', '400.0000 CYBER')
@@ -40,7 +44,8 @@ class GetAccountTest(WalletTestCase):
     def test_08_delegateStake(self):
         self.cleos.exec('create account cyber bob {key}'.format(key = self.wallet.createKeys('bob test key')))
 
-        verifyStakeOpened(self.cleos.exec('push action cyber.stake open \'{ "owner" : bob, "token_code" : "CYBER" }\' -p bob@active'), 'bob')
+        args = jsonArg({ "owner" : "bob", "token_code" : "CYBER" })
+        verifyStakeOpened(self.cleos.exec('push action cyber.stake open {args} -p bob@active'.format(args = args)), 'bob')
         verifyStakeDelegated(self.cleos.exec('system delegatebw alice bob "100.0000 CYBER"'), 'alice', 'bob', '100.0000 CYBER')
 
         getAliceAccountOutput = self.cleos.exec('get account alice')
@@ -64,7 +69,9 @@ class GetAccountTest(WalletTestCase):
 
     def test_09_delegateStake(self):
         self.cleos.exec('create account cyber clara {key}'.format(key =  self.wallet.createKeys('clara test key')))
-        self.cleos.exec('push action cyber.token issue \'[clara, "300.0000 CYBER", ""]\' -p cyber@active')
+
+        args = jsonArg(["clara", "300.0000 CYBER", ""])
+        self.cleos.exec('push action cyber.token issue {args} -p cyber@active'.format(args=args))
         self.cleos.exec('system stake clara "200.0000 CYBER"')
 
         self.cleos.exec('system delegatebw clara alice "80.0000 CYBER"')
@@ -80,7 +87,8 @@ class GetAccountTest(WalletTestCase):
         verifyAccountTotalBalance(getAliceAccountOutput, '980.0000 CYBER')
 
     def test_10_unstakeTokens(self):
-        verifyTokenUnstaked(self.cleos.exec('push action cyber.stake withdraw \'["alice", "100.0000 CYBER"]\' -p alice'), 'alice', '100.0000 CYBER')
+        args = jsonArg(["alice", "100.0000 CYBER"])
+        verifyTokenUnstaked(self.cleos.exec('push action cyber.stake withdraw {args} -p alice'.format(args=args)), 'alice', '100.0000 CYBER')
 
         getAliceAccountOutput = self.cleos.exec('get account alice')
         verifyAccountLiquidBalance(getAliceAccountOutput, '700.0000 CYBER')
@@ -91,7 +99,8 @@ class GetAccountTest(WalletTestCase):
         verifyAccountTotalBalance(getAliceAccountOutput, '980.0000 CYBER')
 
     def test_11_enableStaking(self):
-        verifyStakeEnabled(self.cleos.exec('push action cyber.stake enable \'["4,CYBER"]\' -p cyber'))
+        args = jsonArg(["4,CYBER"])
+        verifyStakeEnabled(self.cleos.exec('push action cyber.stake enable {args} -p cyber'.format(args=args)))
 
     def test_12_stakeUsage(self):
         self.cleos.exec('create account alice alice.child {key}'.format(key = self.wallet.createKeys('alice.child test key')))
