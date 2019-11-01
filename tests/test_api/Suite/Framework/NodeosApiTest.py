@@ -11,7 +11,7 @@ from Suite.Tools.Wallet import Wallet
 from Suite.Tools.ApiClient import ApiClient
 from Suite.Tools.ContractsManager import ContractsManager
 import atexit
-from Suite.Framework.eprint import *
+from Suite.Framework.Utils import *
 
 class NodeosApiTest:
     instance = None

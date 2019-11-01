@@ -1,4 +1,5 @@
 from Suite.Framework.WalletTestCase import WalletTestCase
+from Suite.Framework.Utils import jsonArg
 from abc import abstractmethod
 
 from Tests.Verificators.TransactionExecutionVerificator import *
@@ -22,7 +23,8 @@ class BootSequenceTest(WalletTestCase):
         verifyContractWasSet(self.cleos.exec('set contract cyber {contractPath} -p cyber@active'.format(contractPath=self.contractsManager.getContractPath('cyber.bios'))))
 
     def test_01_createSystemToken(self):
-        output = self.cleos.exec('push action cyber.token create \'[cyber, "100000.0000 CYBER"]\' -p cyber.token')
+        args = ["cyber", "100000.0000 CYBER"]
+        output = self.cleos.exec('push action cyber.token create {args} -p cyber.token'.format(args = jsonArg(args)))
 
         verifyOutputContains(output, 'cyber.token <= cyber.token::create')
         verifyOutputContains(output, '{"issuer":"cyber","maximum_supply":"100000.0000 CYBER"}')
