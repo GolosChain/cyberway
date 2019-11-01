@@ -26,7 +26,7 @@ class NodeosApiTest:
                                     help='Show an api client dialog with a nodeos')
 
         self.argParser.add_argument('--contracts', dest='contracts', default=[], nargs='+',
-                                    help='Contracts neccessary for testing. Syntax: --contract-dir <contract name used by test> <path>.')
+                                    help='Directory with contract used in test. Contract name will be got from the last path segment')
 
         self.argParser.add_argument('--skip', dest='skip', default=[], nargs='+',
                                     help='A list of tests to skip.')
@@ -45,9 +45,6 @@ class NodeosApiTest:
         eprint("Starting a nodeos instance...")
         self.nodeos = Nodeos(args.nodeos, args.mongo, args.nodeosOutput)
         atexit.register(self.nodeos.stop)
-
-        if len(args.contracts) % 2 != 0:
-            raise NameError("Wrong --contract-dir parameter format: must be --contract dir <name> <path> [<name> <path>]")
 
         self.contractsManager = ContractsManager(args.contracts)
         self.apiClient = ApiClient("127.0.0.1", 8888, args.apiClientDialog)
