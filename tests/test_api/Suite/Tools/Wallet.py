@@ -15,10 +15,10 @@ class Wallet:
 
     def createWallet(self):
         self.removeWallet()
-        walletCreateResult = self.cleos.exec("wallet", "create", "--to-console", "-n", self.walletName)
+        walletCreateResult = self.cleos.exec("wallet create --to-console -n {walletName}".format(walletName = self.walletName))
         self.password = self.parseCreateWalletResult(walletCreateResult)
 
-        walletUnlockResult = self.cleos.exec("wallet", "unlock", "--password", self.password, "-n", self.walletName)
+        walletUnlockResult = self.cleos.exec("wallet unlock --password {password} -n {walletName}".format(password = self.password, walletName = self.walletName))
         self.verifyUnlocked(walletUnlockResult)
 
     def removeWallet(self):
@@ -43,13 +43,13 @@ class Wallet:
         raise NameError("Could not unlock the wallet: " + self.walletName)
 
     def createKeys(self, keyName):
-        createKeysResult = self.cleos.exec("create", "key", "--to-console")
+        createKeysResult = self.cleos.exec("create key --to-console")
         publicKey, privateKey = self.getKeysFromCreateResult(createKeysResult)
 
         return self.importKey(publicKey, privateKey, keyName)
 
     def importKey(self, publicKey, privateKey, keyName):
-        importResult = self.cleos.exec("wallet", "import", "-n", self.walletName, "--private-key", privateKey)
+        importResult = self.cleos.exec("wallet import -n {walletName} --private-key {privateKey}".format(walletName = self.walletName, privateKey = privateKey))
         self.verifyKeyImported(importResult, publicKey)
 
         self.keys[keyName] = publicKey

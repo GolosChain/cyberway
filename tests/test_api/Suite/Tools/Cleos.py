@@ -1,4 +1,5 @@
 import subprocess
+import shlex
 
 from Suite.Framework.eprint import *
 
@@ -8,8 +9,8 @@ class Cleos:
         self.remoteHost = remoteHost
         self.printDialog = printDialog
 
-    def exec(self, *params):
-        execTuple = (self.path, '-u', "http://" + self.remoteHost, *params)
+    def exec(self, params):
+        execTuple = (self.path, '-u', "http://" + self.remoteHost) + tuple(shlex.split(params))
 
         if self.printDialog == True:
             self.showCommand(execTuple)
@@ -21,7 +22,7 @@ class Cleos:
             stringLine = line.decode("UTF-8")
 
             if self.printDialog == True:
-                print(stringLine)
+                eprint(stringLine)
 
             output.append(stringLine)
 
