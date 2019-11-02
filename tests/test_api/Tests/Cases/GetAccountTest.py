@@ -1,5 +1,5 @@
 from Suite.Framework.WalletTestCase import WalletTestCase
-from Suite.Framework.Utils import jsonArg
+from Tests.Utils.JsonUtils import jsonArg
 
 from abc import abstractmethod
 

@@ -1,6 +1,8 @@
 import unittest
 import argparse
 import re
+import atexit
+import sys
 
 from os import listdir
 from os.path import isfile
@@ -10,8 +12,7 @@ from Suite.Tools.Cleos import Cleos
 from Suite.Tools.Wallet import Wallet
 from Suite.Tools.ApiClient import ApiClient
 from Suite.Tools.ContractsManager import ContractsManager
-import atexit
-from Suite.Framework.Utils import *
+from Suite.Framework.eprint import eprint
 
 class NodeosApiTest:
     instance = None

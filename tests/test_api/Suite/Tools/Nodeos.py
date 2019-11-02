@@ -3,7 +3,7 @@ import subprocess
 import shutil
 import os
 
-from Suite.Framework.Utils import *
+from Suite.Framework.eprint import eprint
 
 
 class Nodeos:

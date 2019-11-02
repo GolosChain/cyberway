@@ -1,7 +1,7 @@
 import subprocess
 import shlex
 
-from Suite.Framework.Utils import *
+from Suite.Framework.eprint import eprint
 
 class Cleos:
     def __init__(self, path, remoteHost, printDialog):
