@@ -20,8 +20,6 @@ class Object:
                 setattr(self, key, Object(value))
             elif type(value) is list:
                 setattr(self, key, Object.toPythonArray(value))
-            elif type(value) is str and (value == 'true' or value == 'false'):
-                setattr(self, key, value == 'true')
             else:
                 setattr(self, key, value)
 
