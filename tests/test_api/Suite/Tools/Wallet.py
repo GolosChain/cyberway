@@ -37,7 +37,7 @@ class Wallet:
 
     def verifyUnlocked(self, walletUnlockResult):
         for line in walletUnlockResult:
-            if ("Unlocked:" in line and self.walletName in line) or ("Wallet is already unlocked:" in line):
+            if ("Unlocked:" in line and self.walletName in line) or ("Already unlocked" in line):
                 return
 
         raise NameError("Could not unlock the wallet: " + self.walletName)
