@@ -1,9 +1,8 @@
 from Suite.Framework.WalletTestCase import WalletTestCase
-from Suite.Framework.Utils import jsonArg
 from abc import abstractmethod
 
 from Tests.Verificators.TransactionExecutionVerificator import *
-from Tests.Verificators.GetAccountVerificator import *
+from Tests.Verificators.BootSequenceVerificator import *
 
 class BootSequenceTest(WalletTestCase):
     @abstractmethod
