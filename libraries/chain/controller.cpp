@@ -1732,12 +1732,44 @@ struct controller_impl {
    } FC_CAPTURE_AND_RETHROW() }
 
    void update_producers_authority() {
+      using namespace int_arithmetic;
       const auto& producers = pending->_pending_block_state->active_schedule.producers;
+      
+      symbol_code token_code { symbol(CORE_SYMBOL).to_symbol_code() };
+      auto candidates_table = chaindb.get_table<stake_candidate_object>();
+      auto candidates_idx = candidates_table.get_index<stake_candidate_object::by_key>();
 
+      int64_t votes_sum = 0;
+      for(const auto& p : producers) {
+         auto cand = candidates_idx.find(stake::agent_key(token_code, p.producer_name));
+         if (cand != candidates_idx.end()) {
+            votes_sum += cand->votes;
+         }
+      }
+
+      std::map<account_name, weight_type> weights;
+      weight_type weights_sum = 0;
+      weight_type max_weights_sum = std::numeric_limits<weight_type>::max() - 1;
+      if (static_cast<int64_t>(max_weights_sum) > votes_sum) {
+          max_weights_sum = votes_sum;
+      }
+
+      for(const auto& p : producers) {
+         weight_type weight = 1; // for the case when there are no votes
+         if (max_weights_sum) {
+            auto cand = candidates_idx.find(stake::agent_key(token_code, p.producer_name));
+            weight = (cand != candidates_idx.end()) ? downgrade_cast<weight_type>(safe_prop<int64_t>(cand->votes, max_weights_sum, votes_sum)) : 0;
+         }
+         weights[p.producer_name] = weight;
+         weights_sum += weight;
+         
+         
+      }
+         
       auto update_permission = [&]( auto& permission, auto threshold ) {
          auto auth = authority( threshold, {}, {});
-         for( auto& p : producers ) {
-            auth.accounts.push_back({{p.producer_name, config::active_name}, 1});
+         for(const auto& w : weights) {
+            auth.accounts.push_back({{w.first, config::active_name}, w.second});
          }
 
          if( static_cast<authority>(permission.auth) != auth ) { // TODO: use a more efficient way to check that authority has not changed
@@ -1747,9 +1779,8 @@ struct controller_impl {
          }
       };
 
-      uint32_t num_producers = producers.size();
-      auto calculate_threshold = [=]( uint32_t numerator, uint32_t denominator ) {
-         return ( (num_producers * numerator) / denominator ) + 1;
+      auto calculate_threshold = [weights_sum]( uint32_t numerator, uint32_t denominator ) {
+         return ( (weights_sum * numerator) / denominator ) + 1;
       };
 
       update_permission( authorization.get_permission({config::producers_account_name,
