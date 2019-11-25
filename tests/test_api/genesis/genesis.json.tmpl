@@ -1,5 +1,7 @@
 {
-  "initial_timestamp": "2019-11-21T10:03:08.702",
+# NOTE: For automatic set initial_timestamp from GolosChain LIB time
+#  "initial_timestamp": "1970-01-01T00:00:00.000",
+  "initial_timestamp": "${INITIAL_TIMESTAMP}",
   "initial_key": "GLS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV",
   "initial_configuration": {
     "base_per_transaction_net_usage": 12,
@@ -9,6 +11,10 @@
     "min_transaction_ram_usage": 1024
     "max_transaction_lifetime": 3600,
 
+# NOTE: The expiration interval for deferred transactions was increased (for 3 hours) 
+# due to the fact that current value (10 minutes) is not enough to close a large 
+# number of posts in testnet (about 60,000). In the real system there will not be 
+# such a number of posts and this value should be revised.
     "deferred_trx_expiration_window": 10800,
     "max_transaction_delay": 3888000,
     "max_inline_action_size": 32768,
@@ -27,5 +33,5 @@
     "account_usage_windows": [3600000, 3600000, 3600000, 2592000000]
   },
   "initial_chain_id": "000000000000000000000000",
-  "genesis_data_hash": "790cac2a1aebea3a7d469bea150a9e42f85bd19cc2906c0144de834f02e4581a"
+  "genesis_data_hash": "${GENESIS_DATA_HASH}"
 }
