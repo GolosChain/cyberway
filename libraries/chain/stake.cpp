@@ -44,7 +44,7 @@ int64_t recall_proxied_traversal(const cyberway::chaindb::storage_payer_info& st
     auto balance_ret = safe_prop(agent->balance, share, agent->shares_sum);
     EOS_ASSERT(balance_ret <= agent->balance, transaction_exception, "SYSTEM: incorrect balance_ret val");
 
-    auto proxied_ret = 0;
+    int64_t proxied_ret = 0;
     auto grant_itr = grants_idx.lower_bound(grant_key(token_code, agent->account));
     while ((grant_itr != grants_idx.end()) && (grant_itr->token_code == token_code) && (grant_itr->grantor_name == agent->account)) {
         auto cur_share = safe_prop(grant_itr->share, share, agent->shares_sum);
