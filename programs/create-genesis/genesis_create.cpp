@@ -74,6 +74,7 @@ struct genesis_create::genesis_create_impl final {
     vector<string> _plnk_map;
 
     state_object_visitor _visitor;
+    bool _has_golos_state = false;
     asset _total_staked = asset();
     asset _sys_supply = asset();
 
@@ -349,15 +350,15 @@ struct genesis_create::genesis_create_impl final {
             const auto own = convert_authority(config::owner_name, a.owner, recovery_acc);
             const auto act = convert_authority(config::active_name, a.active);
             const auto post = convert_authority(posting_auth_name, a.posting);
+            _exp_info.account_infos[a.account.id] = mvo
+                ("owner_auth", own)
+                ("active_auth", act)
+                ("posting_auth", post);
 
             auto name = name_by_acc(a.account);
             const auto& owner  = store_permission(name, config::owner_name, 0, own, usage_id++);
             const auto& active = store_permission(name, config::active_name, owner.id, act, usage_id++);
             const auto& posting= store_permission(name, posting_auth_name, active.id, post, usage_id++);
-            _exp_info.account_infos[a.account.id] = mvo
-                ("owner_keys", own.keys)
-                ("active_keys", act.keys)
-                ("posting_keys", post.keys);
 
             auto itr = std::find_if(_info.transit_account_authorities.begin(), _info.transit_account_authorities.end(),
                     [&](const auto& acc) {return acc.name == name;});
@@ -1299,10 +1300,35 @@ struct genesis_create::genesis_create_impl final {
     }
 
     void prepare_writer(const bfs::path& out_file, const genesis_ext_header &ext_hdr) {
-        const int n_sections = static_cast<int>(stored_contract_tables::_max) + _info.tables.size();
+        int n_sections = static_cast<int>(sys_contract_tables::_max) + _info.tables.size();
+        if (_has_golos_state) {
+            n_sections += static_cast<int>(contract_tables::_max);
+        }
         db.start(out_file, n_sections, ext_hdr);
         db.prepare_serializers(_contracts);
     };
+
+    void dump_closed_permlinks(const bfs::path& out_file) {
+        ilog("Dumping permlinks of closed posts...");
+
+        bfs::ofstream out;
+        out.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+        out.open(out_file, std::ios_base::binary);
+
+        for (const auto& cp : _visitor.closed_permlinks) {
+            const auto& c = cp.second;
+            std::string parent_permlink(name_by_idx(c.parent_author) == name() ? "" : _plnk_map[c.parent_permlink]);
+            out
+                << name_by_idx(c.author) << ';'
+                << _plnk_map[c.permlink] << ';'
+                << name_by_idx(c.parent_author) << ';'
+                << parent_permlink << ';'
+                << c.depth << ';'
+                << c.children << '\n';
+        }
+        _visitor.closed_permlinks.clear();
+        ilog("Done.");
+    }
 
     std::vector<producer_key> get_producers() {
         if (_info.params.initial_prod_count == 0) {
@@ -1344,9 +1370,16 @@ genesis_create::genesis_create(): _impl(new genesis_create_impl()) {
 genesis_create::~genesis_create() {
 }
 
-void genesis_create::read_state(const bfs::path& state_file) {
+void genesis_create::read_state(const bfs::path& state_file, bool dump_closed_permlinks) {
     state_reader reader{state_file, _impl->_accs_map, _impl->_plnk_map};
+    _impl->_visitor.dump_closed_permlinks = dump_closed_permlinks;
     reader.read_state(_impl->_visitor);
+    _impl->_has_golos_state = true;
+}
+
+
+void genesis_create::dump_closed_permlinks(const bfs::path& out_file) {
+    _impl->dump_closed_permlinks(out_file);
 }
 
 void genesis_create::write_genesis(
@@ -1362,28 +1395,34 @@ void genesis_create::write_genesis(
     }
 
     genesis_ext_header ext_hdr;
-    ext_hdr.producers = _impl->get_producers();
+    if (_impl->_has_golos_state) {
+        ext_hdr.producers = _impl->get_producers();
+    }
 
     _impl->prepare_writer(out_file, ext_hdr);
     _impl->store_contracts();
     _impl->store_auth_links();
     _impl->store_custom_tables();
 
-    _impl->store_accounts();
-    _impl->store_bandwidth();
-    _impl->store_posts();   // also pool and votes
-    _impl->store_balances();
-    _impl->store_stakes();
-    _impl->store_delegation_records();
-    _impl->store_withdrawals();
-    _impl->store_witnesses();
-    _impl->store_memo_keys();
-    _impl->schedule_emit();
+    if (_impl->_has_golos_state) {
+        _impl->store_accounts();
+        _impl->store_bandwidth();
+        _impl->store_posts();   // also pool and votes
+        _impl->store_balances();
+        _impl->store_stakes();
+        _impl->store_delegation_records();
+        _impl->store_withdrawals();
+        _impl->store_witnesses();
+        _impl->store_memo_keys();
+        _impl->schedule_emit();
+    }
 
     _impl->db.finalize();
 
-    _impl->_exp_info.conv_gbg = &_impl->_visitor.conv_gbg;
-    _impl->_exp_info.conv_gls = &_impl->_visitor.conv_gls;
+    if (_impl->_has_golos_state) {
+        _impl->_exp_info.conv_gbg = &_impl->_visitor.conv_gbg;
+        _impl->_exp_info.conv_gls = &_impl->_visitor.conv_gls;
+    }
 }
 
 const genesis_info& genesis_create::get_info() const {

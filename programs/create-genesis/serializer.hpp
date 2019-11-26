@@ -20,12 +20,17 @@ using namespace chaindb;
 using resource_limits::resource_usage_object;
 const fc::microseconds abi_serializer_max_time = fc::seconds(10);
 
-
-enum class stored_contract_tables: int {
+// These enums are need just to count sections for tables_count of genesis container
+enum class sys_contract_tables: int {
     system_account, system_acc_seq, system_res_usage, system_permission, system_perm_usage,
+    sys_permissionlink,
+
+    _max
+};
+enum class contract_tables: int {
     import_account, import_acc_seq, import_res_usage, import_permission, import_perm_usage,
     domains,        usernames,
-    permissionlink, sys_permissionlink,
+    permissionlink,
     token_stats,    vesting_stats,
     token_balance,  vesting_balance,
     delegation,     rdelegation,
@@ -41,7 +46,7 @@ enum class stored_contract_tables: int {
     stake_stats,    stake_params,
     memo_key,       emit_transaction, emit_state,
 
-    _max                // to simplify setting tables_count of genesis container
+    _max
 };
 
 

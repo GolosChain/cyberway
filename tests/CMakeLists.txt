@@ -42,6 +42,8 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version-label.sh ${CMAKE_CURRENT_BINA
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ee-test.py ${CMAKE_CURRENT_BINARY_DIR}/ee-test.py COPYONLY)
 
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/test_api/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/test_api/ )
+
 #To run plugin_test with all log from blockchain displayed, put --verbose after --, i.e. plugin_test -- --verbose
 #add_test(NAME plugin_test COMMAND plugin_test --report_level=detailed --color_output)
 

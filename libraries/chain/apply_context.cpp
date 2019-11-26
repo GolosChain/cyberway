@@ -81,6 +81,7 @@ void apply_context::exec_one( action_trace& trace )
       trace.receipt = r; // fill with known data
       trace.except = e;
       finalize_trace( trace, start );
+      FC_RETHROW_EXCEPTION(e, error, "Executed action ${act}", ("e",e)("act",act));
       throw;
    }
 

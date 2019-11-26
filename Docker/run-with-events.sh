@@ -1,6 +1,11 @@
 #!/bin/bash
 
-script_path=$(dirname $(readlink -f $0))
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    brew install coreutils
+    script_path=$(dirname $(greadlink -f $0))
+else
+    script_path=$(dirname $(readlink -f $0))
+fi
 
 if [[ "$1" == "cleanup" ]]; then
     docker-compose -p cyberway -f $script_path/docker-compose-events.yml down || exit 1
