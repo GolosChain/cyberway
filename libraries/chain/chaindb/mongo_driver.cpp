@@ -662,6 +662,12 @@ namespace cyberway { namespace chaindb {
             return add_cursor(std::move(itr), code, std::move(new_cursor));
         }
 
+        template <typename... Args>
+        mongodb_cursor_info& create_applied_cursor(index_info index, Args&&... args) {
+            apply_table_changes(index);
+            return create_cursor(std::move(index), std::forward<Args>(args)...);
+        }
+
         mongodb_cursor_info& clone_cursor(const cursor_request& request) {
             auto loc = get_cursor(request);
             auto next_id = get_next_cursor_id(loc.code_itr_);
@@ -1107,7 +1113,7 @@ namespace cyberway { namespace chaindb {
 
         // main problem: does exist the key in the collection or not? ...
 
-        auto& cursor = impl_->create_cursor(std::move(index))
+        auto& cursor = impl_->create_applied_cursor(std::move(index))
             // 1. open at the max(), which exclude current value
             .open(direction::Backward, key, primary_key::Unset)
             // 2. return to the value which was excluded by max()
