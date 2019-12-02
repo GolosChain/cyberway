@@ -107,15 +107,15 @@ namespace eosio { namespace testing {
          void open( const snapshot_reader_ptr& snapshot );
          bool is_same_chain( base_tester& other );
 
-         virtual signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/ ) = 0;
-         virtual signed_block_ptr produce_empty_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/ ) = 0;
+         virtual signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/, const std::set<account_name>& disabled_producers = std::set<account_name>() ) = 0;
+         virtual signed_block_ptr produce_empty_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/, const std::set<account_name>& disabled_producers = std::set<account_name>() ) = 0;
          virtual signed_block_ptr finish_block() = 0;
-         signed_block_ptr     wait_irreversible_block( uint32_t, bool empty_blocks = false );
-         signed_block_ptr     produce_blocks( uint32_t n = 1, bool empty = false );
-         void                 produce_blocks_until_end_of_round();
-         void                 produce_blocks_for_n_rounds(const uint32_t num_of_rounds = 1);
+         signed_block_ptr     wait_irreversible_block( uint32_t, bool empty_blocks = false, const std::set<account_name>& disabled_producers = std::set<account_name>() );
+         signed_block_ptr     produce_blocks( uint32_t n = 1, bool empty = false, const std::set<account_name>& disabled_producers = std::set<account_name>() );
+         void                 produce_blocks_until_end_of_round(const std::set<account_name>& disabled_producers = std::set<account_name>());
+         void                 produce_blocks_for_n_rounds(const uint32_t num_of_rounds = 1, const std::set<account_name>& disabled_producers = std::set<account_name>());
          // Produce minimal number of blocks as possible to spend the given time without having any producer become inactive
-         void                 produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(const fc::microseconds target_elapsed_time = fc::microseconds());
+         void                 produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(const fc::microseconds target_elapsed_time = fc::microseconds(), const std::set<account_name>& disabled_producers = std::set<account_name>());
          signed_block_ptr     push_block(signed_block_ptr b);
 
          /**
@@ -282,7 +282,7 @@ namespace eosio { namespace testing {
          }
 
       protected:
-         signed_block_ptr _produce_block( fc::microseconds skip_time, bool skip_pending_trxs = false, uint32_t skip_flag = 0 );
+         signed_block_ptr _produce_block( fc::microseconds skip_time, bool skip_pending_trxs = false, uint32_t skip_flag = 0, const std::set<account_name>& disabled_producers = std::set<account_name>() );
          void             _start_block(fc::time_point block_time);
          signed_block_ptr _finish_block();
 
@@ -305,13 +305,13 @@ namespace eosio { namespace testing {
          init(config, push_genesis, read_mode);
       }
 
-      signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/ )override {
-         return _produce_block(skip_time, false, skip_flag);
+      signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/, const std::set<account_name>& disabled_producers = std::set<account_name>() )override {
+         return _produce_block(skip_time, false, skip_flag, disabled_producers);
       }
 
-      signed_block_ptr produce_empty_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/ )override {
+      signed_block_ptr produce_empty_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/, const std::set<account_name>& disabled_producers = std::set<account_name>() )override {
          control->abort_block();
-         return _produce_block(skip_time, true, skip_flag);
+         return _produce_block(skip_time, true, skip_flag, disabled_producers);
       }
 
       signed_block_ptr finish_block()override {
@@ -346,16 +346,16 @@ namespace eosio { namespace testing {
          init(default_config(), true);
       }
 
-      signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0 /*skip_missed_block_penalty*/ )override {
-         auto sb = _produce_block(skip_time, false, skip_flag | 2);
+      signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0 /*skip_missed_block_penalty*/, const std::set<account_name>& disabled_producers = std::set<account_name>() )override {
+         auto sb = _produce_block(skip_time, false, skip_flag | 2, disabled_producers);
          auto bs = validating_node->create_block_state_future( sb );
          validating_node->push_block( bs );
 
          return sb;
       }
 
-      signed_block_ptr produce_block_no_validation( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0 /*skip_missed_block_penalty*/ ) {
-         return _produce_block(skip_time, false, skip_flag | 2);
+      signed_block_ptr produce_block_no_validation( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0 /*skip_missed_block_penalty*/, const std::set<account_name>& disabled_producers = std::set<account_name>() ) {
+         return _produce_block(skip_time, false, skip_flag | 2, disabled_producers);
       }
 
       void validate_push_block(const signed_block_ptr& sb) {
@@ -363,9 +363,9 @@ namespace eosio { namespace testing {
          validating_node->push_block( bs );
       }
 
-      signed_block_ptr produce_empty_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0 /*skip_missed_block_penalty*/ )override {
+      signed_block_ptr produce_empty_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0 /*skip_missed_block_penalty*/, const std::set<account_name>& disabled_producers = std::set<account_name>() )override {
          control->abort_block();
-         auto sb = _produce_block(skip_time, true, skip_flag | 2);
+         auto sb = _produce_block(skip_time, true, skip_flag | 2, disabled_producers);
          auto bs = validating_node->create_block_state_future( sb );
          validating_node->push_block( bs );
 
