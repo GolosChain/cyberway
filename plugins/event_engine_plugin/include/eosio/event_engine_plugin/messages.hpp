@@ -173,6 +173,7 @@ namespace eosio {
    struct AcceptedBlockMessage : public BlockMessage {
        std::vector<TrxReceipt> trxs;
        std::vector<EventData> events;
+       extensions_type block_extensions;
 
        AcceptedBlockMessage(MsgChannel msg_channel, MsgType msg_type, const chain::block_state_ptr& bstate)
        : BlockMessage(msg_channel, msg_type, bstate)
@@ -193,6 +194,8 @@ namespace eosio {
                TrxReceipt trx_receipt(tid, receipt);
                trxs.push_back(std::move(trx_receipt));
            }
+
+           block_extensions = bstate->block->block_extensions;
        }
    };
 
@@ -209,6 +212,6 @@ FC_REFLECT(eosio::BaseMessage, (msg_channel)(msg_type))
 FC_REFLECT_DERIVED(eosio::GenesisDataMessage, (eosio::BaseMessage), (id)(code)(name)(data))
 FC_REFLECT_DERIVED(eosio::BlockMessage, (eosio::BaseMessage), (id)(previous)(producer)(dpos_irreversible_blocknum)
    (scheduled_shuffle_slot)(scheduled_slot)(active_schedule)(next_schedule)(block_num)(block_time)(block_slot)(next_block_time))
-FC_REFLECT_DERIVED(eosio::AcceptedBlockMessage, (eosio::BlockMessage), (trxs)(events))
+FC_REFLECT_DERIVED(eosio::AcceptedBlockMessage, (eosio::BlockMessage), (trxs)(events)(block_extensions))
 FC_REFLECT_DERIVED(eosio::AcceptTrxMessage, (eosio::BaseMessage)(eosio::TrxMetadata), )
 FC_REFLECT_DERIVED(eosio::ApplyTrxMessage, (eosio::BaseMessage), (id)(block_num)(block_time)(prod_block_id)(actions)(except))
