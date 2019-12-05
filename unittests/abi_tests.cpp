@@ -561,7 +561,7 @@ BOOST_AUTO_TEST_CASE(general)
       "uint64"            : 64,
       "uint64_arr"        : [64,65],
       "uint128"           : 128,
-      "uint128_arr"       : ["0x00000000000000000000000000000080",129],
+      "uint128_arr"       : ["128",129],
       "int8"              : 108,
       "int8_arr"          : [108,109],
       "int16"             : 116,
@@ -571,7 +571,7 @@ BOOST_AUTO_TEST_CASE(general)
       "int64"             : 164,
       "int64_arr"         : [164,165],
       "int128"            : -128,
-      "int128_arr"        : ["0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF80",-129],
+      "int128_arr"        : ["-128",-129],
       "name"              : "xname1",
       "name_arr"          : ["xname2","xname3"],
       "field"             : {"name":"name1", "type":"type1"},
@@ -602,6 +602,8 @@ BOOST_AUTO_TEST_CASE(general)
         "actions":[{"account":"accountname1", "name":"actionname1", "authorization":[{"actor":"acc1","permission":"permname1"}], "data":"445566"}],
         "max_net_usage_words":15,
         "max_cpu_usage_ms":43,
+        "max_ram_kbytes":17,
+        "max_storage_kbytes":23,
         "delay_sec":0,
         "transaction_extensions": []
       },
@@ -613,6 +615,8 @@ BOOST_AUTO_TEST_CASE(general)
         "actions":[{"account":"acc1", "name":"actionname1", "authorization":[{"actor":"acc1","permission":"permname1"}], "data":"445566"}],
         "max_net_usage_words":15,
         "max_cpu_usage_ms":43,
+        "max_ram_kbytes":17,
+        "max_storage_kbytes":23,
         "delay_sec":0,
         "transaction_extensions": []
       },{
@@ -623,6 +627,8 @@ BOOST_AUTO_TEST_CASE(general)
         "actions":[{"account":"acc2", "name":"actionname2", "authorization":[{"actor":"acc2","permission":"permname2"}], "data":""}],
         "max_net_usage_words":21,
         "max_cpu_usage_ms":87,
+        "max_ram_kbytes":17,
+        "max_storage_kbytes":23,
         "delay_sec":0,
         "transaction_extensions": []
       }],
@@ -637,6 +643,8 @@ BOOST_AUTO_TEST_CASE(general)
         "actions":[{"account":"accountname1", "name":"actionname1", "authorization":[{"actor":"acc1","permission":"permname1"}], "data":"445566"}],
         "max_net_usage_words":15,
         "max_cpu_usage_ms":43,
+        "max_ram_kbytes":17,
+        "max_storage_kbytes":23,
         "delay_sec":0,
         "transaction_extensions": []
       },
@@ -651,6 +659,8 @@ BOOST_AUTO_TEST_CASE(general)
         "actions":[{"account":"acc1", "name":"actionname1", "authorization":[{"actor":"acc1","permission":"permname1"}], "data":"445566"}],
         "max_net_usage_words":15,
         "max_cpu_usage_ms":43,
+        "max_ram_kbytes":17,
+        "max_storage_kbytes":23,
         "delay_sec":0,
         "transaction_extensions": []
       },{
@@ -664,6 +674,8 @@ BOOST_AUTO_TEST_CASE(general)
         "actions":[{"account":"acc2", "name":"actionname2", "authorization":[{"actor":"acc2","permission":"permname2"}], "data":""}],
         "max_net_usage_words":15,
         "max_cpu_usage_ms":43,
+        "max_ram_kbytes":17,
+        "max_storage_kbytes":23,
         "delay_sec":0,
         "transaction_extensions": []
       }],
@@ -1626,7 +1638,7 @@ BOOST_AUTO_TEST_CASE(abi_type_repeat)
    )=====";
 
    auto abi = eosio_contract_abi(fc::json::from_string(repeat_abi).as<abi_def>());
-   auto is_table_exception = [](fc::exception const & e) -> bool { return e.to_detail_string().find("type already exists") != std::string::npos; };
+   auto is_table_exception = [](fc::exception const & e) -> bool { return e.to_detail_string().find("type actor_name already exists") != std::string::npos; };
    BOOST_CHECK_EXCEPTION( abi_serializer abis(abi, max_serialization_time), duplicate_abi_type_def_exception, is_table_exception );
 } FC_LOG_AND_RETHROW() }
 
@@ -1897,7 +1909,7 @@ BOOST_AUTO_TEST_CASE(abi_type_loop)
    }
    )=====";
 
-   auto is_type_exception = [](fc::exception const & e) -> bool { return e.to_detail_string().find("type already exists") != std::string::npos; };
+   auto is_type_exception = [](fc::exception const & e) -> bool { return e.to_detail_string().find("type name already exists") != std::string::npos; };
    BOOST_CHECK_EXCEPTION( abi_serializer abis(fc::json::from_string(repeat_abi).as<abi_def>(), max_serialization_time), duplicate_abi_type_def_exception, is_type_exception );
 
 } FC_LOG_AND_RETHROW() }
@@ -1959,7 +1971,7 @@ BOOST_AUTO_TEST_CASE(abi_type_redefine_to_name)
    }
    )=====";
 
-   auto is_type_exception = [](fc::exception const & e) -> bool { return e.to_detail_string().find("type already exists") != std::string::npos; };
+   auto is_type_exception = [](fc::exception const & e) -> bool { return e.to_detail_string().find("type name already exists") != std::string::npos; };
    BOOST_CHECK_EXCEPTION( abi_serializer abis(fc::json::from_string(repeat_abi).as<abi_def>(), max_serialization_time), duplicate_abi_type_def_exception, is_type_exception );
 
 } FC_LOG_AND_RETHROW() }
@@ -2214,7 +2226,7 @@ BOOST_AUTO_TEST_CASE(variants)
    using eosio::testing::fc_exception_message_starts_with;
 
    auto duplicate_variant_abi = R"({
-      "version": "eosio::abi/1.1",
+      "version": "cyberway::abi/1.1",
       "variants": [
          {"name": "v1", "types": ["int8", "string", "bool"]},
          {"name": "v1", "types": ["int8", "string", "bool"]},
@@ -2222,14 +2234,14 @@ BOOST_AUTO_TEST_CASE(variants)
    })";
 
    auto variant_abi_invalid_type = R"({
-      "version": "eosio::abi/1.1",
+      "version": "cyberway::abi/1.1",
       "variants": [
          {"name": "v1", "types": ["int91", "string", "bool"]},
       ],
    })";
 
    auto variant_abi = R"({
-      "version": "eosio::abi/1.1",
+      "version": "cyberway::abi/1.1",
       "types": [
          {"new_type_name": "foo", "type": "s"},
          {"new_type_name": "bar", "type": "s"},
@@ -2287,7 +2299,7 @@ BOOST_AUTO_TEST_CASE(extend)
    using eosio::testing::fc_exception_message_starts_with;
 
    auto abi = R"({
-      "version": "eosio::abi/1.1",
+      "version": "cyberway::abi/1.1",
       "structs": [
          {"name": "s", "base": "", "fields": [
             {"name": "i0", "type": "int8"},
@@ -2339,11 +2351,12 @@ BOOST_AUTO_TEST_CASE(extend)
 BOOST_AUTO_TEST_CASE(version)
 {
    try {
-      BOOST_CHECK_THROW( abi_serializer(fc::json::from_string(R"({})").as<abi_def>(), max_serialization_time), unsupported_abi_version_exception );
       BOOST_CHECK_THROW( abi_serializer(fc::json::from_string(R"({"version": ""})").as<abi_def>(), max_serialization_time), unsupported_abi_version_exception );
-      BOOST_CHECK_THROW( abi_serializer(fc::json::from_string(R"({"version": "eosio::abi/9.0"})").as<abi_def>(), max_serialization_time), unsupported_abi_version_exception );
+      BOOST_CHECK_THROW( abi_serializer(fc::json::from_string(R"({"version": "eosio::abi/1.0"})").as<abi_def>(), max_serialization_time), unsupported_abi_version_exception );
+      BOOST_CHECK_THROW( abi_serializer(fc::json::from_string(R"({"version": "cyberway::abi/9.0"})").as<abi_def>(), max_serialization_time), unsupported_abi_version_exception );
+      abi_serializer(fc::json::from_string(R"({})").as<abi_def>(), max_serialization_time);
       abi_serializer(fc::json::from_string(R"({"version": "cyberway::abi/1.0"})").as<abi_def>(), max_serialization_time);
-      abi_serializer(fc::json::from_string(R"({"version": "eosio::abi/1.1"})").as<abi_def>(), max_serialization_time);
+      abi_serializer(fc::json::from_string(R"({"version": "cyberway::abi/1.1"})").as<abi_def>(), max_serialization_time);
    } FC_LOG_AND_RETHROW()
 }
 
@@ -2441,7 +2454,7 @@ BOOST_AUTO_TEST_CASE(abi_serialize_detailed_error_messages)
    using eosio::testing::fc_exception_message_is;
 
    auto abi = R"({
-      "version": "eosio::abi/1.1",
+      "version": "cyberway::abi/1.1",
       "types": [
          {"new_type_name": "foo", "type": "s2"},
          {"new_type_name": "bar", "type": "foo"},
@@ -2518,7 +2531,7 @@ BOOST_AUTO_TEST_CASE(abi_serialize_short_error_messages)
    using eosio::testing::fc_exception_message_is;
 
    auto abi = R"({
-      "version": "eosio::abi/1.1",
+      "version": "cyberway::abi/1.1",
       "types": [
          {"new_type_name": "foo", "type": "s2"},
          {"new_type_name": "bar", "type": "foo"},
@@ -2598,7 +2611,7 @@ BOOST_AUTO_TEST_CASE(abi_deserialize_detailed_error_messages)
    using eosio::testing::fc_exception_message_is;
 
    auto abi = R"({
-      "version": "eosio::abi/1.1",
+      "version": "cyberway::abi/1.1",
       "types": [
          {"new_type_name": "oint", "type": "int8?"},
          {"new_type_name": "os1", "type": "s1?"}
