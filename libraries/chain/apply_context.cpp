@@ -251,7 +251,7 @@ void apply_context::require_recipient( account_name recipient ) {
 void apply_context::execute_inline( action&& a ) {
    auto* code = chaindb.find<account_object>(a.account, cursor_kind::OneRecord);
    EOS_ASSERT( code != nullptr, action_validate_exception,
-               "inline action's code account ${account} does not exist", ("account", a.account) );
+               "inline action's ${action} code account ${account} does not exist",("action", a.name) ("account", a.account) );
 
    flat_set<account_name> actors;
 

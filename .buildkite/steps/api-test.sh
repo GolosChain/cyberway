@@ -19,16 +19,16 @@ cd Docker
 
 IMAGETAG=${BUILDKITE_BRANCH:-master}
 
-echo ":llama: Change docker-compose.yml"
-sed -i "s/cyberway\/cyberway:stable/cyberway\/cyberway:${IMAGETAG}/g" docker-compose.yml
-sed -i "s/--genesis-json \S\+ --genesis-data \S\+//g" docker-compose.yml
-sed -i "s/\${PWD}\/config.ini/\${PWD}\/config-standalone.ini/g" docker-compose.yml
+echo ":llama: Change docker-compose-api-test.yml"
+sed -i "s/cyberway\/cyberway:stable/cyberway\/cyberway:${IMAGETAG}/g" docker-compose-api-test.yml
+sed -i "s/\${PWD}\/config.ini/\${PWD}\/config-standalone.ini/g" docker-compose-api-test.yml
 echo "----------------------------------------------"
-cat docker-compose.yml
+cat docker-compose-api-test.yml
 echo "----------------------------------------------"
 
-docker-compose up -d || true
-sleep 15s
+docker-compose -f docker-compose-api-test.yml up -d || true
+
+sleep 25s
 
 NODE_STATUS=$(docker inspect --format "{{.State.Status}}" nodeosd)
 NODE_EXIT=$(docker inspect --format "{{.State.ExitCode}}" nodeosd)
@@ -38,10 +38,12 @@ if [[ "$NODE_STATUS" == "exited" ]] || [[ "$NODE_EXIT" != "0" ]]; then
     exit 1
 fi
 
-curl -s http://127.0.0.1:8888/v1/chain/get_info | jq '.'
-
 docker logs nodeosd
 
-echo -e "\nGet cleos version:"
-./cleos.sh version client
-docker-compose down
+docker-compose -f docker-compose-api-test.yml exec nodeosd /bin/bash -c "PYTHONPATH=/opt/cyberway/tests/test_api python3 /opt/cyberway/tests/test_api/Tests/Cases/Runner.py --cleos cleos --skip BootSequenceTest ApiTest"
+
+result=$?
+
+docker-compose  -f docker-compose-api-test.yml down
+
+exit $result
