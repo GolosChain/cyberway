@@ -25,7 +25,7 @@
       "base": "",
       "fields": [
         {"name":"id", "type":"uint64"},
-        {"name":"identity", "type":"uint64"},
+        {"name":"identity", "type":"uint64"}
       ]
     }
   ],
