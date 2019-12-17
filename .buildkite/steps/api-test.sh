@@ -11,24 +11,30 @@ docker rm mongo || true
 docker volume rm cyberway-keosd-data || true
 docker volume rm cyberway-mongodb-data || true
 docker volume rm cyberway-nodeos-data || true
-docker volume create --name=cyberway-keosd-data
-docker volume create --name=cyberway-mongodb-data
 docker volume create --name=cyberway-nodeos-data
 
-cd Docker
+pushd Docker/api-test
 
 IMAGETAG=${BUILDKITE_BRANCH:-master}
 
-echo ":llama: Change docker-compose-api-test.yml"
-sed -i "s/cyberway\/cyberway:stable/cyberway\/cyberway:${IMAGETAG}/g" docker-compose-api-test.yml
-sed -i "s/\${PWD}\/config.ini/\${PWD}\/config-standalone.ini/g" docker-compose-api-test.yml
+CDT_IMAGETAG=$([ "$BUILDKITE_BRANCH" == master ]  && echo "stable" || echo "latest")
+
+BRANCHNAME=$([ "$BUILDKITE_BRANCH" == master ]  && echo "master" || echo "devel")
+
+REF=${TAGREF:-"heads/$BUILDKITE_BRANCH"}
+
+docker build -t cyberway/cyberway.api.test:${IMAGETAG} --build-arg=contract_branch=${BRANCHNAME} --build-arg=cw_imagetag=${IMAGETAG}  --build-arg=cdt_imagetag=${CDT_IMAGETAG} --build-arg=ref=${REF} .
+
+echo ":llama: Change docker-compose.yml"
+sed -i "s/cyberway\/cyberway.api.test:stable/cyberway\/cyberway.api.test:${IMAGETAG}/g" docker-compose.yml
+sed -i "s/\${PWD}\/config.ini/\${PWD}\/config-standalone.ini/g" docker-compose.yml
 echo "----------------------------------------------"
-cat docker-compose-api-test.yml
+cat docker-compose.yml
 echo "----------------------------------------------"
 
-docker-compose -f docker-compose-api-test.yml up -d || true
+docker-compose up -d || true
 
-sleep 25s
+sleep 45s
 
 NODE_STATUS=$(docker inspect --format "{{.State.Status}}" nodeosd)
 NODE_EXIT=$(docker inspect --format "{{.State.ExitCode}}" nodeosd)
@@ -40,10 +46,12 @@ fi
 
 docker logs nodeosd
 
-docker-compose -f docker-compose-api-test.yml exec nodeosd /bin/bash -c "PYTHONPATH=/opt/cyberway/tests/test_api python3 /opt/cyberway/tests/test_api/Tests/Cases/Runner.py --cleos cleos --skip BootSequenceTest ApiTest"
+docker-compose exec nodeosd /bin/bash -c "PYTHONPATH=/opt/cyberway/tests/test_api python3 /opt/cyberway/tests/test_api/Tests/Cases/Runner.py --cleos cleos --skip BootSequenceTest ApiTest"
 
 result=$?
 
-docker-compose  -f docker-compose-api-test.yml down
+docker-compose down
+
+popd 
 
 exit $result
