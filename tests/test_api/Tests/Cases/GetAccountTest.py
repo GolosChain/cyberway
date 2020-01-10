@@ -98,17 +98,17 @@ class GetAccountTest(WalletTestCase):
         verifyAccountEffectiveBalance(getAliceAccountOutput, '280.0000 CYBER')
         verifyAccountTotalBalance(getAliceAccountOutput, '980.0000 CYBER')
 
-    def test_11_enableStaking(self):
-        args = jsonArg(["4,CYBER"])
-        verifyStakeEnabled(self.cleos.exec('push action cyber.stake enable {args} -p cyber'.format(args=args)))
-
-    def test_12_stakeUsage(self):
-        self.cleos.exec('create account alice alice.child {key}'.format(key = self.wallet.createKeys('alice.child test key')))
-
-        output = self.cleos.exec('get account alice')
-
-        verifyResoursesStakeEndowment(output)
-        verifyResoursesStakeUsage(output)
+    # def test_11_enableStaking(self):
+    #     args = jsonArg(["4,CYBER"])
+    #     verifyStakeEnabled(self.cleos.exec('push action cyber.stake enable {args} -p cyber'.format(args=args)))
+    #
+    # def test_12_stakeUsage(self):
+    #     self.cleos.exec('create account alice alice.child {key}'.format(key = self.wallet.createKeys('alice.child test key')))
+    #
+    #     output = self.cleos.exec('get account alice')
+    #
+    #     verifyResoursesStakeEndowment(output)
+    #     verifyResoursesStakeUsage(output)
 
     def test_13_stakeForAnotherAccount(self):
         verifyTokensStaked(self.cleos.exec('system stake alice "200.0000 CYBER" --beneficiary bob'), 'alice', '200.0000 CYBER', 'bob')
