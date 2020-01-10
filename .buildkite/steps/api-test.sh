@@ -24,16 +24,19 @@ else
     BUILDTYPE="latest"
 fi
 
-REF=${TAGREF:-"heads/$BUILDKITE_BRANCH"}
+SYSTEM_CONTRACTS_TAG=${SYSTEM_CONTRACTS_TAG:-$BUILDTYPE}
 
-docker build -t cyberway/cyberway.api.test:${REVISION} --build-arg=contract_branch=master --build-arg=cw_imagetag=${REVISION}  --build-arg=cdt_imagetag=${BUILDTYPE} --build-arg=ref=${REF} .
+docker pull cyberway/cyberway.contracts:${SYSTEM_CONTRACTS_TAG}
+
+docker build -t cyberway/cyberway.api.test:${REVISION} --build-arg=cw_imagetag=${REVISION} --build-arg=system_contracts_tag=${SYSTEM_CONTRACTS_TAG} .
 
 echo ":llama: Change docker-compose.yml"
-sed -i "s/cyberway\/cyberway.api.test:stable/cyberway\/cyberway.api.test:${REVISION}/g" docker-compose.yml
-sed -i "s/\${PWD}\/config.ini/\${PWD}\/config-standalone.ini/g" docker-compose.yml
+sed    "s/\${IMAGETAG}/${REVISION}/g" docker-compose.yml.tmpl > docker-compose.yml
 echo "----------------------------------------------"
 cat docker-compose.yml
 echo "----------------------------------------------"
+
+trap "rm -f docker-compose.yml" EXIT 
 
 docker-compose up -d || true
 

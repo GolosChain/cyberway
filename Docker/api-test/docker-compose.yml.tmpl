@@ -17,7 +17,7 @@ services:
 
   nodeosd:
     container_name: nodeosd
-    image: cyberway/cyberway.api.test:stable
+    image: cyberway/cyberway.api.test:${IMAGETAG}
     depends_on:
       mongo:
         condition: service_healthy
