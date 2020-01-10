@@ -15,18 +15,21 @@ docker volume create --name=cyberway-nodeos-data
 
 pushd Docker/api-test
 
-IMAGETAG=${BUILDKITE_BRANCH:-master}
+REVISION=$(git rev-parse HEAD)
+MASTER_REVISION=$(git rev-parse origin/master)
 
-CDT_IMAGETAG=$([ "$BUILDKITE_BRANCH" == master ]  && echo "stable" || echo "latest")
-
-BRANCHNAME=$([ "$BUILDKITE_BRANCH" == master ]  && echo "master" || echo "develop")
+if [[ ${REVISION} == ${MASTER_REVISION} ]]; then
+    BUILDTYPE="stable"
+else
+    BUILDTYPE="latest"
+fi
 
 REF=${TAGREF:-"heads/$BUILDKITE_BRANCH"}
 
-docker build -t cyberway/cyberway.api.test:${IMAGETAG} --build-arg=contract_branch=${BRANCHNAME} --build-arg=cw_imagetag=${IMAGETAG}  --build-arg=cdt_imagetag=${CDT_IMAGETAG} --build-arg=ref=${REF} .
+docker build -t cyberway/cyberway.api.test:${REVISION} --build-arg=contract_branch=master --build-arg=cw_imagetag=${REVISION}  --build-arg=cdt_imagetag=${BUILDTYPE} --build-arg=ref=${REF} .
 
 echo ":llama: Change docker-compose.yml"
-sed -i "s/cyberway\/cyberway.api.test:stable/cyberway\/cyberway.api.test:${IMAGETAG}/g" docker-compose.yml
+sed -i "s/cyberway\/cyberway.api.test:stable/cyberway\/cyberway.api.test:${REVISION}/g" docker-compose.yml
 sed -i "s/\${PWD}\/config.ini/\${PWD}\/config-standalone.ini/g" docker-compose.yml
 echo "----------------------------------------------"
 cat docker-compose.yml
