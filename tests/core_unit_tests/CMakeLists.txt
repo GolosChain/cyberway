@@ -29,16 +29,6 @@ add_dependencies(
         multi_index_test noop eosio.msig payloadless tic_tac_toe deferred_test snapshot_test
 )
 
-#Manually run unit_test for all supported runtimes
-#To run unit_test with all log from blockchain displayed, put --verbose after --, i.e. unit_test -- --verbose
-add_test(NAME unit_test_wavm COMMAND unit_test
- -t \!wasm_tests/weighted_cpu_limit_tests
- --report_level=detailed --color_output --catch_system_errors=no -- --wavm)
-
-add_test(NAME unit_test_wabt COMMAND unit_test
- -t \!wasm_tests/weighted_cpu_limit_tests
- --report_level=detailed --color_output -- --wabt)
-
 install( TARGETS
     unit_test
 
@@ -64,7 +54,6 @@ if(ENABLE_COVERAGE_TESTING)
   endif() # NOT GENHTML_PATH
 
   # no spaces allowed within tests list
-  set(ctest_tests 'unit_test_wabt|unit_test_wavm')
   set(ctest_exclude_tests '')
 
   # Setup target
