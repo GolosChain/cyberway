@@ -9,7 +9,7 @@ COPY . ./cyberway
 RUN cd cyberway \
     && cmake -H. -B"/tmp/build" \
         -GNinja \
-	-DVERSION_STRING=$versionstring \
+        -DVERSION_STRING=$versionstring \
         -DCMAKE_BUILD_TYPE=$compiletype \
         -DWASM_ROOT=/opt/wasm \
         -DCMAKE_CXX_COMPILER=clang++ \
