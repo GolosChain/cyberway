@@ -1,18 +1,15 @@
 ARG builder=master
 FROM cyberway/builder:$builder as builder
-ARG branch=master
 ARG symbol=CYBER
 ARG compiletype=RelWithDebInfo
-ARG ref=heads/$branch
+ARG versionstring
 
-ADD https://api.github.com/repos/cyberway/cyberway/git/refs/$ref /etc/version.json
-
-RUN git clone -b $branch https://github.com/cyberway/cyberway.git --recursive
+COPY . ./cyberway
 
 RUN cd cyberway \
-    && echo "$branch:$(git rev-parse HEAD)" > /etc/cyberway-version \
     && cmake -H. -B"/tmp/build" \
         -GNinja \
+        -DVERSION_STRING=$versionstring \
         -DCMAKE_BUILD_TYPE=$compiletype \
         -DWASM_ROOT=/opt/wasm \
         -DCMAKE_CXX_COMPILER=clang++ \
@@ -23,14 +20,16 @@ RUN cd cyberway \
     && cmake --build /tmp/build --target install
 
 FROM ubuntu:18.04
+ARG revision
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get -y install openssl ca-certificates libusb-1.0-0-dev libcurl4-gnutls-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "$revision" > /etc/cyberway-version
 
 COPY --from=builder /usr/local/lib/* /usr/local/lib/
 COPY --from=builder /cyberway/Docker/config.ini /
-COPY --from=builder /etc/cyberway-version /etc
+
 COPY --from=builder /opt/cyberway /opt/cyberway
 COPY --from=builder /cyberway/Docker/nodeosd.sh /opt/cyberway/bin/nodeosd.sh
 COPY --from=builder /cyberway/Docker/run-with-events.sh /opt/cyberway/startup/run-with-events.sh

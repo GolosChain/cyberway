@@ -19,7 +19,7 @@ IMAGETAG=${BUILDKITE_BRANCH:-master}
 
 CDT_IMAGETAG=$([ "$BUILDKITE_BRANCH" == master ]  && echo "stable" || echo "latest")
 
-BRANCHNAME=$([ "$BUILDKITE_BRANCH" == master ]  && echo "master" || echo "devel")
+BRANCHNAME=$([ "$BUILDKITE_BRANCH" == master ]  && echo "master" || echo "develop")
 
 REF=${TAGREF:-"heads/$BUILDKITE_BRANCH"}
 

@@ -10,9 +10,9 @@ COPY --from=cyberway /opt/cyberway /opt/cyberway
 
 ARG contract_branch=master
 
-RUN git clone -b $contract_branch https://github.com/cyberway/cyberway.contracts --recursive
-
-RUN cd cyberway.contracts \
+RUN ldconfig \
+    && git clone -b $contract_branch https://github.com/cyberway/cyberway.contracts --recursive \
+    && cd cyberway.contracts \
     && echo ":$(git rev-parse HEAD)" > version \
     && cmake -H. -B"build" \
         -GNinja \
@@ -24,8 +24,6 @@ RUN cd cyberway.contracts \
 
 ENV CYBERWAY_CONTRACTS /opt/cyberway.contracts/
 ENV CYBERWAY /opt/cyberway/
-
-RUN ldconfig
 
 RUN /opt/cyberway/tests/test_api/genesis/create-genesis.sh    
     
