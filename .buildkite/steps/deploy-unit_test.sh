@@ -9,7 +9,7 @@ docker volume create --name=cyberway-mongodb-data
 
 cd Docker
 
-IMAGETAG=${BUILDKITE_BRANCH:-master}
+IMAGETAG=$(git rev-parse HEAD)
 
 docker-compose up -d mongo
 

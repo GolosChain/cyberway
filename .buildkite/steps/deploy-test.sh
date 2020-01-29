@@ -17,7 +17,7 @@ docker volume create --name=cyberway-nodeos-data
 
 cd Docker
 
-IMAGETAG=${BUILDKITE_BRANCH:-master}
+IMAGETAG=$(git rev-parse HEAD)
 
 echo ":llama: Change docker-compose.yml"
 sed -i "s/cyberway\/cyberway:stable/cyberway\/cyberway:${IMAGETAG}/g" docker-compose.yml
