@@ -1,0 +1,29 @@
+steps:
+  - label: ":docker: create base image"
+    command: ".buildkite/steps/build-builder.sh"
+    timeout: 60
+
+  - wait
+
+  - label: ":floppy_disk: upload base image"
+    command: ".buildkite/steps/publish-builder.sh"
+    branches: "master alfa develop ci-* v*.*.*"
+
+  - wait
+
+  - label: ":docker: build docker image"
+    command: ".buildkite/steps/build-image.sh"
+
+  - wait
+
+  - label: ":floppy_disk: upload image"
+    command: ".buildkite/steps/publish-image.sh"
+    branches: "master alfa develop ci-* v*.*.*"
+
+  - wait
+
+  - label: ":docker: mongodb-exporter"
+    command: ".buildkite/steps/mongodb-exporter.sh"
+    branches: "master"
+    timeout: 20
+
