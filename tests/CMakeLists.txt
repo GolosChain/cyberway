@@ -1,7 +1,4 @@
-if(NOT APPLE)
-  add_subdirectory( core_unit_tests )
-endif()
-
+add_subdirectory( core_unit_tests )
 #add_subdirectory( plugin_unit_tests )
 #add_subdirectory( chaindb )
 add_subdirectory( test_api )
