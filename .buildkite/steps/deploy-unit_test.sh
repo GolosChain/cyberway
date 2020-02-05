@@ -5,7 +5,9 @@ set -euo pipefail
 docker stop mongo || true
 docker rm mongo || true
 docker volume rm cyberway-mongodb-data || true
+docker volume rm cyberway-nodeos-data || true
 docker volume create --name=cyberway-mongodb-data
+docker volume create --name=cyberway-nodeos-data
 
 cd Docker
 
