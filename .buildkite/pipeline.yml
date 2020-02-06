@@ -7,12 +7,6 @@ steps:
 
   - wait
 
-  - label: ":floppy_disk: upload base image"
-    command: ".buildkite/steps/publish-builder.sh"
-    branches: "master alfa develop ci-* v*.*.*"
-
-  - wait
-
   - label: ":docker: build docker image"
     command:
       - ".buildkite/steps/build-image.sh"
