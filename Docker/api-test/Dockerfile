@@ -1,8 +1,8 @@
-ARG cw_imagetag=stable
+ARG cw_tag=stable
 ARG system_contracts_tag=stable
 
 FROM cyberway/cyberway.contracts:$system_contracts_tag as cyberway.contracts
-FROM cyberway/cyberway:$cw_imagetag as cyberway
+FROM cyberway/cyberway:$cw_tag as cyberway
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get -y install python3 python3-pymongo python3-requests python3-testfixtures socat \

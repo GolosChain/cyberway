@@ -13,8 +13,6 @@ docker volume rm cyberway-mongodb-data || true
 docker volume rm cyberway-nodeos-data || true
 docker volume create --name=cyberway-nodeos-data
 
-pushd Docker/api-test
-
 REVISION=$(git rev-parse HEAD)
 MASTER_REVISION=$(git rev-parse origin/master)
 
@@ -28,17 +26,12 @@ SYSTEM_CONTRACTS_TAG=${SYSTEM_CONTRACTS_TAG:-$BUILDTYPE}
 
 docker pull cyberway/cyberway.contracts:${SYSTEM_CONTRACTS_TAG}
 
-docker build -t cyberway/cyberway.api.test:${REVISION} --build-arg=cw_imagetag=${REVISION} --build-arg=system_contracts_tag=${SYSTEM_CONTRACTS_TAG} .
+docker build -t cyberway/cyberway.api.test:${REVISION} --build-arg=cw_tag=${REVISION} --build-arg=system_contracts_tag=${SYSTEM_CONTRACTS_TAG} -f  Docker/api-test/Dockerfile .
 
-echo ":llama: Change docker-compose.yml"
-sed    "s/\${IMAGETAG}/${REVISION}/g" docker-compose.yml.tmpl > docker-compose.yml
-echo "----------------------------------------------"
-cat docker-compose.yml
-echo "----------------------------------------------"
+export IMAGETAG=${REVISION} 
+docker-compose --file Docker/api-test/docker-compose.yml up -d || true
 
-trap "rm -f docker-compose.yml" EXIT 
-
-docker-compose up -d || true
+trap "docker-compose  --file Docker/api-test/docker-compose.yml down" EXIT 
 
 sleep 45s
 
@@ -52,12 +45,8 @@ fi
 
 docker logs nodeosd
 
-docker-compose exec nodeosd /bin/bash -c "PYTHONPATH=/opt/cyberway/tests/test_api python3 /opt/cyberway/tests/test_api/Tests/Cases/Runner.py --cleos cleos --skip BootSequenceTest ApiTest"
+docker-compose --file Docker/api-test/docker-compose.yml exec nodeosd /bin/bash -c "PYTHONPATH=/opt/cyberway/tests/test_api python3 /opt/cyberway/tests/test_api/Tests/Cases/Runner.py --cleos cleos --skip BootSequenceTest ApiTest"
 
 result=$?
-
-docker-compose down
-
-popd 
 
 exit $result
