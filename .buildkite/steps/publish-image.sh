@@ -15,6 +15,7 @@ else
     TAG=${BUILDKITE_BRANCH}
 fi
 
+docker pull cuberway/cyberway:${IMAGETAG}
 docker tag cyberway/cyberway:${IMAGETAG} cyberway/cyberway:${TAG}
 docker push cyberway/cyberway:${TAG}
 
