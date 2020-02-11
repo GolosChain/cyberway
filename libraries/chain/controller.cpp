@@ -1184,6 +1184,68 @@ struct controller_impl {
 
             fc::move_append(pending->_actions, move(trx_context.executed));
 
+            if (trx_context.nested_trx) {
+               EOS_ASSERT(!trx->implicit, transaction_exception, "implicit trx can't start nested trx");
+               // transaction t{*trx_context.nested_trx};
+               // vector<signature_type> empty1;
+               // vector<bytes> empty2;
+               signed_transaction ntrx{transaction{*trx_context.nested_trx}, vector<signature_type>{}, vector<bytes>{}};
+               EOS_ASSERT(ntrx.delay_sec.value == 0, transaction_exception, "SYSTEM: nested trx delay != 0");
+               const auto nested_id = ntrx.id();
+               transaction_context nested_ctx{self, ntrx, nested_id}; // TODO: fix `start` arg
+               // if ((bool)subjective_cpu_leeway && pending->_block_status == controller::block_status::incomplete) {
+               //    nested_ctx.leeway = *subjective_cpu_leeway;
+               // }
+               nested_ctx.delay = fc::seconds(ntrx.delay_sec);
+               nested_ctx.leeway = fc::seconds(0);
+               nested_ctx.caller_set_deadline = deadline;   // TODO: ?fix already consumed part
+               nested_ctx.explicit_billed_cpu_time = billed.explicit_usage; // TODO: ?fix already consumed part
+               nested_ctx.billed_cpu_time_us = billed.cpu_time_us;
+               nested_ctx.explicit_billed_ram_bytes = billed.explicit_usage;
+               nested_ctx.billed_ram_bytes = billed.ram_bytes;
+               transaction_trace_ptr ntrace = nested_ctx.trace;
+
+               nested_ctx.is_nested = true;
+               nested_ctx.storage_providers = fc::flat_map<account_name, account_name>{trx_context.storage_providers};
+               nested_ctx.bill_to_accounts = fc::flat_set<account_name>{trx_context.bill_to_accounts};
+               wlog("Nested-pre providers: (${p}); bill to: (${b})",
+                  ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
+               nested_ctx.init_for_implicit_trx(); // can reuse implicit initializer
+               wlog("Nested-init providers: (${p}); bill to: (${b})",
+                  ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
+
+               nested_ctx.exec();
+               nested_ctx.finalize();
+               wlog("Nested-final providers: (${p}); bill to: (${b}), storage: (${s})",
+                  ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts)
+                  ("s", nested_ctx.accounts_storage_deltas));
+
+               // trace2->receipt = push_receipt(*trx->packed_trx, s, nested_ctx.billed_cpu_time_us, trace->net_usage,
+               //       nested_ctx.billed_ram_bytes, trace->storage_bytes);
+               const auto net_usage = ntrace->net_usage;
+               uint64_t net_usage_words = net_usage / 8;
+               EOS_ASSERT(net_usage_words*8 == net_usage, transaction_exception, "net_usage is not divisible by 8");
+               // pending->_pending_block_state->block->transactions.emplace_back( trx );
+               transaction_receipt r;// = pending->_pending_block_state->block->transactions.back();
+               r.status          = transaction_receipt::executed;
+               r.net_usage_words = net_usage_words;
+               r.storage_kbytes  = ntrace->storage_bytes >> 10;
+               r.cpu_usage_us    = nested_ctx.billed_cpu_time_us;
+               r.ram_kbytes      = nested_ctx.billed_ram_bytes >> 10;
+
+               trace->receipt->net_usage_words = (trace->receipt->net_usage_words.value + net_usage_words);
+               trace->receipt->storage_kbytes  = (trace->receipt->storage_kbytes.value + ntrace->storage_bytes) >> 10;
+               trace->receipt->cpu_usage_us    = (trace->receipt->cpu_usage_us.value + nested_ctx.billed_cpu_time_us);
+               trace->receipt->ram_kbytes      = (trace->receipt->ram_kbytes.value + nested_ctx.billed_ram_bytes) >> 10;
+               trace->nested_action_traces     = ntrace->action_traces;
+
+               // pending->_pending_block_state->trxs.emplace_back(trx); // TODO: add metadata for nested
+               fc::move_append(pending->_actions, move(nested_ctx.executed));
+               // emit(self.applied_transaction, trace); // special case for applied_nested?
+
+               nested_ctx.squash();
+            }
+
             // call the accept signal but only once for this transaction
             if (!trx->accepted) {
                trx->accepted = true;
