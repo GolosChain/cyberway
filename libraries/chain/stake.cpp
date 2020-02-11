@@ -77,11 +77,11 @@ int64_t recall_proxied_traversal(const cyberway::chaindb::storage_payer_info& st
     return ret;
 }
 
-template<typename AgentIndex, typename GrantIndex>
+template<typename AgentIndex, typename GrantIndex, typename AutorcIndex>
 void update_proxied_traversal(
     const cyberway::chaindb::storage_payer_info& ram, int64_t now, symbol_code token_code,
-    const AgentIndex& agents_idx, const GrantIndex& grants_idx,
-    const stake_agent_object* agent, time_point_sec last_reward, std::map<account_name, int64_t>& votes_changes, bool force
+    const AgentIndex& agents_idx, const GrantIndex& grants_idx, const AutorcIndex autorcs_idx,
+    const stake_agent_object* agent, time_point_sec last_reward, std::map<account_name, int64_t>& votes_changes, bool force, bool custom_autorecall_mode
 ) {
     if ((last_reward >= agent->last_proxied_update) || force) {
         int64_t new_proxied = 0;
@@ -91,11 +91,16 @@ void update_proxied_traversal(
 
         while ((grant_itr != grants_idx.end()) && (grant_itr->token_code == token_code) && (grant_itr->grantor_name == agent->account)) {
             auto proxy_agent = get_agent(token_code, agents_idx, grant_itr->recipient_name);
-            update_proxied_traversal(ram, now, token_code, agents_idx, grants_idx, proxy_agent, last_reward, votes_changes, force);
+            update_proxied_traversal(ram, now, token_code, agents_idx, grants_idx, autorcs_idx, proxy_agent, last_reward, votes_changes, force, custom_autorecall_mode);
+            
+            auto autorc_itr = autorcs_idx.find(agent_key(token_code, agent->account));
+            bool grantor_breaks_due_to_fee = grant_itr->break_fee < proxy_agent->fee && 
+                (!custom_autorecall_mode || (autorc_itr != autorcs_idx.end() && autorc_itr->break_fee_enabled));
+                
+            bool grantor_breaks_due_to_stake = grant_itr->break_min_own_staked > proxy_agent->min_own_staked && 
+                (!custom_autorecall_mode || (autorc_itr != autorcs_idx.end() && autorc_itr->break_min_stake_enabled));
 
-            if (proxy_agent->proxy_level < agent->proxy_level &&
-                grant_itr->break_fee >= proxy_agent->fee &&
-                grant_itr->break_min_own_staked <= proxy_agent->min_own_staked)
+            if (proxy_agent->proxy_level < agent->proxy_level && !grantor_breaks_due_to_fee && !grantor_breaks_due_to_stake)
             {
                 if (proxy_agent->shares_sum)
                     new_proxied += safe_prop(proxy_agent->get_total_funds(), grant_itr->share, proxy_agent->shares_sum);
@@ -119,12 +124,14 @@ void update_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::c
     EOS_ASSERT(stat, transaction_exception, "no staking for token");
     auto agents_table = db.get_table<stake_agent_object>();
     auto grants_table = db.get_table<stake_grant_object>();
+    auto autorcs_table = db.get_table<stake_auto_recall_object>();
     auto agents_idx = agents_table.get_index<stake_agent_object::by_key>();
     auto grants_idx = grants_table.get_index<stake_grant_object::by_key>();
+    auto autorcs_idx = autorcs_table.get_index<stake_auto_recall_object::by_key>();
     std::map<account_name, int64_t> votes_changes;
-    update_proxied_traversal(storage, now, token_code, agents_idx, grants_idx,
+    update_proxied_traversal(storage, now, token_code, agents_idx, grants_idx, autorcs_idx,
         get_agent(token_code, agents_idx, account),
-        stat->last_reward, votes_changes, force);
+        stat->last_reward, votes_changes, force, autorcs_idx.find(agent_key(token_code, account_name{})) != autorcs_idx.end());
     set_votes(db, &(*stat), token_code, votes_changes);
 }
 
@@ -139,12 +146,15 @@ void recall_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::c
 
     auto agents_table = db.get_table<stake_agent_object>();
     auto grants_table = db.get_table<stake_grant_object>();
+    auto autorcs_table = db.get_table<stake_auto_recall_object>();
     auto agents_idx = agents_table.get_index<stake_agent_object::by_key>();
     auto grants_idx = grants_table.get_index<stake_grant_object::by_key>();
+    auto autorcs_idx = autorcs_table.get_index<stake_auto_recall_object::by_key>();
 
     auto grantor_as_agent = get_agent(token_code, agents_idx, grantor_name);
     std::map<account_name, int64_t> votes_changes;
-    update_proxied_traversal(storage, now, token_code, agents_idx, grants_idx, grantor_as_agent, time_point_sec(), votes_changes, true);
+    update_proxied_traversal(storage, now, token_code, agents_idx, grants_idx, autorcs_idx, grantor_as_agent, time_point_sec(), votes_changes, true,
+        autorcs_idx.find(agent_key(token_code, account_name{})) != autorcs_idx.end());
     
     int64_t amount = 0;
     auto grant_itr = grants_idx.lower_bound(grant_key(token_code, grantor_name));

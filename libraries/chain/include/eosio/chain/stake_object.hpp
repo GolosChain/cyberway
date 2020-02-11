@@ -117,6 +117,29 @@ using stake_candidate_table = cyberway::chaindb::table_container<
     >
 >;
 
+class stake_auto_recall_object : public cyberway::chaindb::object<stake_auto_recall_object_type, stake_auto_recall_object> {
+    CHAINDB_OBJECT_ID_CTOR(stake_auto_recall_object)
+    id_type id;
+    symbol_code token_code;
+    account_name account;
+    bool break_fee_enabled = false;
+    bool break_min_stake_enabled = false;
+    struct by_key {};
+};
+
+using stake_auto_recall_table = cyberway::chaindb::table_container<
+    stake_auto_recall_object,
+    cyberway::chaindb::indexed_by<
+        cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<by_id>, 
+           BOOST_MULTI_INDEX_MEMBER(stake_auto_recall_object, stake_auto_recall_object::id_type, id)>,
+        cyberway::chaindb::ordered_unique<cyberway::chaindb::tag<stake_auto_recall_object::by_key>,
+           cyberway::chaindb::composite_key<stake_auto_recall_object,
+              BOOST_MULTI_INDEX_MEMBER(stake_auto_recall_object, symbol_code, token_code),
+              BOOST_MULTI_INDEX_MEMBER(stake_auto_recall_object, account_name, account)>
+        >
+    >
+>;
+
 class stake_grant_object : public cyberway::chaindb::object<stake_grant_object_type, stake_grant_object> {
     CHAINDB_OBJECT_ID_CTOR(stake_grant_object)
     id_type id;
@@ -190,6 +213,10 @@ CHAINDB_TAG(eosio::chain::stake_candidate_object::by_votes, byvotes)
 CHAINDB_TAG(eosio::chain::stake_candidate_object::by_prior, byprior)
 CHAINDB_TAG(eosio::chain::stake_candidate_object, stake.cand)
 
+CHAINDB_SET_TABLE_TYPE(eosio::chain::stake_auto_recall_object, eosio::chain::stake_auto_recall_table)
+CHAINDB_TAG(eosio::chain::stake_auto_recall_object::by_key, bykey)
+CHAINDB_TAG(eosio::chain::stake_auto_recall_object, stake.autorc)
+
 CHAINDB_SET_TABLE_TYPE(eosio::chain::stake_grant_object, eosio::chain::stake_grant_table)
 CHAINDB_TAG(eosio::chain::stake_grant_object::by_key, bykey)
 CHAINDB_TAG(eosio::chain::stake_grant_object, stake.grant)
@@ -206,6 +233,9 @@ FC_REFLECT(eosio::chain::stake_agent_object,
     
 FC_REFLECT(eosio::chain::stake_candidate_object, 
     (id)(token_code)(account)(latest_pick)(votes)(priority)(signing_key)(enabled))
+    
+FC_REFLECT(eosio::chain::stake_auto_recall_object, 
+     (id)(token_code)(account)(break_fee_enabled)(break_min_stake_enabled))
     
 FC_REFLECT(eosio::chain::stake_grant_object, 
     (id)(token_code)(grantor_name)(recipient_name)(pct)(share)(break_fee)(break_min_own_staked))
