@@ -203,7 +203,9 @@ namespace eosio { namespace chain {
          /**
           *
           */
-         transaction_trace_ptr push_transaction( const transaction_metadata_ptr& trx, fc::time_point deadline, const billed_bw_usage& = {} );
+         transaction_trace_ptr push_transaction( const transaction_metadata_ptr& trx, fc::time_point deadline,
+            const billed_bw_usage& = {}, bool bill_nested = false // this bills are used in tests only
+         );
 
          /**
           * Attempt to execute a specific transaction in our deferred trx database

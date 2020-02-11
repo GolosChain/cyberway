@@ -1,0 +1,53 @@
+{
+    "version": "cyberway::abi/1.1",
+    "types": [],
+    "variants": [],
+    "structs": [
+        {
+            "name": "item",
+            "fields": [{"type": "uint64", "name": "value"}]
+        },{
+            "name": "put",
+            "fields": [{"type": "name", "name": "who"}]
+        },{
+            "name": "auth",
+            "fields": [{"type": "name", "name": "arg"}]
+        },{
+            "name": "check",
+            "fields": [{"type": "int64", "name": "arg"}]
+        },{
+            "name": "sendnested",
+            "fields": [
+                {"type": "name",    "name": "actor"},
+                {"type": "name",    "name": "action"},
+                {"type": "int64",   "name": "arg"},
+                {"type": "uint32",  "name": "delay"},
+                {"type": "uint32",  "name": "expiration"},
+                {"type": "name",    "name": "provide"}
+            ]
+        }
+    ],
+    "actions": [
+        {"name": "put",           "type": "put"},
+        {"name": "auth",          "type": "auth"},
+        {"name": "check",         "type": "check"},
+        {"name": "nestedcheck"    "type": "check"},
+        {"name": "nestedcheck2"   "type": "check"},
+        {"name": "nestedchecki"   "type": "check"},
+        {"name": "sendnested",    "type": "sendnested"},
+        {"name": "sendnestedcfa", "type": "auth"},
+    ],
+    "tables": [
+        {
+            "name": "item",
+            "type": "item",
+            "indexes" : [{
+                "name": "primary",
+                "unique": true,
+                "orders": [{"field": "value", "order": "asc"}]
+            }]
+        }
+    ],
+    "events": [],
+    "abi_extensions": []
+}

@@ -49,6 +49,11 @@ namespace eosio {
          send_deferred(sender_id, payer, serialize.data(), serialize.size(), replace_existing);
       }
 
+      void send_nested() const {
+         auto serialize = pack(*this);
+         ::send_nested(serialize.data(), serialize.size());
+      }
+
       vector<action>  context_free_actions;
       vector<action>  actions;
       extensions_type transaction_extensions;

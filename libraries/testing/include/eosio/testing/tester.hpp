@@ -132,7 +132,9 @@ namespace eosio { namespace testing {
          transaction_trace_ptr    push_transaction( packed_transaction& trx, fc::time_point deadline = fc::time_point::maximum(),
                                                     uint32_t billed_cpu_time_us = DEFAULT_BILLED_CPU_TIME_US, uint64_t billed_ram_bytes = DEFAULT_BILLED_RAM_BYTES );
          transaction_trace_ptr    push_transaction( signed_transaction& trx, fc::time_point deadline = fc::time_point::maximum(),
-                                                    uint32_t billed_cpu_time_us = DEFAULT_BILLED_CPU_TIME_US, uint64_t billed_ram_bytes = DEFAULT_BILLED_RAM_BYTES );
+                                                    uint32_t billed_cpu_time_us = DEFAULT_BILLED_CPU_TIME_US, uint64_t billed_ram_bytes = DEFAULT_BILLED_RAM_BYTES,
+                                                    bool add_nested = false );
+         transaction_trace_ptr    push_transaction2(signed_transaction& trx, bool add_nested = false);
          action_result            push_action(action&& cert_act, uint64_t authorizer); // TODO/QUESTION: Is this needed?
 
          transaction_trace_ptr    push_action( const account_name& code,
@@ -152,7 +154,8 @@ namespace eosio { namespace testing {
                                                const vector<permission_level>& auths,
                                                const variant_object& data,
                                                uint32_t expiration = DEFAULT_EXPIRATION_DELTA,
-                                               uint32_t delay_sec = 0 );
+                                               uint32_t delay_sec = 0,
+                                               bool add_nested = false );
 
 
          action get_action( account_name code, action_name acttype, vector<permission_level> auths,
@@ -293,6 +296,7 @@ namespace eosio { namespace testing {
       public:
          unique_ptr<controller> control;
          std::map<chain::public_key_type, chain::private_key_type> block_signing_private_keys;
+         bool ignore_scheduled_fail = false; // to test deferred more flexible
       protected:
          controller::config                            cfg;
          map<transaction_id_type, transaction_receipt> chain_transactions;

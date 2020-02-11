@@ -29,6 +29,7 @@ namespace eosio {
        bool                       accepted;
        bool                       implicit;
        bool                       scheduled;
+       bool                       nested;
        variant                    trx;
        chain::bytes               hex_data;
        vector<signature_type>     signatures;
@@ -38,6 +39,7 @@ namespace eosio {
        , accepted(meta->accepted)
        , implicit(meta->implicit)
        , scheduled(meta->scheduled)
+       , nested(meta->nested)
        , trx(trx)
        , hex_data(meta->packed_trx->get_raw_transaction())
        , signatures(meta->packed_trx->get_signatures())
@@ -209,7 +211,7 @@ namespace eosio {
 
 FC_REFLECT(eosio::EventData, (code)(event)(data)(args))
 FC_REFLECT(eosio::ActionData, (receiver)(code)(action)(auth)(data)(args)(events))
-FC_REFLECT(eosio::TrxMetadata, (id)(accepted)(implicit)(scheduled)(trx)(hex_data)(signatures))
+FC_REFLECT(eosio::TrxMetadata, (id)(accepted)(implicit)(scheduled)(nested)(trx)(hex_data)(signatures))
 FC_REFLECT(eosio::TrxReceipt, (id)(status)(cpu_usage_us)(net_usage_words)(ram_kbytes)(storage_kbytes))
 
 FC_REFLECT_ENUM(eosio::MsgChannel, (Blocks)(Genesis))

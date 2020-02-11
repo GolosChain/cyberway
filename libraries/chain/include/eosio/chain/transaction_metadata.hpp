@@ -32,6 +32,7 @@ class transaction_metadata {
       bool                                                       accepted = false;
       bool                                                       implicit = false;
       bool                                                       scheduled = false;
+      bool                                                       nested = false;
 
       transaction_metadata() = delete;
       transaction_metadata(const transaction_metadata&) = delete;

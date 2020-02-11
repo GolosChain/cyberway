@@ -176,7 +176,7 @@ namespace eosio { namespace chain {
          fc::microseconds              delay;
          bool                          is_input           = false;
          bool                          apply_context_free = true;
-         
+
          fc::time_point                caller_set_deadline = fc::time_point::maximum();
          fc::microseconds              leeway = fc::microseconds(0);
          int64_t                       billed_cpu_time_us = 0;
@@ -186,6 +186,9 @@ namespace eosio { namespace chain {
          bool                          explicit_billed_ram_bytes = false;
 
          fc::flat_map<account_name, account_name> storage_providers;
+
+         bool                          is_nested = false;
+         optional<transaction>         nested_trx;
 
       private:
          bool                          is_initialized = false;
