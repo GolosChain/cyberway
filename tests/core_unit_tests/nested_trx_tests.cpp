@@ -317,30 +317,30 @@ BOOST_FIXTURE_TEST_CASE(providebw, nested_tester) { try {
     };
     BOOST_TEST_MESSAGE("------ outer provide works");
     BOOST_TEST_MESSAGE("...... alice bw-> bob who sends trx, carol acts in nested");
-    push_transaction(make_trx(bob, bob, alice, carol));
+    push_transaction2(make_trx(bob, bob, alice, carol), true);
     CHECK_ALICE_BOB_CAROL_USAGES(INC, EQ, INC);
     BOOST_TEST_MESSAGE("------ provides to inner too");
     BOOST_TEST_MESSAGE("...... alice sends trx and bw-> bob who acts in nested");
-    push_transaction(make_trx(alice, bob, alice, bob));
+    push_transaction2(make_trx(alice, bob, alice, bob), true);
     CHECK_ALICE_BOB_CAROL_USAGES(INC, EQ, EQ);
     BOOST_TEST_MESSAGE("...... alice bw-> bob who sends trx and acts in nested");
-    push_transaction(make_trx(bob, bob, alice, bob));
+    push_transaction2(make_trx(bob, bob, alice, bob), true);
     CHECK_ALICE_BOB_CAROL_USAGES(INC, EQ, EQ);
     BOOST_TEST_MESSAGE("...... alice sends trx, carol bw-> bob who acts in nested");
-    push_transaction(make_trx(alice, bob, carol, bob));
+    push_transaction2(make_trx(alice, bob, carol, bob), true);
     CHECK_ALICE_BOB_CAROL_USAGES(INC, EQ, INC);
 
     BOOST_TEST_MESSAGE("--- nesting with both outer and inner provides");
     BOOST_TEST_MESSAGE("------ overriding outer provider in a nested trx fails");
-    BOOST_REQUIRE_EXCEPTION(push_transaction(make_trx(alice, bob, carol, bob, carol)), bw_provider_error, any);
-    BOOST_REQUIRE_EXCEPTION(push_transaction(make_trx(alice, bob, carol, bob, alice)), bw_provider_error, any);
+    BOOST_REQUIRE_EXCEPTION(push_transaction2(make_trx(alice, bob, carol, bob, carol), true), bw_provider_error, any);
+    BOOST_REQUIRE_EXCEPTION(push_transaction2(make_trx(alice, bob, carol, bob, alice), true), bw_provider_error, any);
     BOOST_TEST_MESSAGE("------ inner provide = inner usage; outer provide = any usage");
     BOOST_TEST_MESSAGE("...... alice sends trx and acts in nested; carol bw-> bob, inner carol bw-> alice");
-    push_transaction(make_trx(alice, bob, carol, alice, carol));
+    push_transaction2(make_trx(alice, bob, carol, alice, carol), true);
     CHECK_ALICE_BOB_CAROL_USAGES(INC, EQ, INC);
     BOOST_TEST_MESSAGE("------ same provider for inner and outer");
     BOOST_TEST_MESSAGE("...... alice sends trx, carol bw-> alice; bob acts in nested, inner carol bw-> bob also");
-    push_transaction(make_trx(alice, alice, carol, bob, carol));
+    push_transaction2(make_trx(alice, alice, carol, bob, carol), true);
     CHECK_ALICE_BOB_CAROL_USAGES(EQ, EQ, INC);
 
 } FC_LOG_AND_RETHROW() }

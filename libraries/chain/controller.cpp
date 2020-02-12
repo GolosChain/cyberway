@@ -1188,6 +1188,7 @@ struct controller_impl {
             fc::move_append(pending->_actions, move(trx_context.executed));
 
             if (trx_context.nested_trx) {
+               trace->sent_nested = true;
                EOS_ASSERT(!trx->implicit, transaction_exception, "implicit trx can't start nested trx");
                signed_transaction ntrx{transaction{*trx_context.nested_trx}, vector<signature_type>{}, vector<bytes>{}};
                EOS_ASSERT(ntrx.delay_sec.value == 0, transaction_exception, "SYSTEM: nested trx delay != 0");
@@ -1201,8 +1202,15 @@ struct controller_impl {
                if (explicit_usage) {
                   EOS_ASSERT(receipts, transaction_exception, "SYSTEM: no explicit receipts for nested trx");
                   const auto& itr = receipts->find(nested_id);
-                  EOS_ASSERT(itr != receipts->end(), transaction_exception, "SYSTEM: no explicit receipt found for nested trx");
-                  usage_receipt = itr->second;
+                  if (itr == receipts->end()) {
+                     // Workaround for tests only (which use explicit billing for normal trxs). TODO: fix
+                     const auto& itr2 = receipts->find(transaction_id_type{});
+                     EOS_ASSERT(itr2 != receipts->end(), transaction_exception, "SYSTEM: no explicit receipt found for nested trx");
+                     usage_receipt = itr2->second;
+                  } else {
+                     EOS_ASSERT(itr != receipts->end(), transaction_exception, "SYSTEM: no explicit receipt found for nested trx");
+                     usage_receipt = itr->second;
+                  }
                }
                nested_ctx.delay = fc::seconds(ntrx.delay_sec);
                nested_ctx.leeway = fc::seconds(0);
@@ -1418,7 +1426,7 @@ struct controller_impl {
                         ("block", *b)("expected_receipt", receipt)
                       );
             const auto trx_count = pending->_pending_block_state->block->transactions.size();
-            const bool got_nested = trx_count == num_pending_receipts + 2;
+            const bool got_nested = trx_count == num_pending_receipts + 2 && trace->sent_nested;
             EOS_ASSERT( pending->_pending_block_state->block->transactions.size() == num_pending_receipts + 1
                         || got_nested,
                         block_validate_exception, "expected receipt was not added",
@@ -2067,11 +2075,21 @@ void controller::push_block( std::future<block_state_ptr>& block_state_future ) 
    my->push_block( block_state_future );
 }
 
-transaction_trace_ptr controller::push_transaction(const transaction_metadata_ptr& trx, fc::time_point deadline, const billed_bw_usage& billed ) {
+transaction_trace_ptr controller::push_transaction(const transaction_metadata_ptr& trx, fc::time_point deadline,
+   const billed_bw_usage& billed, bool bill_nested
+) {
    validate_db_available_size();
    EOS_ASSERT( get_read_mode() != chain::db_read_mode::READ_ONLY, transaction_type_exception, "push transaction not allowed in read-only mode" );
    EOS_ASSERT( trx && !trx->implicit && !trx->scheduled, transaction_type_exception, "Implicit/Scheduled transaction not allowed" );
-   return my->push_transaction(trx, deadline, billed );
+   if (bill_nested) {
+      std::map<transaction_id_type, transaction_receipt_header> nested_bill;
+      transaction_receipt_header hdr;
+      hdr.cpu_usage_us = billed.cpu_time_us;
+      hdr.ram_kbytes = billed.ram_bytes >> 10;
+      nested_bill.emplace(transaction_id_type(), hdr);
+      return my->push_transaction(trx, deadline, billed, nested_bill);
+   }
+   return my->push_transaction(trx, deadline, billed);
 }
 
 transaction_trace_ptr controller::push_scheduled_transaction( const transaction_id_type& trxid, fc::time_point deadline, const billed_bw_usage& billed )

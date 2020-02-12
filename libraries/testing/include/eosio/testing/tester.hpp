@@ -132,7 +132,9 @@ namespace eosio { namespace testing {
          transaction_trace_ptr    push_transaction( packed_transaction& trx, fc::time_point deadline = fc::time_point::maximum(),
                                                     uint32_t billed_cpu_time_us = DEFAULT_BILLED_CPU_TIME_US, uint64_t billed_ram_bytes = DEFAULT_BILLED_RAM_BYTES );
          transaction_trace_ptr    push_transaction( signed_transaction& trx, fc::time_point deadline = fc::time_point::maximum(),
-                                                    uint32_t billed_cpu_time_us = DEFAULT_BILLED_CPU_TIME_US, uint64_t billed_ram_bytes = DEFAULT_BILLED_RAM_BYTES );
+                                                    uint32_t billed_cpu_time_us = DEFAULT_BILLED_CPU_TIME_US, uint64_t billed_ram_bytes = DEFAULT_BILLED_RAM_BYTES,
+                                                    bool add_nested = false );
+         transaction_trace_ptr    push_transaction2(signed_transaction& trx, bool add_nested = false);
          action_result            push_action(action&& cert_act, uint64_t authorizer); // TODO/QUESTION: Is this needed?
 
          transaction_trace_ptr    push_action( const account_name& code,

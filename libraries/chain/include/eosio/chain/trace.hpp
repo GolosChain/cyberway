@@ -50,11 +50,12 @@ namespace eosio { namespace chain {
       int64_t                                    storage_bytes = 0;
       bool                                       scheduled = false;
       vector<action_trace>                       action_traces; ///< disposable
-      vector<action_trace>                       nested_action_traces; ///< disposable
 
       transaction_trace_ptr                      failed_dtrx_trace;
       fc::optional<fc::exception>                except;
       std::exception_ptr                         except_ptr;
+
+      bool sent_nested = false;
    };
 
 } }  /// namespace eosio::chain
@@ -68,4 +69,4 @@ FC_REFLECT_DERIVED( eosio::chain::action_trace,
 
 FC_REFLECT( eosio::chain::transaction_trace, (id)(block_num)(block_time)(producer_block_id)
                                              (receipt)(elapsed)(ram_bytes)(net_usage)(storage_bytes)(scheduled)
-                                             (action_traces)(nested_action_traces)(failed_dtrx_trace)(except) )
+                                             (action_traces)(failed_dtrx_trace)(except)(sent_nested) )

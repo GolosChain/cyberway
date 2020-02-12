@@ -394,10 +394,15 @@ namespace eosio { namespace testing {
       return r;
    } FC_RETHROW_EXCEPTIONS( warn, "transaction_header: ${header}", ("header", transaction_header(trx.get_transaction()) )) }
 
+   transaction_trace_ptr base_tester::push_transaction2(signed_transaction& trx, bool add_nested) {
+      return push_transaction(trx, fc::time_point::maximum(), DEFAULT_BILLED_CPU_TIME_US, DEFAULT_BILLED_RAM_BYTES, add_nested);
+   }
+
    transaction_trace_ptr base_tester::push_transaction( signed_transaction& trx,
                                                         fc::time_point deadline,
                                                         uint32_t billed_cpu_time_us,
-                                                        uint64_t billed_ram_bytes
+                                                        uint64_t billed_ram_bytes,
+                                                        bool add_nested
                                                       )
    {
         try {
@@ -414,7 +419,7 @@ namespace eosio { namespace testing {
             fc::microseconds( deadline - fc::time_point::now() );
       auto mtrx = std::make_shared<transaction_metadata>(trx, c);
       transaction_metadata::start_recover_keys( mtrx, control->get_thread_pool(), control->get_chain_id(), time_limit );
-      auto r = control->push_transaction( mtrx, deadline, { billed_cpu_time_us, billed_ram_bytes >> 10 } );
+      auto r = control->push_transaction( mtrx, deadline, { billed_cpu_time_us, billed_ram_bytes >> 10 }, add_nested );
       if( r->except_ptr ) std::rethrow_exception( r->except_ptr );
       if( r->except)  throw *r->except;
       return r;
@@ -433,7 +438,7 @@ namespace eosio { namespace testing {
          trx.sign(get_private_key(authorizer, "active"), control->get_chain_id());
       }
       try {
-         push_transaction(trx);
+         push_transaction2(trx, true);
       } catch (const fc::exception& ex) {
          edump((ex.to_detail_string()));
          return error(ex.top_message()); // top_message() is assumed by many tests; otherwise they fail
@@ -490,7 +495,7 @@ namespace eosio { namespace testing {
          trx.sign( get_private_key( auth.actor, auth.permission.to_string() ), control->get_chain_id() );
       }
 
-      return push_transaction( trx );
+      return push_transaction2( trx, true );
    } FC_CAPTURE_AND_RETHROW( (code)(acttype)(auths)(data)(expiration)(delay_sec) ) }
 
    action base_tester::get_action( account_name code, action_name acttype, vector<permission_level> auths,
