@@ -988,6 +988,7 @@ struct controller_impl {
          trx_context.init_for_deferred_trx( gtrx.published );
          trx_context.exec();
          trx_context.finalize(); // Automatically rounds up network and CPU usage in trace and bills payers if successful
+         EOS_ASSERT(!trx_context.nested_trx, transaction_exception, "deferred trx can't start nested trx");
 
          auto restore = make_block_restore_point();
 
@@ -1098,7 +1099,9 @@ struct controller_impl {
     */
    transaction_trace_ptr push_transaction( const transaction_metadata_ptr& trx,
                                            fc::time_point deadline,
-                                           const billed_bw_usage& billed )
+                                           const billed_bw_usage& billed,
+                                           // TODO: avoid copy
+                                           optional<std::map<transaction_id_type, transaction_receipt_header>> receipts = {})
    {
       EOS_ASSERT(deadline != fc::time_point(), transaction_exception, "deadline cannot be uninitialized");
 
@@ -1186,9 +1189,6 @@ struct controller_impl {
 
             if (trx_context.nested_trx) {
                EOS_ASSERT(!trx->implicit, transaction_exception, "implicit trx can't start nested trx");
-               // transaction t{*trx_context.nested_trx};
-               // vector<signature_type> empty1;
-               // vector<bytes> empty2;
                signed_transaction ntrx{transaction{*trx_context.nested_trx}, vector<signature_type>{}, vector<bytes>{}};
                EOS_ASSERT(ntrx.delay_sec.value == 0, transaction_exception, "SYSTEM: nested trx delay != 0");
                const auto nested_id = ntrx.id();
@@ -1196,18 +1196,26 @@ struct controller_impl {
                // if ((bool)subjective_cpu_leeway && pending->_block_status == controller::block_status::incomplete) {
                //    nested_ctx.leeway = *subjective_cpu_leeway;
                // }
+               bool explicit_usage = billed.explicit_usage;
+               transaction_receipt_header usage_receipt;
+               if (explicit_usage) {
+                  EOS_ASSERT(receipts, transaction_exception, "SYSTEM: no explicit receipts for nested trx");
+                  const auto& itr = receipts->find(nested_id);
+                  EOS_ASSERT(itr != receipts->end(), transaction_exception, "SYSTEM: no explicit receipt found for nested trx");
+                  usage_receipt = itr->second;
+               }
                nested_ctx.delay = fc::seconds(ntrx.delay_sec);
                nested_ctx.leeway = fc::seconds(0);
                nested_ctx.caller_set_deadline = deadline;   // TODO: ?fix already consumed part
-               nested_ctx.explicit_billed_cpu_time = billed.explicit_usage; // TODO: ?fix already consumed part
-               nested_ctx.billed_cpu_time_us = billed.cpu_time_us;
-               nested_ctx.explicit_billed_ram_bytes = billed.explicit_usage;
-               nested_ctx.billed_ram_bytes = billed.ram_bytes;
+               nested_ctx.explicit_billed_cpu_time = explicit_usage;
+               nested_ctx.billed_cpu_time_us = usage_receipt.cpu_usage_us;
+               nested_ctx.explicit_billed_ram_bytes = explicit_usage;
+               nested_ctx.billed_ram_bytes = usage_receipt.ram_kbytes << 10;
                transaction_trace_ptr ntrace = nested_ctx.trace;
 
                nested_ctx.is_nested = true;
                nested_ctx.storage_providers = fc::flat_map<account_name, account_name>{trx_context.storage_providers};
-               nested_ctx.bill_to_accounts = fc::flat_set<account_name>{trx_context.bill_to_accounts};
+               // nested_ctx.bill_to_accounts = fc::flat_set<account_name>{trx_context.bill_to_accounts};
                wlog("Nested-pre providers: (${p}); bill to: (${b})",
                   ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
                nested_ctx.init_for_implicit_trx(); // can reuse implicit initializer
@@ -1220,28 +1228,18 @@ struct controller_impl {
                   ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts)
                   ("s", nested_ctx.accounts_storage_deltas));
 
-               // trace2->receipt = push_receipt(*trx->packed_trx, s, nested_ctx.billed_cpu_time_us, trace->net_usage,
-               //       nested_ctx.billed_ram_bytes, trace->storage_bytes);
-               const auto net_usage = ntrace->net_usage;
-               uint64_t net_usage_words = net_usage / 8;
-               EOS_ASSERT(net_usage_words*8 == net_usage, transaction_exception, "net_usage is not divisible by 8");
-               // pending->_pending_block_state->block->transactions.emplace_back( trx );
-               transaction_receipt r;// = pending->_pending_block_state->block->transactions.back();
-               r.status          = transaction_receipt::executed;
-               r.net_usage_words = net_usage_words;
-               r.storage_kbytes  = ntrace->storage_bytes >> 10;
-               r.cpu_usage_us    = nested_ctx.billed_cpu_time_us;
-               r.ram_kbytes      = nested_ctx.billed_ram_bytes >> 10;
+               // trace2->
+               ntrace->receipt = push_receipt(nested_id, transaction_receipt::executed,
+                  nested_ctx.billed_cpu_time_us, ntrace->net_usage, nested_ctx.billed_ram_bytes, ntrace->storage_bytes);
 
-               trace->receipt->net_usage_words = (trace->receipt->net_usage_words.value + net_usage_words);
-               trace->receipt->storage_kbytes  = (trace->receipt->storage_kbytes.value + ntrace->storage_bytes) >> 10;
-               trace->receipt->cpu_usage_us    = (trace->receipt->cpu_usage_us.value + nested_ctx.billed_cpu_time_us);
-               trace->receipt->ram_kbytes      = (trace->receipt->ram_kbytes.value + nested_ctx.billed_ram_bytes) >> 10;
-               trace->nested_action_traces     = ntrace->action_traces;
+               ilog("Outer receipt: ${r}", ("r", trace->receipt));
+               ilog("Inner receipt: ${r}", ("r", ntrace->receipt));
 
-               // pending->_pending_block_state->trxs.emplace_back(trx); // TODO: add metadata for nested
+               transaction_metadata_ptr meta = std::make_shared<transaction_metadata>(ntrx);
+               // ntrx->nested = true;
+               pending->_pending_block_state->trxs.emplace_back(meta);
                fc::move_append(pending->_actions, move(nested_ctx.executed));
-               // emit(self.applied_transaction, trace); // special case for applied_nested?
+               // emit(self.applied_transaction, ntrace); // special case for applied_nested?
 
                nested_ctx.squash();
             }
@@ -1370,6 +1368,7 @@ struct controller_impl {
          auto producer_block_id = b->id();
          start_block( b->timestamp, b->confirmed, s , producer_block_id);
 
+         std::map<transaction_id_type, transaction_receipt_header> maybe_nested;
          std::vector<transaction_metadata_ptr> packed_transactions;
          packed_transactions.reserve( b->transactions.size() );
          for( const auto& receipt : b->transactions ) {
@@ -1380,18 +1379,29 @@ struct controller_impl {
                   transaction_metadata::start_recover_keys( mtrx, thread_pool, chain_id, microseconds::maximum() );
                }
                packed_transactions.emplace_back( std::move( mtrx ) );
+            } else if (receipt.trx.contains<transaction_id_type>()) {
+               auto& id = receipt.trx.get<transaction_id_type>();
+               maybe_nested.emplace(id, receipt);
             }
          }
 
          transaction_trace_ptr trace;
 
+         optional<transaction_id_type> wait_nested;
          size_t packed_idx = 0;
          for( const auto& receipt : b->transactions ) {
             auto num_pending_receipts = pending->_pending_block_state->block->transactions.size();
             if( receipt.trx.contains<packed_transaction>() ) {
-               trace = push_transaction( packed_transactions.at(packed_idx++), fc::time_point::maximum(), {receipt} );
+               EOS_ASSERT(!wait_nested, block_validate_exception, "expected nested trx receipt");
+               trace = push_transaction(packed_transactions.at(packed_idx++), fc::time_point::maximum(), {receipt}, maybe_nested);
             } else if( receipt.trx.contains<transaction_id_type>() ) {
-               trace = push_scheduled_transaction( receipt.trx.get<transaction_id_type>(), fc::time_point::maximum(), {receipt} );
+               auto& id = receipt.trx.get<transaction_id_type>();
+               if (wait_nested) {
+                  EOS_ASSERT(id == wait_nested, block_validate_exception, "encountered unexpected nested trx_id");
+                  wait_nested.reset();
+                  continue;
+               }
+               trace = push_scheduled_transaction(id, fc::time_point::maximum(), {receipt} );
             } else {
                EOS_ASSERT( false, block_validate_exception, "encountered unexpected receipt type" );
             }
@@ -1407,15 +1417,34 @@ struct controller_impl {
                         block_validate_exception, "expected a receipt",
                         ("block", *b)("expected_receipt", receipt)
                       );
-            EOS_ASSERT( pending->_pending_block_state->block->transactions.size() == num_pending_receipts + 1,
+            const auto trx_count = pending->_pending_block_state->block->transactions.size();
+            const bool got_nested = trx_count == num_pending_receipts + 2;
+            EOS_ASSERT( pending->_pending_block_state->block->transactions.size() == num_pending_receipts + 1
+                        || got_nested,
                         block_validate_exception, "expected receipt was not added",
                         ("block", *b)("expected_receipt", receipt)
                       );
-            const transaction_receipt_header& r = pending->_pending_block_state->block->transactions.back();
+            if (got_nested) {
+               const transaction_receipt& nested = pending->_pending_block_state->block->transactions.back();
+               EOS_ASSERT(nested.trx.contains<transaction_id_type>(), block_validate_exception,
+                  "encountered unexpected nested trx receipt type");
+               const auto& id = nested.trx.get<transaction_id_type>();
+               EOS_ASSERT(maybe_nested.find(id) != maybe_nested.end(), block_validate_exception,
+                  "encountered unexpected nested trx id");
+               const auto& nested_receipt = maybe_nested[id];
+               EOS_ASSERT(nested_receipt == static_cast<const transaction_receipt_header&>(nested),
+                  block_validate_exception, "nested receipt does not match",
+                  ("producer_receipt", nested_receipt)("validator_receipt", nested));
+               maybe_nested.erase(id);
+            }
+            const transaction_receipt_header& r = got_nested
+               ? pending->_pending_block_state->block->transactions[num_pending_receipts]
+               : pending->_pending_block_state->block->transactions.back();
             EOS_ASSERT( r == static_cast<const transaction_receipt_header&>(receipt),
                         block_validate_exception, "receipt does not match",
                         ("producer_receipt", receipt)("validator_receipt", pending->_pending_block_state->block->transactions.back()) );
          }
+         EOS_ASSERT(!wait_nested, block_validate_exception, "out of receipts while expected nested trx receipt");
 
          finalize_block();
 
