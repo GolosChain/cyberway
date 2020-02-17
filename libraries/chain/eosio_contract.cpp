@@ -234,12 +234,7 @@ void apply_cyber_setabi(apply_context& context) {
 
     if (act.account == chain::config::system_account_name) {
         act.abi = cyberway::chaindb::merge_abi_def(eosio::chain::eosio_contract_abi(), act.abi);
-    } else if (act.account == eosio::chain::config::domain_account_name) {
-        act.abi = cyberway::chaindb::merge_abi_def(eosio::chain::domain_contract_abi(), act.abi);
-    }
-
-    if (act.account == chain::config::system_account_name) {
-        act.abi = cyberway::chaindb::merge_abi_def(eosio::chain::eosio_contract_abi(), act.abi);
+        
     } else if (act.account == eosio::chain::config::domain_account_name) {
         act.abi = cyberway::chaindb::merge_abi_def(eosio::chain::domain_contract_abi(), act.abi);
     }

@@ -5,7 +5,6 @@ namespace eosio { namespace chain { namespace stake {
 using stake_index_set = index_set<
    stake_agent_table,
    stake_candidate_table,
-   stake_auto_recall_table,
    stake_grant_table,
    stake_param_table,
    stake_stat_table

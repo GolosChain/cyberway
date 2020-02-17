@@ -658,6 +658,11 @@ namespace cyberway { namespace chaindb {
             assert(res.second);
         }
 
+        bool has_cache_converter(const cache_service_key& key) {
+            auto s = find_cache_service(key);
+            return s && s->converter;
+        }
+
         void clear() {
             pending_cell_list_.clear();
             lru_cell_list_.clear();
@@ -1275,6 +1280,10 @@ namespace cyberway { namespace chaindb {
 
     void cache_map::set_cache_converter(const table_info& info, const cache_converter_interface& converter) const  {
         impl_->set_cache_converter(cache_service_key(info), converter);
+    }
+    
+    bool cache_map::has_cache_converter(const table_info& info) const {
+        return impl_->has_cache_converter(cache_service_key(info));
     }
 
     cache_object_ptr cache_map::create(const table_info& info, const storage_payer_info& storage) const {

@@ -516,21 +516,6 @@ abi_def eosio_contract_abi(abi_def eos_abi)
              {{"token_code", "asc"},{"enabled", "asc"},{"priority", "asc"},{"votes", "desc"},{"account", "asc"}}}
       }
    });
-   
-    eos_abi.structs.emplace_back( eosio::chain::struct_def {
-      "stake_auto_recall_object", "",{
-        {"id", "uint64"},
-        {"token_code", "symbol_code"},
-        {"account", "name"},
-        {"break_fee_enabled", "bool"},
-        {"break_min_stake_enabled", "bool" }}});
-        
-   eos_abi.tables.emplace_back( eosio::chain::table_def {
-      cyberway::chaindb::tag<stake_auto_recall_object>::get_code(), "stake_auto_recall_object", {
-         {cyberway::chaindb::tag<by_id>::get_code(), true, {{"id", "asc"}}},
-         {cyberway::chaindb::tag<stake_auto_recall_object::by_key>::get_code(), true, {{"token_code", "asc"},{"account", "asc"}}}
-      }
-   });
 
    eos_abi.structs.emplace_back( eosio::chain::struct_def {
       "stake_grant_object", "",{
