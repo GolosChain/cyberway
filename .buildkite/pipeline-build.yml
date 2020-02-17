@@ -1,0 +1,14 @@
+steps:
+  - label: ":docker: create base image"
+    command: 
+      - ".buildkite/steps/build-builder.sh"
+      - ".buildkite/steps/upload-builder.sh"
+    timeout: 60
+
+  - wait
+
+  - label: ":docker: build docker image"
+    command:
+      - ".buildkite/steps/build-image.sh"
+      - ".buildkite/steps/upload-image.sh"
+
