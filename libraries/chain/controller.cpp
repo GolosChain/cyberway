@@ -1229,6 +1229,7 @@ struct controller_impl {
                nested_ctx.init_for_implicit_trx(); // can reuse implicit initializer
                wlog("Nested-init providers: (${p}); bill to: (${b})",
                   ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
+               nested_ctx.record_transaction(nested_id, ntrx.expiration); /// checks for dupes
 
                nested_ctx.exec();
                nested_ctx.finalize();
@@ -1236,7 +1237,6 @@ struct controller_impl {
                   ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts)
                   ("s", nested_ctx.accounts_storage_deltas));
 
-               // trace2->
                ntrace->receipt = push_receipt(nested_id, transaction_receipt::executed,
                   nested_ctx.billed_cpu_time_us, ntrace->net_usage, nested_ctx.billed_ram_bytes, ntrace->storage_bytes);
 
@@ -1443,6 +1443,7 @@ struct controller_impl {
                EOS_ASSERT(nested_receipt == static_cast<const transaction_receipt_header&>(nested),
                   block_validate_exception, "nested receipt does not match",
                   ("producer_receipt", nested_receipt)("validator_receipt", nested));
+               wait_nested = id;
                maybe_nested.erase(id);
             }
             const transaction_receipt_header& r = got_nested

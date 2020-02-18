@@ -295,6 +295,7 @@ namespace eosio { namespace testing {
       public:
          unique_ptr<controller> control;
          std::map<chain::public_key_type, chain::private_key_type> block_signing_private_keys;
+         bool ignore_scheduled_fail = false; // to test deferred more flexible
       protected:
          controller::config                            cfg;
          map<transaction_id_type, transaction_receipt> chain_transactions;

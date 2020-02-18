@@ -35,6 +35,7 @@
         {"name": "nestedcheck2"   "type": "check"},
         {"name": "nestedchecki"   "type": "check"},
         {"name": "sendnested",    "type": "sendnested"},
+        {"name": "sendnestedcfa", "type": "auth"},
     ],
     "tables": [
         {

@@ -188,7 +188,7 @@ namespace eosio { namespace testing {
             for (const auto& trx : scheduled_trxs ) {
                auto trace = control->push_scheduled_transaction(trx, fc::time_point::maximum());
                if(trace->except) {
-                  if (!controller::scheduled_failure_is_subjective((*trace->except), true)) {
+                  if (!controller::scheduled_failure_is_subjective((*trace->except), true) && !ignore_scheduled_fail) {
                      trace->except->dynamic_rethrow_exception();
                   }
                }

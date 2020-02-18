@@ -43,7 +43,7 @@ void nested::nestedchecki(int64_t arg) {
 
 void nested::sendnested(name actor, name action_name, int64_t arg, uint32_t delay, uint32_t expiration, name provide) {
     // require_auth(_self);
-    transaction trx(time_point_sec(now() + delay + expiration));
+    transaction trx{time_point_sec(now() + delay + expiration)};
     trx.actions.emplace_back(action{{actor, N(active)}, _self, action_name, std::make_tuple(arg)});
     if (provide != name()) {
         trx.actions.emplace_back(
@@ -54,7 +54,18 @@ void nested::sendnested(name actor, name action_name, int64_t arg, uint32_t dela
     trx.send_nested();
 }
 
+void nested::sendnestedcfa(name arg) {
+    require_auth(arg);
+    transaction trx{};
+    action a{}; // create manually to use empty data
+    a.account = _self;
+    a.name = N(someaction);
+    a.authorization = vector<permission_level>{{arg, N(active)}};
+    trx.context_free_actions.emplace_back(a);
+    trx.send_nested();
+}
+
 
 } // cyber
 
-EOSIO_ABI(cyber::nested, (put)(auth)(check)(nestedcheck)(nestedcheck2)(nestedchecki)(sendnested))
+EOSIO_ABI(cyber::nested, (put)(auth)(check)(nestedcheck)(nestedcheck2)(nestedchecki)(sendnested)(sendnestedcfa))

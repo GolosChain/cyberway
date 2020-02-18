@@ -119,7 +119,6 @@ BOOST_FIXTURE_TEST_CASE(base, nested_tester) { try {
     init();
     const auto any = [](auto&){return true;};
     const auto msg = [](auto& m){ return [&m](auto& e) {
-        // BOOST_TEST_MESSAGE("... comparing\n'" << e.top_message() << "' and\n'" << (string("assertion failure with message: ") + m) << "'");
         return e.top_message() == string("assertion failure with message: ") + m;
     };};
     const auto err_le0 = "Argument must be positive";
@@ -142,11 +141,11 @@ BOOST_FIXTURE_TEST_CASE(base, nested_tester) { try {
     BOOST_CHECK_EXCEPTION(check(nester, bob, 1), missing_auth_exception, any);
 
     BOOST_TEST_MESSAGE("------ nested_check success");
-    nested_check(nester, nester, 1);
-    nested_check_inline(nester, nester, 1);
+    nested_check(nester, nester, 2);
+    nested_check_inline(nester, nester, 3);
     BOOST_TEST_MESSAGE("------ nested_check success nested auth (escalation)");
-    nested_check(nester, bob, 1);
-    nested_check_inline(nester, bob, 1);
+    nested_check(nester, bob, 4);
+    nested_check_inline(nester, bob, 5);
     BOOST_TEST_MESSAGE("------ nested_check assert inside nested");
     BOOST_CHECK_EXCEPTION(nested_check(nester, nester, 0), eosio_assert_message_exception, msg(err_le0));
     BOOST_CHECK_EXCEPTION(nested_check(nester, bob, 0), eosio_assert_message_exception, msg(err_le0));
@@ -171,11 +170,12 @@ BOOST_FIXTURE_TEST_CASE(base, nested_tester) { try {
     BOOST_CHECK_EXCEPTION(send_nested_simple(normal, N(auth), normal.value), not_privileged_nested_tx, any);
 
     BOOST_TEST_MESSAGE("--- Only one level nesting allowed");
-    BOOST_CHECK_EXCEPTION(send_nested_simple(nester, N(nestedcheck), 1), second_nested_tx, any);
-    BOOST_CHECK_EXCEPTION(send_nested_simple(nester, N(nestedchecki), 1), second_nested_tx, any);
-    BOOST_CHECK_EXCEPTION(send_nested_simple(nester, N(nestedcheck2), 1), second_nested_tx, any);
+    BOOST_CHECK_EXCEPTION(send_nested_simple(nester, N(nestedcheck), 5), second_nested_tx, any);
+    BOOST_CHECK_EXCEPTION(send_nested_simple(nester, N(nestedchecki), 5), second_nested_tx, any);
+    BOOST_CHECK_EXCEPTION(send_nested_simple(nester, N(nestedcheck2), 5), second_nested_tx, any);
 
     BOOST_TEST_MESSAGE("--- Only one nesting allowed in a trx");
+    produce_block(); // avoid dups
     BOOST_CHECK_EXCEPTION(nested_check2(nester, nester, 1), second_nested_tx, any);
     signed_transaction trx;
     auto make_trx = [&](name action1, name action2, name action3 = {}) -> signed_transaction& {
@@ -196,6 +196,12 @@ BOOST_FIXTURE_TEST_CASE(base, nested_tester) { try {
     BOOST_REQUIRE_EXCEPTION(push_transaction(make_trx(N(check), N(nestedcheck2))), second_nested_tx, any);
     BOOST_REQUIRE_EXCEPTION(push_transaction(make_trx(N(nestedcheck),N(check),N(nestedcheck))), second_nested_tx, any);
     BOOST_REQUIRE_EXCEPTION(push_transaction(make_trx(N(nestedcheck),N(check),N(nestedchecki))), second_nested_tx, any);
+
+    BOOST_TEST_MESSAGE("--- No context-free actions allowed in a nesting trx");
+    BOOST_REQUIRE_EXCEPTION(base_tester::push_action(nester, N(sendnestedcfa), nester, mvo("arg", nester)),
+        transaction_exception,
+        [](const auto& e) {return e.top_message() == "context free actions are not allowed in nested transactions";}
+    );
 
 } FC_LOG_AND_RETHROW() }
 
@@ -342,6 +348,95 @@ BOOST_FIXTURE_TEST_CASE(providebw, nested_tester) { try {
     BOOST_TEST_MESSAGE("...... alice sends trx, carol bw-> alice; bob acts in nested, inner carol bw-> bob also");
     push_transaction2(make_trx(alice, alice, carol, bob, carol), true);
     CHECK_ALICE_BOB_CAROL_USAGES(EQ, EQ, INC);
+
+} FC_LOG_AND_RETHROW() }
+
+BOOST_FIXTURE_TEST_CASE(expired, nested_tester) { try {
+    BOOST_TEST_MESSAGE("Test nested trx fields validation");
+    init();
+    BOOST_TEST_MESSAGE("--- Delay takes no effect (used by msig)");
+    BOOST_CHECK_EXCEPTION(send_nested_simple(nester, N(auth), bob.value, 300),
+        missing_auth_exception, [](auto&){return true;});
+    send_nested_simple(nester, N(auth), nester.value, -1);
+    produce_block();
+    send_nested_simple(nester, N(auth), nester.value, 300);
+    BOOST_TEST_MESSAGE("--- Expiration should be >= 0 (takes no effect, used by msig)");
+    produce_blocks(5); // avoid dups: expiration resets before trx_id calculation
+    send_nested_simple(nester, N(auth), nester.value, 0, -1);
+    produce_block();
+    send_nested_simple(nester, N(auth), nester.value, 0, 0);
+    produce_block();
+    send_nested_simple(nester, N(auth), nester.value, 0, 1);
+
+} FC_LOG_AND_RETHROW() }
+
+void print_block(const signed_block_ptr b) {
+    const auto& trxs = b->transactions;
+    string o = "";
+    o += "Transaction(s) = " + std::to_string(trxs.size()) + ": [\n";
+    for (const auto& r: trxs) {
+        bool have_id = r.trx.contains<transaction_id_type>();
+        if (have_id) {
+            const auto& id = r.trx.get<transaction_id_type>();
+            o += string("  id: ") + id.str();
+        } else {
+            const auto& id = r.trx.get<packed_transaction>().packed_digest();
+            o += string("  pkd:") + id.str();
+        }
+        o += string(" status: ") + std::to_string(r.status);
+        o += '\n';
+    }
+    o += ']';
+    BOOST_TEST_MESSAGE("--- block: " << o);
+}
+
+BOOST_FIXTURE_TEST_CASE(deferred, nested_tester) { try {
+    BOOST_TEST_MESSAGE("Test nesting from deferred");
+    init();
+    BOOST_TEST_MESSAGE("--- Deffered transaction cannot send nested one");
+    uint32_t delay = 3;
+    signed_transaction trx{};
+    trx.actions.push_back(get_action(nester, N(nestedcheck), {{bob, config::active_name}}, mvo()("arg", 1)));
+    set_transaction_headers(trx, 300, delay);
+    trx.sign(get_private_key(bob, "active"), control->get_chain_id());
+    push_transaction2(trx, true);
+    BOOST_TEST_MESSAGE("--- schedule");
+    auto block = produce_block();
+    print_block(block);
+    // Can't catch this
+    // BOOST_REQUIRE_EXCEPTION(produce_block(), transaction_exception, [](const auto& e){
+    //     return e.top_message() == "deferred trx can't start nested trx";
+    // });
+    BOOST_TEST_MESSAGE("--- ensure that deffered transaction hard-failed");
+    ignore_scheduled_fail = true;
+    block = produce_block();
+    BOOST_REQUIRE_EQUAL(block->transactions.size(), 1);
+    auto receipt = block->transactions[0];
+    BOOST_CHECK_EQUAL(receipt.trx.contains<transaction_id_type>(), true);
+    BOOST_CHECK_EQUAL(receipt.status, transaction_receipt_header::hard_fail);
+    print_block(block);
+    ignore_scheduled_fail = false;
+    produce_blocks(2);
+
+} FC_LOG_AND_RETHROW() }
+
+BOOST_FIXTURE_TEST_CASE(duplicate, nested_tester) { try {
+    BOOST_TEST_MESSAGE("Test several nested with same trx_id");
+    init();
+
+    signed_transaction trx;
+    auto make_trx = [&](name action) -> signed_transaction& {
+        trx = signed_transaction{};
+        trx.actions.push_back(get_action(nester, action, {{bob, config::active_name}}, mvo()("arg", 1)));
+        set_transaction_headers(trx);
+        trx.sign(get_private_key(bob, "active"), control->get_chain_id());
+        return trx;
+    };
+    // push different transactions, which produce same nested transaction
+    push_transaction2(make_trx(N(nestedcheck)), true);
+    BOOST_REQUIRE_EXCEPTION(push_transaction2(make_trx(N(nestedchecki)), true);, tx_duplicate, [](auto&){return true;});
+    auto block = produce_block();
+    print_block(block);
 
 } FC_LOG_AND_RETHROW() }
 

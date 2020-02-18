@@ -17,6 +17,7 @@ public:
     void nestedcheck2(int64_t arg);
     void nestedchecki(int64_t arg);
     void sendnested(name actor, name action, int64_t arg, uint32_t delay, uint32_t expiration, name provide = {});
+    void sendnestedcfa(name arg);
 
     struct item {
         uint64_t value;
