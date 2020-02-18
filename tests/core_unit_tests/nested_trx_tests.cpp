@@ -73,33 +73,37 @@ public:
 
 
     // api
+    auto push_action(name code, name action, name signer, const mvo& data, bool add_nested = false) {
+        vector<permission_level> auths{{signer, N(active)}};
+        return base_tester::push_action(code, action, auths, data, 6, 0, add_nested);
+    }
     auto auth(name contract, name signer, name arg) {
-        return base_tester::push_action(contract, N(auth), signer, mvo()("arg", arg));
+        return push_action(contract, N(auth), signer, mvo()("arg", arg));
     }
     auto check(name contract, name signer, int64_t arg) {
-        return base_tester::push_action(contract, N(check), signer, mvo()("arg", arg));
+        return push_action(contract, N(check), signer, mvo()("arg", arg));
     }
     auto nested_check(name contract, name signer, int64_t arg) {
-        return base_tester::push_action(contract, N(nestedcheck), signer, mvo()("arg", arg));
+        return push_action(contract, N(nestedcheck), signer, mvo()("arg", arg), true);
     }
     auto nested_check2(name contract, name signer, int64_t arg) {
-        return base_tester::push_action(contract, N(nestedcheck2), signer, mvo()("arg", arg));
+        return push_action(contract, N(nestedcheck2), signer, mvo()("arg", arg), true);
     }
     auto nested_check_inline(name contract, name signer, int64_t arg) {
-        return base_tester::push_action(contract, N(nestedchecki), signer, mvo()("arg", arg));
+        return push_action(contract, N(nestedchecki), signer, mvo()("arg", arg), true);
     }
     auto send_nested(
         name contract, name signer, name actor, name action, int64_t arg,
         name provide={}, uint32_t delay = 0, uint32_t expire = 30
     ) {
-        return base_tester::push_action(contract, N(sendnested), signer, mvo()
+        auto data = mvo()
             ("actor", actor)
             ("action", action)
             ("arg", arg)
             ("delay", delay)
             ("expiration", expire)
-            ("provide", provide)
-        );
+            ("provide", provide);
+        return push_action(contract, N(sendnested), signer, data, true);
     }
     auto send_nested_simple(
         name contract, name action, int64_t arg, uint32_t delay = 0, uint32_t expire = 30

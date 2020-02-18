@@ -154,7 +154,8 @@ namespace eosio { namespace testing {
                                                const vector<permission_level>& auths,
                                                const variant_object& data,
                                                uint32_t expiration = DEFAULT_EXPIRATION_DELTA,
-                                               uint32_t delay_sec = 0 );
+                                               uint32_t delay_sec = 0,
+                                               bool add_nested = false );
 
 
          action get_action( account_name code, action_name acttype, vector<permission_level> auths,

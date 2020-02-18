@@ -438,7 +438,7 @@ namespace eosio { namespace testing {
          trx.sign(get_private_key(authorizer, "active"), control->get_chain_id());
       }
       try {
-         push_transaction2(trx, true);
+         push_transaction(trx);
       } catch (const fc::exception& ex) {
          edump((ex.to_detail_string()));
          return error(ex.top_message()); // top_message() is assumed by many tests; otherwise they fail
@@ -484,7 +484,8 @@ namespace eosio { namespace testing {
                                                    const vector<permission_level>& auths,
                                                    const variant_object& data,
                                                    uint32_t expiration,
-                                                   uint32_t delay_sec
+                                                   uint32_t delay_sec,
+                                                   bool add_nested
                                                  )
 
    { try {
@@ -495,7 +496,7 @@ namespace eosio { namespace testing {
          trx.sign( get_private_key( auth.actor, auth.permission.to_string() ), control->get_chain_id() );
       }
 
-      return push_transaction2( trx, true );
+      return push_transaction2(trx, add_nested);
    } FC_CAPTURE_AND_RETHROW( (code)(acttype)(auths)(data)(expiration)(delay_sec) ) }
 
    action base_tester::get_action( account_name code, action_name acttype, vector<permission_level> auths,
