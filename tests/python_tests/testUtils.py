@@ -20,21 +20,26 @@ class Utils:
     Debug=False
     FNull = open(os.devnull, 'w')
 
-    EosClientPath="programs/cleos/cleos"
+    EosClientName="cleos"
+    EosClientPath=("programs/cleos" if os.getenv("CLEOS_DIR") is None else os.getenv("CLEOS_DIR")) + "/" + EosClientName
+
     MiscEosClientArgs="--no-auto-keosd"
 
     EosWalletName="keosd"
-    EosWalletPath="programs/keosd/"+ EosWalletName
+    EosWalletPath=("programs/keosd" if os.getenv("KEOSD_DIR") is None else os.getenv("KEOSD_DIR")) + "/" + EosWalletName
 
     EosServerName="nodeos"
-    EosServerPath="programs/nodeos/"+ EosServerName
+    EosSServerPath=("programs/nodeos" if os.getenv("NODEOS_DIR") is None else os.getenv("NODEOS_DIR")) + "/" + EosServerName
 
-    EosLauncherPath="programs/eosio-launcher/eosio-launcher"
+    EosLauncherName="eosio-launcher"
+    EosLauncherPath=("programs/eosio-launcher" if os.getenv("LAUNCHER_DIR") is None else os.getenv("LAUNCHER_DIR")) + "/" + EosLauncherName
+
     MongoPath="mongo"
     ShuttingDown=False
     CheckOutputDeque=deque(maxlen=10)
 
-    EosBlockLogPath="programs/eosio-blocklog/eosio-blocklog"
+    EosBlockLogName="eosio-blocklog"
+    EosBlockLogPath=("programs/eosio-blocklog" if os.getenv("BLOCKLOG_DIR") is None else os.getenv("BLOCKLOG_DIR")) + "/" + EosBlockLogName
 
     FileDivider="================================================================="
 

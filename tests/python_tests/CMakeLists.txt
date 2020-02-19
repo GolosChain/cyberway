@@ -18,6 +18,9 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/nodeos_voting_test.py ${CMAKE_CURRENT
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/consensus-validation-malicious-producers.py ${CMAKE_CURRENT_BINARY_DIR}/consensus-validation-malicious-producers.py COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/validate-dirty-db.py ${CMAKE_CURRENT_BINARY_DIR}/validate-dirty-db.py COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/launcher_test.py ${CMAKE_CURRENT_BINARY_DIR}/launcher_test.py COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/run_long_tests.sh ${CMAKE_CURRENT_BINARY_DIR}/run_long_tests.sh COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/run_tests.sh ${CMAKE_CURRENT_BINARY_DIR}/run_tests.sh COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/run_short_tests.sh ${CMAKE_CURRENT_BINARY_DIR}/run_short_tests.sh COPYONLY)
 
 add_test(NAME nodeos_sanity_test COMMAND tests/python_tests/nodeos_run_test.py -v --sanity-test --clean-run --dump-error-detail WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 set_property(TEST nodeos_sanity_test PROPERTY LABELS nonparallelizable_tests)
@@ -28,8 +31,6 @@ set_property(TEST nodeos_run_test PROPERTY LABELS nonparallelizable_tests)
 add_test(NAME nodeos_run_bnet_test COMMAND tests/python_tests/nodeos_run_test.py -v --clean-run --p2p-plugin bnet --dump-error-detail WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 set_property(TEST nodeos_run_bnet_test PROPERTY LABELS nonparallelizable_tests)
 
-add_test(NAME p2p_dawn515_test COMMAND tests/p2p_tests/dawn_515/test.sh WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-set_property(TEST p2p_dawn515_test PROPERTY LABELS nonparallelizable_tests)
 if(BUILD_MONGO_DB_PLUGIN)
   add_test(NAME nodeos_run_test-mongodb COMMAND tests/python_tests/nodeos_run_test.py --mongodb -v --clean-run --dump-error-detail WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
   set_property(TEST nodeos_run_test-mongodb PROPERTY LABELS nonparallelizable_tests)

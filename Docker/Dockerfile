@@ -36,7 +36,8 @@ COPY --from=builder /cyberway/Docker/run-with-events.sh /opt/cyberway/startup/ru
 COPY --from=builder /cyberway/Docker/docker-compose-events.yml /opt/cyberway/startup/docker-compose-events.yml
 COPY --from=builder /cyberway/Docker/mongodb-exporter /opt/cyberway/startup/mongodb-exporter
 COPY --from=builder /cyberway/Docker/nats /opt/cyberway/startup/nats
-COPY --from=builder /cyberway/tests/test_api/ /opt/cyberway/tests/test_api/
+COPY --from=builder /cyberway/tests/ /opt/cyberway/tests/
+COPY --from=builder /cyberway/etc/ /opt/cyberway/tests/python_tests/etc
 
 ENV CYBERWAY_ROOT=/opt/cyberway
 RUN chmod +x /opt/cyberway/bin/nodeosd.sh
