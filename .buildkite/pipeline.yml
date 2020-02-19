@@ -1,33 +1,28 @@
 steps:
-  - label: ":docker: create base image"
-    command: 
-      - ".buildkite/steps/build-builder.sh"
-      - ".buildkite/steps/upload-builder.sh"
-    timeout: 60
+  - label: ":pipeline: run build steps"
+    trigger: "build-only-cyberway-image"
+    build:
+        message: "${BUILDKITE_MESSAGE}"
+        commit: "${BUILDKITE_COMMIT}"
+        branch: "${BUILDKITE_BRANCH}"
+        env:
+           BUILDKITE_PULL_REQUEST: "${BUILDKITE_PULL_REQUEST}"
+           BUILDKITE_PULL_REQUEST_BASE_BRANCH: "${BUILDKITE_PULL_REQUEST_BASE_BRANCH}"
+           BUILDKITE_PULL_REQUEST_REPO: "${BUILDKITE_PULL_REQUEST_REPO}"
 
   - wait
 
-  - label: ":docker: build docker image"
-    command:
-      - ".buildkite/steps/build-image.sh"
-      - ".buildkite/steps/upload-image.sh"
+  - label: ":pipeline: run test steps"
+    trigger: "test-only-cyberway-image"
+    build:
+        message: "${BUILDKITE_MESSAGE}"
+        commit: "${BUILDKITE_COMMIT}"
+        branch: "${BUILDKITE_BRANCH}"
+        env:
+           BUILDKITE_PULL_REQUEST: "${BUILDKITE_PULL_REQUEST}"
+           BUILDKITE_PULL_REQUEST_BASE_BRANCH: "${BUILDKITE_PULL_REQUEST_BASE_BRANCH}"
+           BUILDKITE_PULL_REQUEST_REPO: "${BUILDKITE_PULL_REQUEST_REPO}"
 
-  - wait
-
-  - label: ":cop::skin-tone-2: deploy check"
-    command: ".buildkite/steps/deploy-test.sh"
-    timeout: 20
-
-  - wait
-
-  - label: ":cop::skin-tone-2: api test"
-    command: ".buildkite/steps/api-test.sh"
-    timeout: 20
-
-  - wait
-
-  - label: ":cop::skin-tone-2: unit_test"
-    command: ".buildkite/steps/deploy-unit_test.sh"
 
   - wait
 
