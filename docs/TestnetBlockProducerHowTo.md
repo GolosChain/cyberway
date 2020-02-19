@@ -1,4 +1,4 @@
-# CyberWay Testnet: How to setup and run BlockProducer node
+# CyberWay Testnet: How to setup and run Validator node
 ## Hardware and software requirements
   - VDS: 1 vCPU, 2Gb Ram, 10Gb HDD should be enough
   - Ubuntu 16.04 or 18.04 recommended, any other system able to run docker images could work but untested.
@@ -49,7 +49,7 @@ Set some important values in config.ini:
 ```
 p2p-peer-address = 116.203.104.164:9876 # seed node
 p2p-listen-endpoint = 0.0.0.0:9876 # Allow incoming connections
-producer-name = <Producer name> # change it to desired name of your producer
+producer-name = <Validator name> # change it to desired name of your validator
 ```
 Create volumes and start it up:
 ```sh
@@ -86,7 +86,7 @@ cleos get info
 ## Create validator keys, wallet and CyberWay account
 
 To produce blocks we need a few more things.
-First, blockproducer keypair (its different from wallet keypair, just BP stuff). Lets generate it by running
+First, validator keypair (its different from wallet keypair, just BP stuff). Lets generate it by running
 ```sh
 cleos create key --to-console
 ```
@@ -118,25 +118,25 @@ You will need it to create account in the CyberWay network.
 
 CyberWay is EOS fork, so you need to ask peoples on [t.me/CyberWayOS](https://t.me/CyberWayOS) Telegram Channel to register one for you.
 
-Just drop desired name (it should be same as `<Producer Name>` you set above in config.ini) and wallet public key into chatroom and someone will help you.
+Just drop desired name (it should be same as `<Validator Name>` you set above in config.ini) and wallet public key into chatroom and someone will help you.
 
-## Register blockproducer
+## Register validator
 Ensure you node is in sync first by checking logs.
 ```sh 
 docker logs --tail 100 -f nodeosd
 ```
 If its ok, run:
 ```sh
-cleos push action cyber.stake setproxylvl '{"account":"<producer-name>", "token_code":"SYS", "purpose_code":"", "level":0}' -p <producer-name>
-cleos push action cyber.stake setkey '{"account":"<producer-name>", "token_code":"SYS", "signing_key":"<public-key>"}' -p <producer-name>
+cleos push action cyber.stake setproxylvl '{"account":"<validator-name>", "token_code":"SYS", "purpose_code":"", "level":0}' -p <validator-name>
+cleos push action cyber.stake setkey '{"account":"<validator-name>", "token_code":"SYS", "signing_key":"<public-key>"}' -p <validator-name>
 ```
-Replace `<public-key>` and `<producer-name>` with values from config.ini.
+Replace `<public-key>` and `<validator-name>` with values from config.ini.
 
 Wait for a 15 minutes and check if your account name in there:
 ```sh
 cleos get account cyber.prods
 ```
-***Congratulations, you are CyberWay BlockProducer now!***
+***Congratulations, you are CyberWay Validator now!***
 
 # Useful links
   - [Cleos commands available](https://gist.github.com/vikxx/dfa9d671beb07a39e6eb18bad2c1174e)
