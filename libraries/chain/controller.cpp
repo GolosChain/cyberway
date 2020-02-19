@@ -1192,10 +1192,11 @@ struct controller_impl {
 
             fc::move_append(pending->_actions, move(trx_context.executed));
 
+            fc::optional<std::pair<transaction_trace_ptr, transaction_metadata_ptr>> nested_info;
             if (trx_context.nested_trx) {
                EOS_ASSERT(!trx->implicit, transaction_exception, "implicit trx can't start nested trx");
                trace->sent_nested = true;
-               handle_nested_trx(trx_context, deadline, billed, valid_maybe_nested);
+               nested_info = push_nested_trx(trx_context, deadline, billed, valid_maybe_nested);
                ilog("Outer receipt: ${r}", ("r", trace->receipt));
             }
 
@@ -1203,9 +1204,15 @@ struct controller_impl {
             if (!trx->accepted) {
                trx->accepted = true;
                emit( self.accepted_transaction, trx);
+               if (nested_info) {
+                  emit(self.accepted_transaction, nested_info->second);
+               }
             }
 
             emit(self.applied_transaction, trace);
+            if (nested_info) {
+               emit(self.applied_transaction, nested_info->first);
+            }
 
 
             if ( read_mode != db_read_mode::SPECULATIVE && pending->_block_status == controller::block_status::incomplete ) {
@@ -1238,19 +1245,16 @@ struct controller_impl {
       } FC_CAPTURE_AND_RETHROW((trace))
    } /// push_transaction
 
-   void handle_nested_trx(
+   std::pair<transaction_trace_ptr, transaction_metadata_ptr> push_nested_trx(
       const transaction_context& trx_context,
       fc::time_point deadline,
       const billed_bw_usage& billed,
       bool valid_maybe_nested
    ) {
-      signed_transaction ntrx{transaction{*trx_context.nested_trx}, vector<signature_type>{}, vector<bytes>{}};
-      EOS_ASSERT(ntrx.delay_sec.value == 0, transaction_exception, "SYSTEM: nested trx delay != 0");
-      const auto nested_id = ntrx.id();
-      transaction_context nested_ctx{self, ntrx, nested_id}; // TODO: fix `start` arg
-      // if ((bool)subjective_cpu_leeway && pending->_block_status == controller::block_status::incomplete) {
-      //    nested_ctx.leeway = *subjective_cpu_leeway;
-      // }
+      signed_transaction trx{transaction{*trx_context.nested_trx}, vector<signature_type>{}, vector<bytes>{}};
+      EOS_ASSERT(trx.delay_sec.value == 0, transaction_exception, "SYSTEM: nested trx delay != 0");
+      const auto nested_id = trx.id();
+      transaction_context nested_ctx{self, trx, nested_id}; // TODO: fix `start` arg
       bool explicit_usage = billed.explicit_usage;
       transaction_receipt_header usage_receipt; // contains 0 for cpu/ram
       if (explicit_usage) {
@@ -1268,24 +1272,26 @@ struct controller_impl {
             usage_receipt = itr->second;
          }
       }
-      nested_ctx.delay = fc::seconds(ntrx.delay_sec);
-      nested_ctx.leeway = fc::seconds(0);
+      nested_ctx.delay = fc::seconds(trx.delay_sec);
+      if ((bool)subjective_cpu_leeway && pending->_block_status == controller::block_status::incomplete) {
+         nested_ctx.leeway = *subjective_cpu_leeway;
+      }
       nested_ctx.caller_set_deadline = deadline; // set the same deadline. outer will stop processing. TODO: doublecheck
       nested_ctx.explicit_billed_cpu_time = explicit_usage;
       nested_ctx.billed_cpu_time_us = usage_receipt.cpu_usage_us;
       nested_ctx.explicit_billed_ram_bytes = explicit_usage;
       nested_ctx.billed_ram_bytes = usage_receipt.ram_kbytes << 10;
-      transaction_trace_ptr ntrace = nested_ctx.trace;
+      transaction_trace_ptr trace = nested_ctx.trace;
 
       nested_ctx.is_nested = true;
       nested_ctx.storage_providers = fc::flat_map<account_name, account_name>{trx_context.storage_providers};
       // nested_ctx.bill_to_accounts = fc::flat_set<account_name>{trx_context.bill_to_accounts};
       wlog("Nested-pre providers: (${p}); bill to: (${b})",
          ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
-      nested_ctx.init_for_implicit_trx(); // can reuse implicit initializer
+      nested_ctx.init_for_implicit_trx(); // can reuse implicit initializer. TODO: check NET bill for receipt record
       wlog("Nested-init providers: (${p}); bill to: (${b})",
          ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
-      nested_ctx.record_transaction(nested_id, ntrx.expiration); /// checks for dupes
+      nested_ctx.record_transaction(nested_id, trx.expiration); /// checks for dupes
 
       nested_ctx.exec();
       nested_ctx.finalize();
@@ -1293,17 +1299,17 @@ struct controller_impl {
          ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts)
          ("s", nested_ctx.accounts_storage_deltas));
 
-      ntrace->receipt = push_receipt(nested_id, transaction_receipt::executed,
-         nested_ctx.billed_cpu_time_us, ntrace->net_usage, nested_ctx.billed_ram_bytes, ntrace->storage_bytes);
-      ilog("Inner receipt: ${r}", ("r", ntrace->receipt));
+      trace->receipt = push_receipt(nested_id, transaction_receipt::executed,
+         nested_ctx.billed_cpu_time_us, trace->net_usage, nested_ctx.billed_ram_bytes, trace->storage_bytes);
+      ilog("Inner receipt: ${r}", ("r", trace->receipt));
 
-      transaction_metadata_ptr meta = std::make_shared<transaction_metadata>(ntrx);
-      // ntrx->nested = true;
+      transaction_metadata_ptr meta = std::make_shared<transaction_metadata>(trx);
+      meta->nested = true;
       pending->_pending_block_state->trxs.emplace_back(meta);
       fc::move_append(pending->_actions, move(nested_ctx.executed));
-      // emit(self.applied_transaction, ntrace); // special case for applied_nested?
 
       nested_ctx.squash();
+      return std::make_pair(trace, meta);
    }
 
 
@@ -1452,7 +1458,7 @@ struct controller_impl {
                EOS_ASSERT(nested.trx.contains<transaction_id_type>(), block_validate_exception,
                   "encountered unexpected nested trx receipt type");
                const auto& id = nested.trx.get<transaction_id_type>();
-               EOS_ASSERT(maybe_nested_receipts.find(id) != maybe_nested_receipts.end(), block_validate_exception,
+               EOS_ASSERT(maybe_nested_receipts.count(id) > 0, block_validate_exception,
                   "encountered unexpected nested trx id");
                const auto& nested_receipt = maybe_nested_receipts[id];
                EOS_ASSERT(nested_receipt == static_cast<const transaction_receipt_header&>(nested),
@@ -2097,6 +2103,7 @@ transaction_trace_ptr controller::push_transaction(const transaction_metadata_pt
    validate_db_available_size();
    EOS_ASSERT( get_read_mode() != chain::db_read_mode::READ_ONLY, transaction_type_exception, "push transaction not allowed in read-only mode" );
    EOS_ASSERT( trx && !trx->implicit && !trx->scheduled, transaction_type_exception, "Implicit/Scheduled transaction not allowed" );
+   EOS_ASSERT( !trx->nested, transaction_type_exception, "Nested transaction not allowed" );
    if (bill_nested) {
       std::map<transaction_id_type, transaction_receipt_header> nested_bill;
       transaction_receipt_header hdr;
@@ -2104,9 +2111,8 @@ transaction_trace_ptr controller::push_transaction(const transaction_metadata_pt
       hdr.ram_kbytes = billed.ram_bytes >> 10;
       my->maybe_nested_receipts.clear();
       my->maybe_nested_receipts.emplace(transaction_id_type(), hdr);
-      return my->push_transaction(trx, deadline, billed, true);
    }
-   return my->push_transaction(trx, deadline, billed);
+   return my->push_transaction(trx, deadline, billed, bill_nested);
 }
 
 transaction_trace_ptr controller::push_scheduled_transaction( const transaction_id_type& trxid, fc::time_point deadline, const billed_bw_usage& billed )
