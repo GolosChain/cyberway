@@ -139,8 +139,9 @@ cleos get account cyber.prods
 ***Congratulations, you are CyberWay BlockProducer now!***
 
 # Useful links
-  - [Cleos commands available](https://gist.github.com/vikxx/dfa9d671beb07a39e6eb18bad2c1174e)
-  - [Main features of CyberWay](https://docs.cyberway.io/users/cyberway_features)
-  - [Bandwidth differences between EOS and CyberWay](https://docs.cyberway.io/users/bandwidth_differences)
-  - [Bandwidth implementation](https://docs.cyberway.io/users/bandwidth_implementation)
-  - [How to join CyberWay for those who are interested in being validators](https://docs.cyberway.io/validators/quick_reference)
+   - [Cleos commands available](https://gist.github.com/vikxx/dfa9d671beb07a39e6eb18bad2c1174e)
+   - [Основные особенности блокчейна](https://golos.io/ru--blokcheijn/@goloscore/cyberway-predposylki-sozdaniya-platformy-osnovnye-otlichiya-ot-eos)
+  - [Дорожная карта проекта](https://golos.io/ru--blokcheijn/@goloscore/cyberway-predposylki-sozdaniya-platformy-osnovnye-otlichiya-ot-eos)
+  - [Базовые положения](https://golos.io/ru--blokcheijn/@goloscore/cyberway-predposylki-sozdaniya-platformy-osnovnye-otlichiya-ot-eos)
+  - [Информация о тестнете](https://golos.io/ru--blokcheijn/@goloscore/novosti-golos-core-testnet-eksperimentalnaya-versiya)
+  - [Тестнет. Руководство по установке для блок-продюсеров](https://golos.io/cyberway/@goloscore/cyberway-testnet-rukovodstvo-po-ustanovke-dlya-blok-prodyuserov)
