@@ -14,4 +14,15 @@ steps:
   - label: ":cop::skin-tone-2: unit_test"
     command: ".buildkite/steps/deploy-unit_test.sh"
 
+  - wait
+
+  - label: ":cop::skin-tone-2: python fast tests"
+    command: ".buildkite/steps/python_fast_tests.sh"
+
+  - wait
+
+  - label: ":cop::skin-tone-2: python long running tests"
+    command: ".buildkite/steps/python_long_test.sh"
+
+
 
