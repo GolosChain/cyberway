@@ -3,9 +3,61 @@
 #include <eosio/chain/int_arithmetic.hpp>
 #include <cyberway/chaindb/controller.hpp>
 #include <cyberway/chaindb/names.hpp>
+#include <cyberway/chaindb/account_abi_info.hpp>
 
 namespace eosio { namespace chain { namespace stake {
 using namespace int_arithmetic;
+
+struct autorc_info_t {
+    bool break_fee_enabled;
+    bool break_min_stake_enabled;
+};
+
+template<typename Controller>
+class autorcs_t {
+    Controller& db;
+    symbol_code token_code;
+    using autorcs_table_t = decltype(db.template get_table<stake_auto_recall_object>());
+    std::optional<autorcs_table_t> autorcs_table;
+    using autorcs_idx_t = decltype(autorcs_table->template get_index<stake_auto_recall_object::by_key>());
+    std::optional<autorcs_idx_t> autorcs_idx;
+    
+public:
+    autorcs_t(Controller& db_, symbol_code token_code_):
+        db(db_), 
+        token_code(token_code_),
+        autorcs_table(db.get_system_abi_info().abi().find_table(N(stake.autorc)) ? std::make_optional(db.template get_table<stake_auto_recall_object>()) : std::nullopt),
+        autorcs_idx(autorcs_table.has_value() ? std::make_optional(autorcs_table->template get_index<stake_auto_recall_object::by_key>()) : std::nullopt)
+    {
+        if (autorcs_table.has_value() && !stake_auto_recall_table::has_cache_converter(db)) {
+            stake_auto_recall_table::set_cache_converter(db);
+        }
+        if (autorcs_idx.has_value() && autorcs_idx->find(agent_key(token_code, account_name{})) == autorcs_idx->end()) {
+            autorcs_idx.reset();
+        }
+    }
+    
+    autorc_info_t get(account_name account) const {
+        autorc_info_t ret {
+            .break_fee_enabled       = true,
+            .break_min_stake_enabled = true
+        };
+        if (autorcs_idx.has_value()) {
+            auto autorc_itr = autorcs_idx->find(agent_key(token_code, account));
+            if (autorc_itr != autorcs_idx->end()) {
+                ret = autorc_info_t {
+                    .break_fee_enabled       = autorc_itr->break_fee_enabled,
+                    .break_min_stake_enabled = autorc_itr->break_min_stake_enabled
+                };
+            }
+            else {
+                ret.break_fee_enabled       = false;
+                ret.break_min_stake_enabled = false;
+            }
+        }
+        return ret;
+    }
+};
 
 void set_votes(cyberway::chaindb::chaindb_controller& db, const stake_stat_object* stat, symbol_code token_code, const std::map<account_name, int64_t>& votes_changes) {
     int64_t votes_changes_sum = 0;
@@ -77,10 +129,10 @@ int64_t recall_proxied_traversal(const cyberway::chaindb::storage_payer_info& st
     return ret;
 }
 
-template<typename AgentIndex, typename GrantIndex>
+template<typename AgentIndex, typename GrantIndex, typename Autorcs>
 void update_proxied_traversal(
     const cyberway::chaindb::storage_payer_info& ram, int64_t now, symbol_code token_code,
-    const AgentIndex& agents_idx, const GrantIndex& grants_idx,
+    const AgentIndex& agents_idx, const GrantIndex& grants_idx, const Autorcs& autorcs,
     const stake_agent_object* agent, time_point_sec last_reward, std::map<account_name, int64_t>& votes_changes, bool force
 ) {
     if ((last_reward >= agent->last_proxied_update) || force) {
@@ -91,11 +143,13 @@ void update_proxied_traversal(
 
         while ((grant_itr != grants_idx.end()) && (grant_itr->token_code == token_code) && (grant_itr->grantor_name == agent->account)) {
             auto proxy_agent = get_agent(token_code, agents_idx, grant_itr->recipient_name);
-            update_proxied_traversal(ram, now, token_code, agents_idx, grants_idx, proxy_agent, last_reward, votes_changes, force);
-
-            if (proxy_agent->proxy_level < agent->proxy_level &&
-                grant_itr->break_fee >= proxy_agent->fee &&
-                grant_itr->break_min_own_staked <= proxy_agent->min_own_staked)
+            update_proxied_traversal(ram, now, token_code, agents_idx, grants_idx, autorcs, proxy_agent, last_reward, votes_changes, force);
+            
+            auto autorc_info = autorcs.get(agent->account);
+            bool grantor_breaks_due_to_fee   = autorc_info.break_fee_enabled       && grant_itr->break_fee            < proxy_agent->fee;
+            bool grantor_breaks_due_to_stake = autorc_info.break_min_stake_enabled && grant_itr->break_min_own_staked > proxy_agent->min_own_staked;
+            
+            if (proxy_agent->proxy_level < agent->proxy_level && !grantor_breaks_due_to_fee && !grantor_breaks_due_to_stake)
             {
                 if (proxy_agent->shares_sum)
                     new_proxied += safe_prop(proxy_agent->get_total_funds(), grant_itr->share, proxy_agent->shares_sum);
@@ -119,10 +173,12 @@ void update_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::c
     EOS_ASSERT(stat, transaction_exception, "no staking for token");
     auto agents_table = db.get_table<stake_agent_object>();
     auto grants_table = db.get_table<stake_grant_object>();
+    
     auto agents_idx = agents_table.get_index<stake_agent_object::by_key>();
     auto grants_idx = grants_table.get_index<stake_grant_object::by_key>();
+    
     std::map<account_name, int64_t> votes_changes;
-    update_proxied_traversal(storage, now, token_code, agents_idx, grants_idx,
+    update_proxied_traversal(storage, now, token_code, agents_idx, grants_idx, autorcs_t(db, token_code),
         get_agent(token_code, agents_idx, account),
         stat->last_reward, votes_changes, force);
     set_votes(db, &(*stat), token_code, votes_changes);
@@ -144,7 +200,8 @@ void recall_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::c
 
     auto grantor_as_agent = get_agent(token_code, agents_idx, grantor_name);
     std::map<account_name, int64_t> votes_changes;
-    update_proxied_traversal(storage, now, token_code, agents_idx, grants_idx, grantor_as_agent, time_point_sec(), votes_changes, true);
+    
+    update_proxied_traversal(storage, now, token_code, agents_idx, grants_idx, autorcs_t(db, token_code), grantor_as_agent, time_point_sec(), votes_changes, true);
     
     int64_t amount = 0;
     auto grant_itr = grants_idx.lower_bound(grant_key(token_code, grantor_name));
