@@ -1288,7 +1288,10 @@ struct controller_impl {
       // nested_ctx.bill_to_accounts = fc::flat_set<account_name>{trx_context.bill_to_accounts};
       wlog("Nested-pre providers: (${p}); bill to: (${b})",
          ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
-      nested_ctx.init_for_implicit_trx(); // can reuse implicit initializer. TODO: check NET bill for receipt record
+      const auto& cfg = self.get_global_properties().configuration;
+      auto initial_net_usage = static_cast<uint64_t>(cfg.base_per_transaction_net_usage)
+         + static_cast<uint64_t>(config::transaction_id_net_usage);
+      nested_ctx.init_for_implicit_trx(initial_net_usage); // can reuse implicit initializer
       wlog("Nested-init providers: (${p}); bill to: (${b})",
          ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
       nested_ctx.record_transaction(nested_id, trx.expiration); /// checks for dupes
