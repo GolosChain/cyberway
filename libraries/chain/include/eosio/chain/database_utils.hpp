@@ -4,9 +4,11 @@
  */
 #pragma once
 
-#include <eosio/chain/types.hpp>
-#include <fc/io/raw.hpp>
 #include <softfloat.hpp>
+
+#include <fc/io/raw.hpp>
+
+#include <cyberway/chaindb/controller.hpp>
 
 namespace cyberway { namespace chaindb {
     class chaindb_controller;
@@ -14,86 +16,49 @@ namespace cyberway { namespace chaindb {
 
 namespace eosio { namespace chain {
 
-   template<typename ...Indices>
-   class index_set;
+   template<typename ...Tables>
+   class table_set;
 
-   template<typename Index>
-   class index_utils {
+   template<typename Table>
+   class table_utils {
+      using chaindb_controller = cyberway::chaindb::chaindb_controller;
       public:
-         using index_t = Index;
-
          template<typename F>
-         static void walk( const chainbase::database& db, F function ) {
-            auto const& index = db.get_index<Index>().indices();
-            const auto& first = index.begin();
-            const auto& last = index.end();
+         static void walk(const chaindb_controller& chaindb, const F& function) {
+            const auto table = Table(chaindb);
+            const auto& first = table.begin();
+            const auto& last = table.end();
             for (auto itr = first; itr != last; ++itr) {
                function(*itr);
             }
          }
-
-         template<typename Secondary, typename Key, typename F>
-         static void walk_range( const chainbase::database& db, const Key& begin_key, const Key& end_key, F function ) {
-            const auto& idx = db.get_index<Index, Secondary>();
-            auto begin_itr = idx.lower_bound(begin_key);
-            auto end_itr = idx.lower_bound(end_key);
-            for (auto itr = begin_itr; itr != end_itr; ++itr) {
-               function(*itr);
-            }
-         }
-
-         template<typename Secondary, typename Key>
-         static size_t size_range( const chainbase::database& db, const Key& begin_key, const Key& end_key ) {
-            const auto& idx = db.get_index<Index, Secondary>();
-            auto begin_itr = idx.lower_bound(begin_key);
-            auto end_itr = idx.lower_bound(end_key);
-            size_t res = 0;
-            while (begin_itr != end_itr) {
-               res++; ++begin_itr;
-            }
-            return res;
-         }
-
-         template<typename F>
-         static void create( chainbase::database& db, F cons ) {
-            db.create<typename index_t::value_type>(cons);
-         }
    };
 
-   template<typename Index>
-   class index_set<Index> {
+   template<typename Table>
+   class table_set<Table> {
    public:
-      static void add_indices( chainbase::database& db ) {
-         db.add_index<Index>();
-      }
-
-      static void add_indices( cyberway::chaindb::chaindb_controller& chaindb ) {
-         Index::set_cache_converter(chaindb);
+      static void add_tables( cyberway::chaindb::chaindb_controller& chaindb ) {
+         Table::set_cache_converter(chaindb);
       }
 
       template<typename F>
-      static void walk_indices( F function ) {
-         function( index_utils<Index>() );
+      static void walk_tables( F function ) {
+         function( table_utils<Table>() );
       }
    };
 
-   template<typename FirstIndex, typename ...RemainingIndices>
-   class index_set<FirstIndex, RemainingIndices...> {
+   template<typename FirstTable, typename ...RemainingTables>
+   class table_set<FirstTable, RemainingTables...> {
    public:
-      static void add_indices( chainbase::database& db ) {
-         index_set<FirstIndex>::add_indices(db);
-         index_set<RemainingIndices...>::add_indices(db);
-      }
-
-      static void add_indices( cyberway::chaindb::chaindb_controller& chaindb ) {
-         index_set<FirstIndex>::add_indices(chaindb);
-         index_set<RemainingIndices...>::add_indices(chaindb);
+      static void add_tables(cyberway::chaindb::chaindb_controller& chaindb) {
+         table_set<FirstTable>::add_tables(chaindb);
+         table_set<RemainingTables...>::add_tables(chaindb);
       }
 
       template<typename F>
-      static void walk_indices( F function ) {
-         index_set<FirstIndex>::walk_indices(function);
-         index_set<RemainingIndices...>::walk_indices(function);
+      static void walk_tables( F function ) {
+         table_set<FirstTable>::walk_tables(function);
+         table_set<RemainingTables...>::walk_tables(function);
       }
    };
 

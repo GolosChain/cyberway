@@ -20,7 +20,7 @@ namespace eosio { namespace chain {
 
    using cyberway::chaindb::cursor_kind;
 
-   using authorization_index_set = index_set<
+   using authorization_index_set = table_set<
       permission_table,
       permission_usage_table,
       permission_link_table
@@ -30,7 +30,7 @@ namespace eosio { namespace chain {
    :_control(c),_chaindb(chaindb) {}
 
    void authorization_manager::add_indices() {
-       authorization_index_set::add_indices(_chaindb);
+       authorization_index_set::add_tables(_chaindb);
    }
 
    void authorization_manager::initialize_database() {

@@ -89,7 +89,7 @@ FC_REFLECT(eosio::account_history_object, (id)(account)(action_sequence_num)(acc
 FC_REFLECT(eosio::action_history_object, (id)(action_sequence_num)(packed_action_trace)(block_num)(block_time)(trx_id))
 
 
-using history_table_set = eosio::chain::index_set<
+using history_table_set = eosio::chain::table_set<
     eosio::action_history_table,
     eosio::account_history_table,
     eosio::public_key_history_table,
@@ -398,7 +398,7 @@ namespace eosio {
    void history_plugin::add_indices() {
        auto& chain = my->chain_plug->chain();
        auto& chaindb = chain.chaindb();
-       history_table_set::add_indices(chaindb);
+       history_table_set::add_tables(chaindb);
    }
 
 
