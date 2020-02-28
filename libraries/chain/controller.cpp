@@ -1106,7 +1106,6 @@ struct controller_impl {
                                            fc::time_point deadline,
                                            const billed_bw_usage& billed,
                                            bool valid_maybe_nested = false)
-                                           // TODO: avoid copy
    {
       EOS_ASSERT(deadline != fc::time_point(), transaction_exception, "deadline cannot be uninitialized");
 
@@ -1197,7 +1196,6 @@ struct controller_impl {
                EOS_ASSERT(!trx->implicit, transaction_exception, "implicit trx can't start nested trx");
                trace->sent_nested = true;
                nested_info = push_nested_trx(trx_context, deadline, billed, valid_maybe_nested);
-               ilog("Outer receipt: ${r}", ("r", trace->receipt));
             }
 
             // call the accept signal but only once for this transaction
@@ -1282,26 +1280,22 @@ struct controller_impl {
       nested_ctx.explicit_billed_ram_bytes = explicit_usage;
       nested_ctx.billed_ram_bytes = usage_receipt.ram_kbytes << 10;
       transaction_trace_ptr trace = nested_ctx.trace;
+      trace->nested = true;
 
       nested_ctx.is_nested = true;
       nested_ctx.storage_providers = fc::flat_map<account_name, account_name>{trx_context.storage_providers};
       // nested_ctx.bill_to_accounts = fc::flat_set<account_name>{trx_context.bill_to_accounts};
-      wlog("Nested-pre providers: (${p}); bill to: (${b})",
-         ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
-      nested_ctx.init_for_implicit_trx(); // can reuse implicit initializer. TODO: check NET bill for receipt record
-      wlog("Nested-init providers: (${p}); bill to: (${b})",
-         ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts));
+      const auto& cfg = self.get_global_properties().configuration;
+      auto initial_net_usage = static_cast<uint64_t>(cfg.base_per_transaction_net_usage)
+         + static_cast<uint64_t>(config::transaction_id_net_usage);
+      nested_ctx.init_for_implicit_trx(initial_net_usage); // can reuse implicit initializer
       nested_ctx.record_transaction(nested_id, trx.expiration); /// checks for dupes
 
       nested_ctx.exec();
       nested_ctx.finalize();
-      wlog("Nested-final providers: (${p}); bill to: (${b}), storage: (${s})",
-         ("p", nested_ctx.storage_providers)("b", nested_ctx.bill_to_accounts)
-         ("s", nested_ctx.accounts_storage_deltas));
 
       trace->receipt = push_receipt(nested_id, transaction_receipt::executed,
          nested_ctx.billed_cpu_time_us, trace->net_usage, nested_ctx.billed_ram_bytes, trace->storage_bytes);
-      ilog("Inner receipt: ${r}", ("r", trace->receipt));
 
       transaction_metadata_ptr meta = std::make_shared<transaction_metadata>(trx);
       meta->nested = true;

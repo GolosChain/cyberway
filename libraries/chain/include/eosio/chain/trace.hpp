@@ -55,6 +55,7 @@ namespace eosio { namespace chain {
       fc::optional<fc::exception>                except;
       std::exception_ptr                         except_ptr;
 
+      bool nested = false;
       bool sent_nested = false;
    };
 
@@ -69,4 +70,4 @@ FC_REFLECT_DERIVED( eosio::chain::action_trace,
 
 FC_REFLECT( eosio::chain::transaction_trace, (id)(block_num)(block_time)(producer_block_id)
                                              (receipt)(elapsed)(ram_bytes)(net_usage)(storage_bytes)(scheduled)
-                                             (action_traces)(failed_dtrx_trace)(except)(sent_nested) )
+                                             (action_traces)(failed_dtrx_trace)(except)(nested)(sent_nested) )

@@ -462,7 +462,6 @@ void apply_context::execute_nested_transaction(transaction&& trx) {
    // Do not check authorization (privileged), msig must do it itself
 
    trx_context.nested_trx = std::move(trx);
-   // push_event({name(), name("sendnested"), fc::raw::pack(trx)});
 }
 
 bool apply_context::cancel_deferred_transaction( const uint128_t& sender_id, account_name sender ) {

@@ -75,7 +75,7 @@ public:
     // api
     auto push_action(name code, name action, name signer, const mvo& data, bool add_nested = false) {
         vector<permission_level> auths{{signer, N(active)}};
-        return base_tester::push_action(code, action, auths, data, 6, 0, add_nested);
+        return base_tester::push_action(code, action, auths, data, DEFAULT_EXPIRATION_DELTA, 0, add_nested);
     }
     auto auth(name contract, name signer, name arg) {
         return push_action(contract, N(auth), signer, mvo()("arg", arg));
