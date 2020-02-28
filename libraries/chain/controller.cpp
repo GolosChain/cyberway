@@ -35,7 +35,7 @@ namespace eosio { namespace chain {
 using resource_limits::resource_limits_manager;
 using cyberway::chaindb::cursor_kind;
 
-using controller_index_set = index_set<
+using controller_index_set = table_set<
    account_table,
    account_sequence_table,
    global_property_table,
@@ -473,11 +473,11 @@ struct controller_impl {
    void add_indices() {
       reversible_blocks.add_index<reversible_block_index>();
 
-      controller_index_set::add_indices(chaindb);
+      controller_index_set::add_tables(chaindb);
 
       authorization.add_indices();
       resource_limits.add_indices();
-      stake::stake_index_set::add_indices(chaindb);
+      stake::stake_index_set::add_tables(chaindb);
    }
 
    void add_contract_tables_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
