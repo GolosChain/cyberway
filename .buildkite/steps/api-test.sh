@@ -14,9 +14,8 @@ docker volume rm cyberway-nodeos-data || true
 docker volume create --name=cyberway-nodeos-data
 
 REVISION=$(git rev-parse HEAD)
-MASTER_REVISION=$(git rev-parse origin/master)
 
-if [[ ${REVISION} == ${MASTER_REVISION} ]]; then
+if [[ ${BUILDKITE_BRANCH} == "master" ]]; then
     BUILDTYPE="stable"
 else
     BUILDTYPE="latest"

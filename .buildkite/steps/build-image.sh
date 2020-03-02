@@ -6,9 +6,7 @@ VERSION_STRING=$(git describe --tags --dirty)
 
 COMPILETYPE=RelWithDebInfo
 
-MASTER_REVISION=$(git rev-parse origin/master)
-
-if [[ "${GIT_REVISION}" == "${MASTER_REVISION}" ]]; then
+if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
     COMPILETYPE=Release
 fi
 
