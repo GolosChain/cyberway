@@ -446,6 +446,24 @@ void apply_context::schedule_deferred_transaction( const uint128_t& sender_id, a
 //   add_ram_usage( payer, (config::billable_size_v<generated_transaction_object> + trx_size) );
 }
 
+void apply_context::execute_nested_transaction(transaction&& trx) {
+   EOS_ASSERT(privileged, not_privileged_nested_tx, "nested transaction is only allowed in privileged context");
+   EOS_ASSERT(!trx_context.is_nested && !trx_context.nested_trx,
+      second_nested_tx, "only one nested transaction is allowed inside the normal");
+   // EOS_ASSERT(trx.expiration == time_point_sec() && trx.ref_block_num == 0 && trx.ref_block_prefix == 0,
+   //    non_zero_nested_fields, "expiration, ref_block_num and ref_block_prefix fields of nested trx must be 0");
+   EOS_ASSERT(trx.context_free_actions.size() == 0, cfa_inside_nested_tx, "context free actions are not allowed in nested transactions");
+   trx.expiration = control.pending_block_time() + fc::microseconds(999'999); // Rounds up to nearest second (makes expiration check unnecessary)
+   trx.set_reference_block(control.head_block_id()); // No TaPoS check necessary
+   trx.delay_sec = 0; // Reset delay, it can be used by msig, but should be 0 at this point. TODO: check delay if trx not from msig
+
+   trx_context.validate_referenced_accounts(trx);
+
+   // Do not check authorization (privileged), msig must do it itself
+
+   trx_context.nested_trx = std::move(trx);
+}
+
 bool apply_context::cancel_deferred_transaction( const uint128_t& sender_id, account_name sender ) {
    auto trx_table = chaindb.get_table<generated_transaction_object>();
    const auto* gto = chaindb.find<generated_transaction_object,by_sender_id>(boost::make_tuple(sender, sender_id), cursor_kind::OneRecord);

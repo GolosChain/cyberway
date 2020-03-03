@@ -199,6 +199,13 @@ namespace eosio { namespace chain {
                                     3040015, "Bandwith has been already confirmed" )
       FC_DECLARE_DERIVED_EXCEPTION( bw_provider_error, transaction_exception,
                                     3040016, "Bandwith provider error" )
+      FC_DECLARE_DERIVED_EXCEPTION( not_privileged_nested_tx, transaction_exception,
+                                    3040017, "Nested transaction is only allowed in privileged context" )
+      FC_DECLARE_DERIVED_EXCEPTION( cfa_inside_nested_tx, transaction_exception,
+                                    3040018, "Context free action is not allowed inside nested transaction" )
+      FC_DECLARE_DERIVED_EXCEPTION( second_nested_tx, transaction_exception,
+                                    3040019, "Only one nested transaction is allowed inside the normal" )
+
 
 
    FC_DECLARE_DERIVED_EXCEPTION( action_validate_exception, chain_exception,

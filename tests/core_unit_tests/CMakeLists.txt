@@ -27,6 +27,7 @@ add_dependencies(
         unit_test asserter test_api test_api_mem test_api_db test_ram_limit test_api_multi_index
         eosio.token proxy identity identity_test stltest eosio.system eosio.bios
         multi_index_test noop eosio.msig payloadless tic_tac_toe deferred_test snapshot_test
+        nested_trx
 )
 
 install( TARGETS
