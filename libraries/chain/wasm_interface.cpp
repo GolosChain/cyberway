@@ -142,7 +142,12 @@ class privileged_api : public context_aware_api {
 
       void recall_stake_proxied(uint64_t token_code_raw, account_name grantor_name, account_name recipient_name, int32_t pct) {
           int64_t now = context.control.pending_block_time().sec_since_epoch();
-          stake::recall_proxied(context.chaindb, context.get_storage_payer(), now, symbol_code{token_code_raw}, grantor_name, recipient_name, pct);
+          stake::recall_proxied(context.chaindb, context.get_storage_payer(), now, symbol_code{token_code_raw}, grantor_name, recipient_name, pct, false);
+      }
+      
+      void recall_stake_proxied_soft(uint64_t token_code_raw, account_name grantor_name, account_name recipient_name, int32_t pct) {
+          int64_t now = context.control.pending_block_time().sec_since_epoch();
+          stake::recall_proxied(context.chaindb, context.get_storage_payer(), now, symbol_code{token_code_raw}, grantor_name, recipient_name, pct, true);
       }
       
       uint64_t get_used_resources_cost(account_name account) {
@@ -1764,15 +1769,16 @@ REGISTER_INTRINSICS(compiler_builtins,
 );
 
 REGISTER_INTRINSICS(privileged_api,
-   (is_feature_active,                int(int64_t)                          )
-   (activate_feature,                 void(int64_t)                         )
-   (update_stake_proxied,             void(int64_t,int64_t,int)             )
-   (recall_stake_proxied,             void(int64_t,int64_t,int64_t,int32_t) )
-   (get_used_resources_cost,          int64_t(int64_t)                      )
-   (set_proposed_producers,           int64_t(int,int)                      )
-   (get_blockchain_parameters_packed, int(int, int)                         )
-   (set_blockchain_parameters_packed, void(int,int)                         )
-   (is_privileged,                    int(int64_t)                          )
+   (is_feature_active,                int(int64_t)                               )
+   (activate_feature,                 void(int64_t)                              )
+   (update_stake_proxied,             void(int64_t,int64_t,int)                  )
+   (recall_stake_proxied,             void(int64_t,int64_t,int64_t,int32_t)      )
+   (recall_stake_proxied_soft,             void(int64_t,int64_t,int64_t,int32_t) )
+   (get_used_resources_cost,          int64_t(int64_t)                           )
+   (set_proposed_producers,           int64_t(int,int)                           )
+   (get_blockchain_parameters_packed, int(int, int)                              )
+   (set_blockchain_parameters_packed, void(int,int)                              )
+   (is_privileged,                    int(int64_t)                               )
 );
 
 REGISTER_INJECTED_INTRINSICS(transaction_context,
