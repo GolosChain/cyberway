@@ -336,8 +336,9 @@ namespace eosio {
     */
    constexpr uint16_t proto_base = 0;
    constexpr uint16_t proto_explicit_sync = 1;
+   constexpr uint16_t proto_address_advertising = 2;
 
-   constexpr uint16_t net_version = proto_explicit_sync;
+   constexpr uint16_t net_version = proto_address_advertising;
 
    struct transaction_state {
       transaction_id_type id;
