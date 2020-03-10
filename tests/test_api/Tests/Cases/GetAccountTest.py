@@ -99,7 +99,7 @@ class GetAccountTest(WalletTestCase):
         verifyAccountTotalBalance(getAliceAccountOutput, '980.0000 CYBER')
 
     def test_11_enableStaking(self):
-        args = jsonArg(["4,CYBER"])
+        args = jsonArg(["CYBER"])
         verifyStakeEnabled(self.cleos.exec('push action cyber.stake enable {args} -p cyber'.format(args=args)))
 
     def test_12_stakeUsage(self):

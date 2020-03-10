@@ -1,0 +1,17 @@
+steps:
+  - label: ":cop::skin-tone-2: deploy check"
+    command: ".buildkite/steps/deploy-test.sh"
+    timeout: 20
+
+  - wait
+
+  - label: ":cop::skin-tone-2: api test"
+    command: ".buildkite/steps/api-test.sh"
+    timeout: 20
+
+  - wait
+
+  - label: ":cop::skin-tone-2: unit_test"
+    command: ".buildkite/steps/deploy-unit_test.sh"
+
+

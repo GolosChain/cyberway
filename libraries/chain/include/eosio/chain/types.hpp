@@ -164,6 +164,7 @@ namespace eosio { namespace chain {
       domain_object_type,
       stake_agent_object_type,
       stake_candidate_object_type,
+      stake_auto_recall_object_type,
       stake_grant_object_type,
       stake_param_object_type,
       stake_stat_object_type,
@@ -206,6 +207,7 @@ namespace eosio { namespace chain {
    class account_object;
    class producer_object;
    class stake_agent_object;
+   class stake_auto_recall_object;
    class stake_grant_object;
    class stake_param_object;
    class stake_stat_object;

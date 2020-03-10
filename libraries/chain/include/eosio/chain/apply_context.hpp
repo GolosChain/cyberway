@@ -488,6 +488,7 @@ class apply_context {
       void schedule_deferred_transaction( const uint128_t& sender_id, account_name payer, transaction&& trx, bool replace_existing );
       bool cancel_deferred_transaction( const uint128_t& sender_id, account_name sender );
       bool cancel_deferred_transaction( const uint128_t& sender_id ) { return cancel_deferred_transaction(sender_id, receiver); }
+      void execute_nested_transaction(transaction&& trx);
 
    /// Event methods:
    public:

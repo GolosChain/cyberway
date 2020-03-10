@@ -50,6 +50,7 @@ namespace cyberway { namespace chaindb {
         table_info generate_table_info(const abi_info& abi, const table_def& table) {
             table_info info(abi.code(), abi.code());
             info.table = &table;
+            info.pk_order = abi.find_pk_order(table);
             return info;
         }
 

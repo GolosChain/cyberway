@@ -16,6 +16,7 @@ add_subdirectory(identity)
 add_subdirectory(stltest)
 add_subdirectory(test.inline)
 add_subdirectory(ee.test)
+add_subdirectory(nested_trx)
 
 add_subdirectory(hello)
 add_subdirectory(asserter)

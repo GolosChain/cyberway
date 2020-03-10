@@ -1390,6 +1390,12 @@ class transaction_api : public context_aware_api {
          fc::uint128_t sender_id(val>>64, uint64_t(val) );
          return context.cancel_deferred_transaction( (unsigned __int128)sender_id );
       }
+
+      void send_nested(array_ptr<char> data, size_t data_len) {
+         transaction trx;
+         fc::raw::unpack<transaction>(data, data_len, trx);
+         context.execute_nested_transaction(std::move(trx));
+      }
 };
 
 class event_api : public context_aware_api {
@@ -1921,6 +1927,7 @@ REGISTER_INTRINSICS(transaction_api,
    (send_context_free_inline,  void(int, int)               )
    (send_deferred,             void(int, int64_t, int, int, int32_t) )
    (cancel_deferred,           int(int)                     )
+   (send_nested,               void(int, int) )
 );
 
 REGISTER_INTRINSICS(event_api,

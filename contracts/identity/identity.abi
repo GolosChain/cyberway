@@ -75,7 +75,7 @@
       "base": "",
       "fields": [
         {"name":"id", "type":"account_name"},
-        {"name":"identity", "type":"uint64"},
+        {"name":"identity", "type":"uint64"}
       ]
     }
   ],

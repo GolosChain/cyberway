@@ -173,7 +173,7 @@ void config_reader::read_config(const variables_map& options) {
 
     // base validation and init
     info.init();
-    EOS_ASSERT(info.golos.max_supply >= 0, genesis_exception, "max_supply can't be negative");
+    EOS_ASSERT(info.golos.max_supply >= 0, genesis_exception, "max_supply can't be negative: ${supply}", ("supply", info.golos.max_supply));
     EOS_ASSERT(info.golos.sys_max_supply >= 0, genesis_exception, "sys_max_supply can't be negative");
     for (const auto& f: info.params.funds) {
         EOS_ASSERT(f.numerator * f.denominator != 0, genesis_exception, "funds numerator & denominator must not be 0");

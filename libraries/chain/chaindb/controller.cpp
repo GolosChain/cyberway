@@ -346,6 +346,11 @@ namespace cyberway { namespace chaindb {
             cache_.set_cache_converter(table, converter);
         }
 
+        bool has_cache_converter(const table_request& request) {
+            auto table = get_table(request);
+            return cache_.has_cache_converter(table);
+        }
+
         cache_object_ptr create_cache_object(const table_request& req, const storage_payer_info& storage) {
             auto table = get_table(req);
             auto item = cache_.create(table, storage);
@@ -880,6 +885,10 @@ namespace cyberway { namespace chaindb {
         const table_request& table, const cache_converter_interface& conv
     ) const {
         impl_->set_cache_converter(table, conv);
+    }
+
+    bool chaindb_controller::has_cache_converter(const table_request& table) const {
+        return impl_->has_cache_converter(table);
     }
 
     cache_object_ptr chaindb_controller::create_cache_object(

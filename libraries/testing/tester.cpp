@@ -159,12 +159,17 @@ namespace eosio { namespace testing {
       return b;
    }
 
-   signed_block_ptr base_tester::_produce_block( fc::microseconds skip_time, bool skip_pending_trxs, uint32_t skip_flag) {
+   signed_block_ptr base_tester::_produce_block( fc::microseconds skip_time, bool skip_pending_trxs, uint32_t skip_flag, const std::set<account_name>& disabled_producers) {
       auto head = control->head_block_state();
       auto head_time = control->head_block_time();
       auto next_time = head_time + skip_time;
 
       if( !control->pending_block_state() || control->pending_block_state()->header.timestamp != next_time ) {
+         _start_block( next_time );
+      }
+      
+      while(disabled_producers.count(control->pending_block_state()->header.producer)) {
+          next_time = next_time + fc::milliseconds(config::block_interval_ms);
          _start_block( next_time );
       }
 
@@ -183,7 +188,7 @@ namespace eosio { namespace testing {
             for (const auto& trx : scheduled_trxs ) {
                auto trace = control->push_scheduled_transaction(trx, fc::time_point::maximum());
                if(trace->except) {
-                  if (!controller::scheduled_failure_is_subjective((*trace->except), true)) {
+                  if (!controller::scheduled_failure_is_subjective((*trace->except), true) && !ignore_scheduled_fail) {
                      trace->except->dynamic_rethrow_exception();
                   }
                }
@@ -242,27 +247,27 @@ namespace eosio { namespace testing {
    }
 
 
-   signed_block_ptr base_tester::wait_irreversible_block(const uint32_t lib, bool empty_blocks) {
+   signed_block_ptr base_tester::wait_irreversible_block(const uint32_t lib, bool empty_blocks, const std::set<account_name>& disabled_producers) {
       signed_block_ptr b;
       while (control->head_block_state()->dpos_irreversible_blocknum < lib) {
          if (empty_blocks) {
-            b = produce_empty_block();
+            b = produce_empty_block(fc::milliseconds(config::block_interval_ms), 0, disabled_producers);
          } else {
-            b = produce_block();
+            b = produce_block(fc::milliseconds(config::block_interval_ms), 0, disabled_producers);
          }
       }
       return b;
    }
 
 
-   signed_block_ptr base_tester::produce_blocks( uint32_t n, bool empty ) {
+   signed_block_ptr base_tester::produce_blocks( uint32_t n, bool empty, const std::set<account_name>& disabled_producers ) {
       signed_block_ptr b;
       if( empty ) {
          for( uint32_t i = 0; i < n; ++i )
-            b = produce_empty_block();
+            b = produce_empty_block(fc::milliseconds(config::block_interval_ms), 0, disabled_producers);
       } else {
          for( uint32_t i = 0; i < n; ++i )
-            b = produce_block();
+            b = produce_block(fc::milliseconds(config::block_interval_ms), 0, disabled_producers);
       }
       return b;
    }
@@ -280,32 +285,32 @@ namespace eosio { namespace testing {
       return result;
    }
 
-   void base_tester::produce_blocks_until_end_of_round() {
+   void base_tester::produce_blocks_until_end_of_round(const std::set<account_name>& disabled_producers) {
       uint64_t blocks_per_round;
       while(true) {
          blocks_per_round = control->active_producers().producers.size() * config::producer_repetitions;
-         produce_block();
+         produce_block(fc::milliseconds(config::block_interval_ms), 0, disabled_producers);
          if (control->head_block_num() % blocks_per_round == (blocks_per_round - 1)) break;
       }
    }
 
-   void base_tester::produce_blocks_for_n_rounds(const uint32_t num_of_rounds) {
+   void base_tester::produce_blocks_for_n_rounds(const uint32_t num_of_rounds, const std::set<account_name>& disabled_producers) {
       for(uint32_t i = 0; i < num_of_rounds; i++) {
-         produce_blocks_until_end_of_round();
+         produce_blocks_until_end_of_round(disabled_producers);
       }
    }
 
-   void base_tester::produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(const fc::microseconds target_elapsed_time) {
+   void base_tester::produce_min_num_of_blocks_to_spend_time_wo_inactive_prod(const fc::microseconds target_elapsed_time, const std::set<account_name>& disabled_producers) {
       fc::microseconds elapsed_time;
       while (elapsed_time < target_elapsed_time) {
          for(uint32_t i = 0; i < control->head_block_state()->active_schedule.producers.size(); i++) {
             const auto time_to_skip = fc::milliseconds(config::producer_repetitions * config::block_interval_ms);
-            produce_block(time_to_skip);
+            produce_block(time_to_skip, 0, disabled_producers);
             elapsed_time += time_to_skip;
          }
          // if it is more than 24 hours, producer will be marked as inactive
          const auto time_to_skip = fc::seconds(23 * 60 * 60);
-         produce_block(time_to_skip);
+         produce_block(time_to_skip, 0, disabled_producers);
          elapsed_time += time_to_skip;
       }
 
@@ -389,10 +394,15 @@ namespace eosio { namespace testing {
       return r;
    } FC_RETHROW_EXCEPTIONS( warn, "transaction_header: ${header}", ("header", transaction_header(trx.get_transaction()) )) }
 
+   transaction_trace_ptr base_tester::push_transaction2(signed_transaction& trx, bool add_nested) {
+      return push_transaction(trx, fc::time_point::maximum(), DEFAULT_BILLED_CPU_TIME_US, DEFAULT_BILLED_RAM_BYTES, add_nested);
+   }
+
    transaction_trace_ptr base_tester::push_transaction( signed_transaction& trx,
                                                         fc::time_point deadline,
                                                         uint32_t billed_cpu_time_us,
-                                                        uint64_t billed_ram_bytes
+                                                        uint64_t billed_ram_bytes,
+                                                        bool add_nested
                                                       )
    {
         try {
@@ -409,7 +419,7 @@ namespace eosio { namespace testing {
             fc::microseconds( deadline - fc::time_point::now() );
       auto mtrx = std::make_shared<transaction_metadata>(trx, c);
       transaction_metadata::start_recover_keys( mtrx, control->get_thread_pool(), control->get_chain_id(), time_limit );
-      auto r = control->push_transaction( mtrx, deadline, { billed_cpu_time_us, billed_ram_bytes >> 10 } );
+      auto r = control->push_transaction( mtrx, deadline, { billed_cpu_time_us, billed_ram_bytes >> 10 }, add_nested );
       if( r->except_ptr ) std::rethrow_exception( r->except_ptr );
       if( r->except)  throw *r->except;
       return r;
@@ -474,7 +484,8 @@ namespace eosio { namespace testing {
                                                    const vector<permission_level>& auths,
                                                    const variant_object& data,
                                                    uint32_t expiration,
-                                                   uint32_t delay_sec
+                                                   uint32_t delay_sec,
+                                                   bool add_nested
                                                  )
 
    { try {
@@ -485,7 +496,7 @@ namespace eosio { namespace testing {
          trx.sign( get_private_key( auth.actor, auth.permission.to_string() ), control->get_chain_id() );
       }
 
-      return push_transaction( trx );
+      return push_transaction2(trx, add_nested);
    } FC_CAPTURE_AND_RETHROW( (code)(acttype)(auths)(data)(expiration)(delay_sec) ) }
 
    action base_tester::get_action( account_name code, action_name acttype, vector<permission_level> auths,
