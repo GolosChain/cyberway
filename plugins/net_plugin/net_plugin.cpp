@@ -212,6 +212,7 @@ namespace eosio {
       void handle_message(const connection_ptr& c, const request_message& msg);
       void handle_message(const connection_ptr& c, const sync_request_message& msg);
       void handle_message(const connection_ptr& c, const address_request_message& msg);
+      void handle_message(const connection_ptr& c, const address_message& msg);
       void handle_message(const connection_ptr& c, const signed_block& msg) = delete; // signed_block_ptr overload used instead
       void handle_message(const connection_ptr& c, const signed_block_ptr& msg);
       void handle_message(const connection_ptr& c, const packed_transaction& msg) = delete; // packed_transaction_ptr overload used instead
@@ -2474,6 +2475,14 @@ namespace eosio {
    }
 
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_request_message& msg) {
+      address_message amsg;
+      for( auto& con : connections ) {
+         amsg.addresses.push_back(con->peer_addr);
+      }
+      c->enqueue(amsg);
+   }
+
+   void net_plugin_impl::handle_message(const connection_ptr& c, const address_message& msg) {
    }
 
    size_t calc_trx_size( const packed_transaction_ptr& trx ) {
