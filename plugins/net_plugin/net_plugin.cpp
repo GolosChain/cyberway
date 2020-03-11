@@ -2477,7 +2477,8 @@ namespace eosio {
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_request_message& msg) {
       address_message amsg;
       for( auto& con : connections ) {
-         amsg.addresses.push_back(con->peer_addr);
+         if (con->connected())
+            amsg.addresses.push_back(con->peer_addr);
       }
       c->enqueue(amsg);
    }
