@@ -2483,6 +2483,11 @@ namespace eosio {
    }
 
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_message& msg) {
+      for( auto& host : msg.addresses) {
+         connection_ptr con = std::make_shared<connection>(host);
+         connections.insert( con );
+         connect( con );
+      }
    }
 
    size_t calc_trx_size( const packed_transaction_ptr& trx ) {
