@@ -42,8 +42,4 @@ steps:
     command: ".buildkite/steps/mongodb-exporter.sh"
     branches: "master"
     timeout: 20
-
-  - wait
-
-  - label: ":slack:"
-    command: ".buildkite/steps/slack.sh \"Pipeline complete successfully: ${BUILDKITE_MESSAGE}\" \"good\""
+    

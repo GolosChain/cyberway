@@ -1,0 +1,30 @@
+FROM debian:stretch-slim
+
+ARG SONAR_SCANNER_HOME=/opt/sonar-scanner
+ARG BUILD_WRAPPER_HOME=/opt/build-wrapper
+
+ENV SONAR_SCANNER_HOME=${SONAR_SCANNER_HOME} \
+    SONAR_SCANNER_VERSION=4.2.0.1873 \
+    BUILD_WRAPPER_HOME=${BUILD_WRAPPER_HOME} \
+    PATH=${SONAR_SCANNER_HOME}/bin:${BUILD_WRAPPER_HOME}:${PATH}
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git wget unzip xz-utils pylint \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt
+RUN wget -q -O /opt/sonar-scanner-cli.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip \
+    && unzip sonar-scanner-cli.zip \
+    && rm sonar-scanner-cli.zip \
+    && mv sonar-scanner-${SONAR_SCANNER_VERSION}-linux ${SONAR_SCANNER_HOME} \
+    && wget -q -O /opt/build-wrapper.zip https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip \
+    && unzip build-wrapper.zip \
+    && rm build-wrapper.zip \
+    && mv build-wrapper-linux-x86 ${BUILD_WRAPPER_HOME}
+
+RUN pwd && ls -lah
+#RUN build-wrapper-linux-x86-64
+#RUN sonar-scanner-cli
+CMD ["/bin/bash"]
+
+    
