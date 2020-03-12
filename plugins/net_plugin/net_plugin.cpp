@@ -2477,12 +2477,20 @@ namespace eosio {
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_request_message& msg) {
       address_message amsg;
       for( auto& con : connections ) {
-         amsg.addresses.push_back(con->peer_addr);
+         if (con->connected())
+            amsg.addresses.push_back(con->peer_addr);
       }
       c->enqueue(amsg);
    }
 
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_message& msg) {
+      for( auto& host : msg.addresses) {
+         if (!find_connection(host)) {
+            connection_ptr con = std::make_shared<connection>(host);
+            connections.insert( con );
+            connect( con );
+         }
+      }
    }
 
    size_t calc_trx_size( const packed_transaction_ptr& trx ) {
