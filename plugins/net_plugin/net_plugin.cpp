@@ -132,10 +132,12 @@ namespace eosio {
       unique_ptr<boost::asio::steady_timer> connector_check;
       unique_ptr<boost::asio::steady_timer> transaction_check;
       unique_ptr<boost::asio::steady_timer> keepalive_timer;
+      unique_ptr<boost::asio::steady_timer> fetch_addresses_timer;
       boost::asio::steady_timer::duration   connector_period;
       boost::asio::steady_timer::duration   txn_exp_period;
       boost::asio::steady_timer::duration   resp_expected_period;
       boost::asio::steady_timer::duration   keepalive_interval{std::chrono::seconds{32}};
+      boost::asio::steady_timer::duration   fetch_addresses_interval{std::chrono::minutes{15}};
       int                           max_cleanup_time_ms = 0;
 
       const std::chrono::system_clock::duration peer_authentication_interval{std::chrono::seconds{1}}; ///< Peer clock may be no more than 1 second skewed from our clock, including network latency.
@@ -232,6 +234,7 @@ namespace eosio {
       /** \brief Peer heartbeat ticker.
        */
       void ticker();
+      void fetch_addresses();
       /** @} */
       /** \brief Determine if a peer is allowed to connect.
        *
@@ -2654,6 +2657,23 @@ namespace eosio {
       } );
    }
 
+   void net_plugin_impl::fetch_addresses() {
+      fetch_addresses_timer->expires_from_now(fetch_addresses_interval);
+      fetch_addresses_timer->async_wait( [this]( boost::system::error_code ec ) {
+         app().post( priority::low, [this, ec]() {
+            fetch_addresses();
+            if( ec ) {
+               fc_wlog( logger, "Addresses fetching ticked sooner than expected: ${m}", ("m", ec.message()) );
+            }
+            for( auto& c : connections ) {
+               if (c->connected() && c->protocol_version >= proto_address_advertising) {
+                  c->enqueue(address_request_message());
+               }
+            }
+         } );
+      } );
+   }
+
    void net_plugin_impl::start_monitors() {
       connector_check.reset(new boost::asio::steady_timer( *server_ioc ));
       transaction_check.reset(new boost::asio::steady_timer( *server_ioc ));
@@ -3072,6 +3092,8 @@ namespace eosio {
       }
 
       my->start_monitors();
+      my->fetch_addresses_timer.reset( new boost::asio::steady_timer( *my->server_ioc ) );
+      my->fetch_addresses();
 
       for( auto seed_node : my->supplied_peers ) {
          connect( seed_node );
@@ -3096,6 +3118,8 @@ namespace eosio {
             my->transaction_check->cancel();
          if( my->keepalive_timer )
             my->keepalive_timer->cancel();
+         if( my->fetch_addresses_timer )
+            my->fetch_addresses_timer->cancel();
 
          my->done = true;
          if( my->acceptor ) {
