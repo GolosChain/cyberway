@@ -518,8 +518,7 @@ namespace eosio {
       handshake_message       last_handshake_recv;
       handshake_message       last_handshake_sent;
       int16_t                 sent_handshake_count = 0;
-      bool                    connecting = false;
-      bool                    syncing = false;
+      connection_state        state = connection_state::none;
       uint16_t                protocol_version  = 0;
       string                  peer_addr;
       unique_ptr<boost::asio::steady_timer> response_expected;
@@ -532,8 +531,8 @@ namespace eosio {
       connection_status get_status()const {
          connection_status stat;
          stat.peer = peer_addr;
-         stat.connecting = connecting;
-         stat.syncing = syncing;
+         stat.connecting = (state == connection_state::connecting);
+         stat.syncing = (state == connection_state::syncing);
          stat.last_handshake = last_handshake_recv;
          return stat;
       }
@@ -740,8 +739,7 @@ namespace eosio {
         last_handshake_recv(),
         last_handshake_sent(),
         sent_handshake_count(0),
-        connecting(false),
-        syncing(false),
+        state(connection_state::none),
         protocol_version(0),
         peer_addr(endpoint),
         response_expected(),
@@ -766,8 +764,7 @@ namespace eosio {
         last_handshake_recv(),
         last_handshake_sent(),
         sent_handshake_count(0),
-        connecting(true),
-        syncing(false),
+        state(connection_state::connecting),
         protocol_version(0),
         peer_addr(),
         response_expected(),
@@ -791,11 +788,11 @@ namespace eosio {
    }
 
    bool connection::connected() {
-      return (socket && socket->is_open() && !connecting);
+      return (socket && socket->is_open() && state != connection_state::connected);
    }
 
    bool connection::current() {
-      return (connected() && !syncing);
+      return (connected() && state != connection_state::syncing);
    }
 
    void connection::reset() {
@@ -816,8 +813,7 @@ namespace eosio {
          fc_wlog( logger, "no socket to close!" );
       }
       flush_queues();
-      connecting = false;
-      syncing = false;
+      state = connection_state::none;
       if( last_req ) {
          my_impl->dispatcher->retry_fetch(shared_from_this());
       }
@@ -878,7 +874,7 @@ namespace eosio {
       enqueue_sync_block();
 
       // still want to send transactions along during blk branch sync
-      syncing = false;
+      state = connection_state::connected;
    }
 
    void connection::blk_send(const block_id_type& blkid) {
@@ -905,7 +901,7 @@ namespace eosio {
    }
 
    void connection::stop_send() {
-      syncing = false;
+      state = connection_state::connected;
    }
 
    void connection::send_handshake() {
@@ -1409,7 +1405,7 @@ namespace eosio {
       uint32_t lib_num = cc.last_irreversible_block_num();
       uint32_t peer_lib = msg.last_irreversible_block_num;
       reset_lib_num(c);
-      c->syncing = false;
+      c->state = connection_state::connected;
 
       //--------------------------------
       // sync need checks; (lib == last irreversible block)
@@ -1453,7 +1449,7 @@ namespace eosio {
             note.known_blocks.pending = head;
             c->enqueue( note );
          }
-         c->syncing = true;
+         c->state = connection_state::syncing;
          return;
       }
       // TODO: added by CyberWay
@@ -1478,7 +1474,7 @@ namespace eosio {
             note.known_blocks.ids.push_back(head_id);
             c->enqueue( note );
          }
-         c->syncing = true;
+         c->state = connection_state::syncing;
          return;
       }
       fc_elog( logger, "sync check failed to resolve status" );
@@ -1680,7 +1676,7 @@ namespace eosio {
       my_impl->local_txns.insert(std::move(nts));
 
       my_impl->send_transaction_to_all( buff, [&id, &skips, trx_expiration](const connection_ptr& c) -> bool {
-         if( skips.find(c) != skips.end() || c->syncing ) {
+         if( skips.find(c) != skips.end() || c->state == connection_state::syncing ) {
             return false;
           }
           const auto& bs = c->trx_state.find(id);
@@ -1863,7 +1859,7 @@ namespace eosio {
       }
       auto current_endpoint = *endpoint_itr;
       ++endpoint_itr;
-      c->connecting = true;
+      c->state = connection_state::connecting;
       c->pending_message_buffer.reset();
       connection_wptr weak_conn = c;
       c->socket->async_connect( current_endpoint, boost::asio::bind_executor( c->strand,
@@ -1881,7 +1877,7 @@ namespace eosio {
                   connect( c, endpoint_itr );
                } else {
                   fc_elog( logger, "connection failed to ${peer}: ${error}", ("peer", c->peer_name())( "error", err.message()));
-                  c->connecting = false;
+                  c->state = connection_state::none;
                   my_impl->close( c );
                }
             }
@@ -1895,7 +1891,7 @@ namespace eosio {
       con->socket->set_option( nodelay, ec );
       if (ec) {
          fc_elog( logger, "connection failed to ${peer}: ${error}", ( "peer", con->peer_name())("error",ec.message()) );
-         con->connecting = false;
+         con->state = connection_state::none;
          close(con);
          return false;
       }
@@ -2226,8 +2222,8 @@ namespace eosio {
       controller& cc = chain_plug->chain();
       uint32_t lib_num = cc.last_irreversible_block_num();
       uint32_t peer_lib = msg.last_irreversible_block_num;
-      if( c->connecting ) {
-         c->connecting = false;
+      if( c->state == connection_state::connecting ) {
+         c->state = connection_state::connected;
       }
       if (msg.generation == 1) {
          if( msg.node_id == node_id) {
@@ -2378,7 +2374,7 @@ namespace eosio {
       // notices of previously unknown blocks or txns,
       //
       peer_ilog(c, "received notice_message");
-      c->connecting = false;
+      c->state = connection_state::connected;
       request_message req;
       bool send_req = false;
       if (msg.known_trx.mode != none) {
@@ -2727,7 +2723,7 @@ namespace eosio {
             start_conn_timer(std::chrono::milliseconds(1), *it); // avoid exhausting
             return;
          }
-         if( !(*it)->socket->is_open() && !(*it)->connecting) {
+         if( !(*it)->socket->is_open() && (*it)->state != connection_state::connecting) {
             if( (*it)->peer_addr.length() > 0) {
                connect(*it);
             }

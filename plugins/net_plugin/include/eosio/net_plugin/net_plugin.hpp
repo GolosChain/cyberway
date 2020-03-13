@@ -10,6 +10,14 @@
 namespace eosio {
    using namespace appbase;
 
+   enum class connection_state {
+      none,
+      connecting,
+      connected,
+      syncing
+   };
+
+   // Returning in public methods
    struct connection_status {
       string            peer;
       bool              connecting = false;
