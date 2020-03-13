@@ -29,14 +29,20 @@ namespace eosio {
        bool                       accepted;
        bool                       implicit;
        bool                       scheduled;
+       bool                       nested;
        variant                    trx;
+       chain::bytes               hex_data;
+       vector<signature_type>     signatures;
 
        TrxMetadata(const chain::transaction_metadata_ptr &meta, const fc::variant& trx)
        : id(meta->id)
        , accepted(meta->accepted)
        , implicit(meta->implicit)
        , scheduled(meta->scheduled)
+       , nested(meta->nested)
        , trx(trx)
+       , hex_data(meta->packed_trx->get_raw_transaction())
+       , signatures(meta->packed_trx->get_signatures())
        {}
    };
 
@@ -133,6 +139,7 @@ namespace eosio {
        chain::block_id_type          id;
        chain::block_id_type          previous;
        account_name                  producer;
+       signature_type                producer_signature;
        uint32_t                      dpos_irreversible_blocknum;
        uint32_t                      scheduled_shuffle_slot;
        uint32_t                      scheduled_slot;
@@ -148,6 +155,7 @@ namespace eosio {
        , id(bstate->block->id())
        , previous(bstate->header.previous)
        , producer(bstate->header.producer)
+       , producer_signature(bstate->header.producer_signature)
        , dpos_irreversible_blocknum(bstate->dpos_irreversible_blocknum)
        , scheduled_shuffle_slot(bstate->scheduled_shuffle_slot)
        , block_num(bstate->block->block_num())
@@ -173,6 +181,7 @@ namespace eosio {
    struct AcceptedBlockMessage : public BlockMessage {
        std::vector<TrxReceipt> trxs;
        std::vector<EventData> events;
+       extensions_type block_extensions;
 
        AcceptedBlockMessage(MsgChannel msg_channel, MsgType msg_type, const chain::block_state_ptr& bstate)
        : BlockMessage(msg_channel, msg_type, bstate)
@@ -193,6 +202,8 @@ namespace eosio {
                TrxReceipt trx_receipt(tid, receipt);
                trxs.push_back(std::move(trx_receipt));
            }
+
+           block_extensions = bstate->block->block_extensions;
        }
    };
 
@@ -200,15 +211,15 @@ namespace eosio {
 
 FC_REFLECT(eosio::EventData, (code)(event)(data)(args))
 FC_REFLECT(eosio::ActionData, (receiver)(code)(action)(auth)(data)(args)(events))
-FC_REFLECT(eosio::TrxMetadata, (id)(accepted)(implicit)(scheduled)(trx))
+FC_REFLECT(eosio::TrxMetadata, (id)(accepted)(implicit)(scheduled)(nested)(trx)(hex_data)(signatures))
 FC_REFLECT(eosio::TrxReceipt, (id)(status)(cpu_usage_us)(net_usage_words)(ram_kbytes)(storage_kbytes))
 
 FC_REFLECT_ENUM(eosio::MsgChannel, (Blocks)(Genesis))
 FC_REFLECT_ENUM(eosio::BaseMessage::MsgType, (Unknown)(GenesisData)(AcceptBlock)(CommitBlock)(AcceptTrx)(ApplyTrx))
 FC_REFLECT(eosio::BaseMessage, (msg_channel)(msg_type))
 FC_REFLECT_DERIVED(eosio::GenesisDataMessage, (eosio::BaseMessage), (id)(code)(name)(data))
-FC_REFLECT_DERIVED(eosio::BlockMessage, (eosio::BaseMessage), (id)(previous)(producer)(dpos_irreversible_blocknum)
+FC_REFLECT_DERIVED(eosio::BlockMessage, (eosio::BaseMessage), (id)(previous)(producer)(producer_signature)(dpos_irreversible_blocknum)
    (scheduled_shuffle_slot)(scheduled_slot)(active_schedule)(next_schedule)(block_num)(block_time)(block_slot)(next_block_time))
-FC_REFLECT_DERIVED(eosio::AcceptedBlockMessage, (eosio::BlockMessage), (trxs)(events))
+FC_REFLECT_DERIVED(eosio::AcceptedBlockMessage, (eosio::BlockMessage), (trxs)(events)(block_extensions))
 FC_REFLECT_DERIVED(eosio::AcceptTrxMessage, (eosio::BaseMessage)(eosio::TrxMetadata), )
 FC_REFLECT_DERIVED(eosio::ApplyTrxMessage, (eosio::BaseMessage), (id)(block_num)(block_time)(prod_block_id)(actions)(except))

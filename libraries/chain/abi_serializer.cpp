@@ -129,7 +129,6 @@ namespace eosio { namespace chain {
       }
 
       for( const auto& td : abi.types ) {
-         EOS_ASSERT(_is_type(td.type, ctx), invalid_type_inside_abi, "invalid type ${type}", ("type", td.type));
          EOS_ASSERT(!_is_type(td.new_type_name, ctx), duplicate_abi_type_def_exception,
             "type ${new_type_name} already exists", ("new_type_name", td.new_type_name));
          typedefs.insert(std::make_pair(td.new_type_name, td.type));
@@ -488,6 +487,12 @@ namespace eosio { namespace chain {
             ctx.set_array_index_of_path_back(i);
            _variant_to_binary(fundamental_type(rtype), var, ds, ctx);
            ++i;
+         }
+      } else if( is_optional(rtype) ) {
+         char flag = !var.is_null();
+         fc::raw::pack(ds, flag);
+         if( flag ) {
+            _variant_to_binary(fundamental_type(rtype), var, ds, ctx);
          }
       } else if( (v_itr = variants.find(rtype)) != variants.end() ) {
          ctx.hint_variant_type_if_in_array( v_itr );

@@ -35,21 +35,21 @@ class NodeosApiTest:
     def execute(self, path):
         args, unknown = self.prepareExecutables()
         self.tests = self.getTests(path)
-        self.startUnitTests(unknown)
+        return self.runUnitTests(unknown)
 
     def prepareExecutables(self):
         args, unknown = self.argParser.parse_known_args()
+        self.skip = args.skip
+        self.contractsManager = ContractsManager(args.contracts)
+        self.apiClient = ApiClient("127.0.0.1", 8888, args.apiClientDialog)
 
         if args.nodeos == None:
-            return
+            return args, unknown
 
         eprint("Starting a nodeos instance...")
         self.nodeos = Nodeos(args.nodeos, args.mongo, args.nodeosOutput)
         atexit.register(self.nodeos.stop)
 
-        self.contractsManager = ContractsManager(args.contracts)
-        self.apiClient = ApiClient("127.0.0.1", 8888, args.apiClientDialog)
-        self.skip = args.skip
         eprint("The nodeos is ready")
         return args, unknown
 
@@ -61,35 +61,44 @@ class NodeosApiTest:
             if isfile(path + '/' + file) and re.fullmatch('[a-zA-Z0-9.]*Test.py', file):
                 test = file[:-3]
                 if self.skipTest(test):
-                    eprint("Skipped test: " + file[:-3])
+                    eprint("Skipped test: " + test)
                 else :
                     tests.append(test)
-                    eprint("Found test: " + file[:-3])
+                    eprint("Found test: " + test)
 
         return tests
 
     def skipTest(self, test):
         return test in self.skip
 
-    def startUnitTests(self, args):
+    def runUnitTests(self, args):
         sys.argv = [sys.argv[0]]
         sys.argv.extend(args)
 
+        suites = []
         for test in self.tests:
-            eprint("Starting test: " + test)
-
             try:
-                unittest.main(module=test, exit=False)
+                suites.append((test, unittest.defaultTestLoader.loadTestsFromName(test)))
             except ModuleNotFoundError:
                 eprint("Could not execute test: " + test)
 
+
+        testRunner = unittest.TextTestRunner(resultclass=unittest.TextTestResult)
+        successful = True
+        for testName, suite in suites:
+            eprint("Starting test: " + testName)
+            result = testRunner.run(suite)
+
+            successful = successful and result.wasSuccessful()
+
+        return successful
 
 class CleosTestSuite(NodeosApiTest):
     def __init__(self):
         NodeosApiTest.__init__(self)
         NodeosApiTest.instance = self
         self.argParser.description = 'The nodeos api test suite with the cleos client'
-        self.argParser.add_argument(dest='cleos' , help='A path to the cleos')
+        self.argParser.add_argument('--cleos', dest='cleos', required=True, help='A path to the cleos')
         self.argParser.add_argument('--remote-host', dest='remoteHost', default='127.0.0.1:8888', help='A host to send cleos requests')
         self.argParser.add_argument('--cleos-dialog', action='store_true', dest='cleosDialog', help='Show the cleos commands and output')
 

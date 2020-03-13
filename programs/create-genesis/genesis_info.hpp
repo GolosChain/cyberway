@@ -185,8 +185,8 @@ struct genesis_info {
             uint32_t wait_days;
         } recovery;
 
-        int64_t max_supply;
-        int64_t sys_max_supply;
+        int64_t max_supply = 0;
+        int64_t sys_max_supply = 0;
 
         struct start_trx_params {
             uint16_t delay_minutes = 60;

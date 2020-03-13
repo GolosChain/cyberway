@@ -77,6 +77,15 @@ extern "C" {
    int cancel_deferred(const uint128_t& sender_id);
 
    /**
+    *  Sends a nested transaction.
+    *
+    *  @brief Sends a nested transaction.
+    *  @param serialized_transaction - Pointer of serialized transaction to be nested
+    *  @param size - Size to reserve
+    */
+   void send_nested(const char* serialized_transaction, size_t size);
+
+   /**
     * Access a copy of the currently executing transaction.
     *
     * @brief Access a copy of the currently executing transaction.

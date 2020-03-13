@@ -1,0 +1,89 @@
+{
+    "state_file": "",
+    "genesis_json": "${GENESIS_DIR}/genesis.json",
+    "params":{
+        "initial_prod_count": 0,
+        "funds": [],
+    },
+    "accounts": [
+        {"name": "cyber",
+            "privileged": true,
+            "permissions": [
+                {"name": "owner",  "keys": []},
+                {"name": "active", "keys": ["INITIAL"]},
+                {"name": "prods",  "keys": [], "threshold": 2, "accounts": ["cyber.prods@active"], "waits": ["1209600"]}
+            ],
+            "abi":  {"path": "${CYBERWAY_CONTRACTS}/cyber.bios/cyber.bios.abi", "hash":""},
+            "code": {"path": "${CYBERWAY_CONTRACTS}/cyber.bios/cyber.bios.wasm", "hash":""}
+        },
+        {"name": "cyber.govern",
+            "privileged": true,
+            "permissions": [
+                {"name": "owner",  "keys": [], "accounts": ["cyber@owner"]},
+                {"name": "active", "keys": [], "accounts": ["cyber@active"]},
+                {"name": "prods",  "keys": [], "accounts": ["cyber@prods"]}
+            ]
+        },
+        {"name": "cyber.stake",
+            "privileged": true,
+            "permissions": [
+                {"name": "owner",  "keys": [], "accounts": ["cyber@owner"]},
+                {"name": "active", "keys": [], "accounts": ["cyber@active"]},
+                {"name": "prods",  "keys": [], "accounts": ["cyber@prods"]}
+            ],
+            "abi":  {"path": "${CYBERWAY_CONTRACTS}/cyber.stake/cyber.stake.abi", "hash":""},
+            "code": {"path": "${CYBERWAY_CONTRACTS}/cyber.stake/cyber.stake.wasm", "hash":""}
+        },
+        {"name": "cyber.null",
+            "permissions": [
+                {"name": "owner",  "keys": [], "accounts": []},
+                {"name": "active", "keys": [], "accounts": []}
+            ]
+        },
+        {"name": "cyber.prods",
+            "permissions": [
+                {"name": "owner",  "keys": [], "accounts": []},
+                {"name": "active", "keys": [], "accounts": ["cyber@active"]},
+                {"name": "prod.major", "keys": [], "accounts": ["cyber@active"]},
+                {"name": "prod.minor", "keys": [], "accounts": ["cyber@active"]}
+            ]
+        },
+        {"name": "cyber.token",
+            "permissions": [
+                {"name": "owner",  "keys": [], "accounts": ["cyber@owner"]},
+                {"name": "active", "keys": [], "accounts": ["cyber@active"]},
+                {"name": "prods",  "keys": [], "accounts": ["cyber@prods"]}
+            ],
+            "abi":  {"path": "${CYBERWAY_CONTRACTS}/cyber.token/cyber.token.abi", "hash":""},
+            "code": {"path": "${CYBERWAY_CONTRACTS}/cyber.token/cyber.token.wasm", "hash":""}
+        },
+    ],
+    "transit_account_authorities": [],
+    "delegateuse": [],
+    "tables": [
+        {
+            "code": "cyber.token",
+            "table": "stat",
+            "abi_type": "currency_stats",
+            "rows": [
+                {
+                    "scope": "CYBER", "payer": "cyber.token", "pk": 353349294403,
+                    "data": {
+                        "supply" : {
+                            "_amount" : 0,
+                            "_decs" : 4,
+                            "_sym" : "CYBER"
+                        },
+                        "max_supply" : {
+                            "_amount" : 1000000000,
+                            "_decs" : 4,
+                            "_sym" : "CYBER"
+                        },
+                        "issuer" : "cyber"
+                    }
+                }
+            ]
+        }
+    ],
+    "auth_links": [],
+}

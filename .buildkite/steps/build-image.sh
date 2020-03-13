@@ -1,16 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-IMAGETAG=${BUILDKITE_BRANCH:-master}
-BRANCHNAME=${BUILDKITE_BRANCH:-master}
+GIT_REVISION=$(git rev-parse HEAD)
+VERSION_STRING=$(git describe --tags --dirty)
+
 COMPILETYPE=RelWithDebInfo
 
-TAGREF=${BUILDKITE_TAG:+"tags/$BUILDKITE_TAG"}
-REF=${TAGREF:-"heads/$BUILDKITE_BRANCH"}
-
-if [[ "${IMAGETAG}" == "master" ]]; then
+if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
     COMPILETYPE=Release
 fi
 
-cd Docker
-docker build -t cyberway/cyberway:${IMAGETAG} --build-arg=branch=${BRANCHNAME} --build-arg=builder=${BRANCHNAME} --build-arg=compiletype=${COMPILETYPE} --build-arg=ref=${REF} .
+docker build -t cyberway/cyberway:${GIT_REVISION} --build-arg=builder=${GIT_REVISION} --build-arg=compiletype=${COMPILETYPE} --build-arg=revision=${GIT_REVISION} --build-arg=versionstring=${VERSION_STRING} -f Docker/Dockerfile .

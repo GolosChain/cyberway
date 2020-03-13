@@ -1,0 +1,37 @@
+{
+# NOTE: For automatic set initial_timestamp from GolosChain LIB time
+#  "initial_timestamp": "1970-01-01T00:00:00.000",
+  "initial_timestamp": "${INITIAL_TIMESTAMP}",
+  "initial_key": "GLS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV",
+  "initial_configuration": {
+    "base_per_transaction_net_usage": 12,
+    "context_free_discount_net_usage_num": 20,
+    "context_free_discount_net_usage_den": 100,
+    "min_transaction_cpu_usage": 100,
+    "min_transaction_ram_usage": 1024
+    "max_transaction_lifetime": 3600,
+
+# NOTE: The expiration interval for deferred transactions was increased (for 3 hours) 
+# due to the fact that current value (10 minutes) is not enough to close a large 
+# number of posts in testnet (about 60,000). In the real system there will not be 
+# such a number of posts and this value should be revised.
+    "deferred_trx_expiration_window": 10800,
+    "max_transaction_delay": 3888000,
+    "max_inline_action_size": 32768,
+    "max_inline_action_depth": 4,
+    "max_authority_depth": 6,
+    "ram_size": "8589934592",
+    "reserved_ram_size": "536870912",
+    "max_block_usage":       [1400000,    1048576,    134217728,   4194304],
+    "max_transaction_usage": [800000,     524288,     67108864,    2097152],
+    "target_virtual_limits": [140000,     524288,     67108864,    3268],
+    "min_virtual_limits":    [1400000,    1048576,    33554432,    1634],
+    "max_virtual_limits":    [1400000000, 1048576000, 33554432000, 326800],
+    "usage_windows":         [60000, 60000, 60000, 86400000],
+    "virtual_limit_decrease_pct": [100, 100, 100, 100],
+    "virtual_limit_increase_pct": [10,  10,  10,  10],
+    "account_usage_windows": [3600000, 3600000, 3600000, 2592000000]
+  },
+  "initial_chain_id": "000000000000000000000000",
+  "genesis_data_hash": "${GENESIS_DATA_HASH}"
+}

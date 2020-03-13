@@ -40,4 +40,4 @@ def verifyTokensStaked(output, stakeHolder, amount, receiver =""):
 
 
 def verifyStakeEnabled(output):
-    verifyOutputContainsRegex(output, "#[ ]+cyber.stake <= cyber.stake::enable[ ]+{\"token_symbol\":\"4,CYBER\"}")
+    verifyOutputContainsRegex(output, "#[ ]+cyber.stake <= cyber.stake::enable[ ]+{\"token_code\":\"CYBER\"}")

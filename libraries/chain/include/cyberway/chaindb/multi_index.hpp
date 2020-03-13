@@ -754,6 +754,10 @@ public:
         controller.set_cache_converter(get_table_request(), cache_converter());
     }
 
+    static bool has_cache_converter(const chaindb_controller& controller) {
+        return controller.has_cache_converter(get_table_request());
+    }
+
     const_iterator cbegin() const { return primary_idx_.cbegin(); }
     const_iterator begin()  const { return cbegin(); }
 

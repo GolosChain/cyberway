@@ -132,10 +132,12 @@ namespace eosio {
       unique_ptr<boost::asio::steady_timer> connector_check;
       unique_ptr<boost::asio::steady_timer> transaction_check;
       unique_ptr<boost::asio::steady_timer> keepalive_timer;
+      unique_ptr<boost::asio::steady_timer> fetch_addresses_timer;
       boost::asio::steady_timer::duration   connector_period;
       boost::asio::steady_timer::duration   txn_exp_period;
       boost::asio::steady_timer::duration   resp_expected_period;
       boost::asio::steady_timer::duration   keepalive_interval{std::chrono::seconds{32}};
+      boost::asio::steady_timer::duration   fetch_addresses_interval{std::chrono::minutes{15}};
       int                           max_cleanup_time_ms = 0;
 
       const std::chrono::system_clock::duration peer_authentication_interval{std::chrono::seconds{1}}; ///< Peer clock may be no more than 1 second skewed from our clock, including network latency.
@@ -211,6 +213,8 @@ namespace eosio {
       void handle_message(const connection_ptr& c, const notice_message& msg);
       void handle_message(const connection_ptr& c, const request_message& msg);
       void handle_message(const connection_ptr& c, const sync_request_message& msg);
+      void handle_message(const connection_ptr& c, const address_request_message& msg);
+      void handle_message(const connection_ptr& c, const address_message& msg);
       void handle_message(const connection_ptr& c, const signed_block& msg) = delete; // signed_block_ptr overload used instead
       void handle_message(const connection_ptr& c, const signed_block_ptr& msg);
       void handle_message(const connection_ptr& c, const packed_transaction& msg) = delete; // packed_transaction_ptr overload used instead
@@ -230,6 +234,7 @@ namespace eosio {
       /** \brief Peer heartbeat ticker.
        */
       void ticker();
+      void fetch_addresses();
       /** @} */
       /** \brief Determine if a peer is allowed to connect.
        *
@@ -336,8 +341,9 @@ namespace eosio {
     */
    constexpr uint16_t proto_base = 0;
    constexpr uint16_t proto_explicit_sync = 1;
+   constexpr uint16_t proto_address_advertising = 2;
 
-   constexpr uint16_t net_version = proto_explicit_sync;
+   constexpr uint16_t net_version = proto_address_advertising;
 
    struct transaction_state {
       transaction_id_type id;
@@ -2310,6 +2316,10 @@ namespace eosio {
          if (c->sent_handshake_count == 0) {
             c->send_handshake();
          }
+
+         if (c->protocol_version >= proto_address_advertising) {
+            c->enqueue(address_request_message());
+         }
       }
 
       c->last_handshake_recv = msg;
@@ -2464,6 +2474,25 @@ namespace eosio {
       } else {
          c->peer_requested = sync_state( msg.start_block,msg.end_block,msg.start_block-1);
          c->enqueue_sync_block();
+      }
+   }
+
+   void net_plugin_impl::handle_message(const connection_ptr& c, const address_request_message& msg) {
+      address_message amsg;
+      for( auto& con : connections ) {
+         if (con->connected())
+            amsg.addresses.push_back(con->peer_addr);
+      }
+      c->enqueue(amsg);
+   }
+
+   void net_plugin_impl::handle_message(const connection_ptr& c, const address_message& msg) {
+      for( auto& host : msg.addresses) {
+         if (!find_connection(host)) {
+            connection_ptr con = std::make_shared<connection>(host);
+            connections.insert( con );
+            connect( con );
+         }
       }
    }
 
@@ -2622,6 +2651,23 @@ namespace eosio {
             for( auto& c : connections ) {
                if( c->socket->is_open()) {
                   c->send_time();
+               }
+            }
+         } );
+      } );
+   }
+
+   void net_plugin_impl::fetch_addresses() {
+      fetch_addresses_timer->expires_from_now(fetch_addresses_interval);
+      fetch_addresses_timer->async_wait( [this]( boost::system::error_code ec ) {
+         app().post( priority::low, [this, ec]() {
+            fetch_addresses();
+            if( ec ) {
+               fc_wlog( logger, "Addresses fetching ticked sooner than expected: ${m}", ("m", ec.message()) );
+            }
+            for( auto& c : connections ) {
+               if (c->connected() && c->protocol_version >= proto_address_advertising) {
+                  c->enqueue(address_request_message());
                }
             }
          } );
@@ -3046,6 +3092,8 @@ namespace eosio {
       }
 
       my->start_monitors();
+      my->fetch_addresses_timer.reset( new boost::asio::steady_timer( *my->server_ioc ) );
+      my->fetch_addresses();
 
       for( auto seed_node : my->supplied_peers ) {
          connect( seed_node );
@@ -3070,6 +3118,8 @@ namespace eosio {
             my->transaction_check->cancel();
          if( my->keepalive_timer )
             my->keepalive_timer->cancel();
+         if( my->fetch_addresses_timer )
+            my->fetch_addresses_timer->cancel();
 
          my->done = true;
          if( my->acceptor ) {

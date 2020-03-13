@@ -132,6 +132,13 @@ namespace eosio {
       uint32_t end_block;
    };
 
+   struct address_request_message {
+   };
+
+   struct address_message {
+      std::vector<std::string> addresses;
+   };
+
    using net_message = static_variant<handshake_message,
                                       chain_size_message,
                                       go_away_message,
@@ -140,7 +147,9 @@ namespace eosio {
                                       request_message,
                                       sync_request_message,
                                       signed_block,         // which = 7
-                                      packed_transaction>;  // which = 8
+                                      packed_transaction,   // which = 8
+                                      address_request_message,
+                                      address_message>;
 
 } // namespace eosio
 
@@ -159,6 +168,8 @@ FC_REFLECT( eosio::time_message, (org)(rec)(xmt)(dst) )
 FC_REFLECT( eosio::notice_message, (known_trx)(known_blocks) )
 FC_REFLECT( eosio::request_message, (req_trx)(req_blocks) )
 FC_REFLECT( eosio::sync_request_message, (start_block)(end_block) )
+FC_REFLECT( eosio::address_request_message, )
+FC_REFLECT( eosio::address_message, (addresses) )
 
 /**
  *

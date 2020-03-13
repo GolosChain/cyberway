@@ -234,7 +234,7 @@ namespace bacc = boost::accumulators;
       
       using cyberway::chain::providebw;
 
-      storage_providers.reserve(trx.actions.size());
+      storage_providers.reserve(storage_providers.size() + trx.actions.size());
       for( const auto& act : trx.actions ) {
          if (act.account == providebw::get_account() && act.name == providebw::get_name()) {
             add_storage_provider(act.data_as<providebw>());
@@ -391,7 +391,7 @@ namespace bacc = boost::accumulators;
        EOS_ASSERT( is_initialized, transaction_exception, "must first initialize" );
 
        if( is_input ) {
-          auto& am = control.get_mutable_authorization_manager();
+          auto& am = control.get_mutable_authorization_manager(); // TODO: check is it updated for nested (should update in msig check_auth)
           for( const auto& act : trx.actions ) {
              for( const auto& auth : act.authorization ) {
                 am.update_permission_usage( am.get_permission(auth) );
