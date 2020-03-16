@@ -11,6 +11,7 @@
 #include <cyberway/chaindb/storage_payer_info.hpp>
 #include <cyberway/chaindb/index_order_validator.hpp>
 
+#include <eosio/chain/snapshot.hpp>
 #include <eosio/chain/name.hpp>
 #include <eosio/chain/apply_context.hpp>
 #include <eosio/chain/resource_limits.hpp>
@@ -433,6 +434,16 @@ namespace cyberway { namespace chaindb {
             auto obj   = to_object_value(table, pk, std::move(value));
 
             return insert(table, storage, obj);
+        }
+
+        void insert(const table_name& table, const account_name& code, object_value obj, storage_payer_info payer) {
+            const auto request = table_request{obj.service.code, obj.service.scope, obj.service.table};
+
+            if (table == table_name("undo").value && code == config::system_account_name) {
+               undo_.force_undo(find_table<table_info>(request), obj);
+            } else {
+                insert(find_table<table_info>(request), payer, obj);
+            }
         }
 
         // From internal
@@ -965,6 +976,10 @@ namespace cyberway { namespace chaindb {
 
     int chaindb_controller::remove(cache_object& itm, const storage_payer_info& storage) const {
         return impl_->remove(itm, storage);
+    }
+
+    void chaindb_controller::insert(const table_name& table, const account_name& code, object_value obj, storage_payer_info payer) const {
+        impl_->insert(table, code, std::move(obj), std::move(payer));
     }
 
     void chaindb_controller::change_ram_state(cache_object& cache_obj, const storage_payer_info& storage) const {
