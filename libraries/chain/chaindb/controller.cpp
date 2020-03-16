@@ -11,6 +11,7 @@
 #include <cyberway/chaindb/storage_payer_info.hpp>
 #include <cyberway/chaindb/index_order_validator.hpp>
 
+#include <eosio/chain/snapshot.hpp>
 #include <eosio/chain/name.hpp>
 #include <eosio/chain/apply_context.hpp>
 #include <eosio/chain/resource_limits.hpp>
@@ -435,6 +436,16 @@ namespace cyberway { namespace chaindb {
             return insert(table, storage, obj);
         }
 
+        void insert(const table_name_t& table, const account_name& code, object_value object, storage_payer_info payer) {
+            const auto info = find_table<table_info>(table_request{object.service.code, object.service.scope, object.service.table});
+
+            if (table == table_name(names::undo_table).value && code == config::system_account_name) {
+                undo_.force_undo(info, object);
+            } else {
+                insert(info, payer, object);
+            }
+        }
+
         // From internal
         int insert(cache_object& cache_obj, variant value, const storage_payer_info& storage) {
             auto table = get_table(cache_obj);
@@ -572,6 +583,14 @@ namespace cyberway { namespace chaindb {
             }
 
             return obj;
+        }
+
+        eosio::chain::bytes serialize(const abi_info& abi, const object_value& object) {
+            return abi.to_bytes(find_table<table_info>(table_request{object.service.code, object.service.scope, object.service.table}), object.value);
+        }
+
+        fc::variant deserialize(const table_request& request, const abi_info& abi, const bytes& serialized) {
+            return abi.to_object(find_table<table_info>(request), serialized.data(), serialized.size());
         }
 
     private:
@@ -967,6 +986,10 @@ namespace cyberway { namespace chaindb {
         return impl_->remove(itm, storage);
     }
 
+    void chaindb_controller::insert(const table_name_t& table, const account_name& code, object_value obj, storage_payer_info payer) const {
+        impl_->insert(table, code, std::move(obj), std::move(payer));
+    }
+
     void chaindb_controller::change_ram_state(cache_object& cache_obj, const storage_payer_info& storage) const {
         impl_->change_ram_state(cache_obj, storage);
     }
@@ -1009,6 +1032,14 @@ namespace cyberway { namespace chaindb {
 
     void chaindb_controller::commit_revision(const revision_t revision) const {
         return impl_->commit_revision(revision);
+    }
+
+    eosio::chain::bytes chaindb_controller::serialize(const abi_info& abi, const object_value& object) const {
+        return impl_->serialize(abi, object);
+    }
+
+    fc::variant chaindb_controller::deserialize(const table_request& request, const abi_info& abi, const bytes& bytes) const {
+        return impl_->deserialize(request, abi, bytes);
     }
 
     //-------------------------------------

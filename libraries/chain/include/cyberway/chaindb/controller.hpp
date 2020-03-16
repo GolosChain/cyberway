@@ -15,6 +15,7 @@ namespace cyberway { namespace chaindb {
 
     template<class> struct object_to_table;
     struct chaindb_controller_impl;
+    struct abi_info;
 
     enum class cursor_kind {
         ManyRecords,
@@ -183,12 +184,17 @@ namespace cyberway { namespace chaindb {
         int update(cache_object&, variant, const storage_payer_info&) const;
         int remove(cache_object&, const storage_payer_info&) const;
 
+        void insert(const table_name_t&, const account_name&, object_value, storage_payer_info) const;
+
         void change_ram_state(cache_object&, const storage_payer_info&) const;
 
         table_info   table_by_request(const table_request&) const;
         index_info   index_at_cursor(const cursor_request&) const;
         object_value object_at_cursor(const cursor_request&) const;
         object_value object_by_pk(const table_request& request, primary_key_t) const;
+
+        eosio::chain::bytes serialize(const abi_info&, const object_value&) const;
+        fc::variant deserialize(const table_request&, const abi_info&, const bytes&) const;
 
     private:
         friend class chaindb_session;
