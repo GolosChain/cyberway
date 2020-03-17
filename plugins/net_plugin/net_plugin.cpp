@@ -114,6 +114,8 @@ namespace eosio {
       std::map<chain::public_key_type,
                chain::private_key_type> private_keys; ///< overlapping with producer keys, also authenticating non-producing nodes
 
+      std::set<string>                   private_peers;
+
       enum possible_connections : char {
          None = 0,
             Producers = 1 << 0,
@@ -2474,7 +2476,7 @@ namespace eosio {
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_request_message& msg) {
       address_message amsg;
       for( auto& con : connections ) {
-         if (con->connected())
+         if (con->connected() && private_peers.find(con->peer_addr) == private_peers.end())
             amsg.addresses.push_back(con->peer_addr);
       }
       c->enqueue(amsg);
@@ -2906,6 +2908,7 @@ namespace eosio {
          ( "peer-key", bpo::value<vector<string>>()->composing()->multitoken(), "Optional public key of peer allowed to connect.  May be used multiple times.")
          ( "peer-private-key", boost::program_options::value<vector<string>>()->composing()->multitoken(),
            "Tuple of [PublicKey, WIF private key] (may specify multiple times)")
+         ( "private-peer", bpo::value<vector<string>>()->composing(), "The public endpoints of peers to do not advertise in address exchange. You can use multiple options.")
          ( "max-clients", bpo::value<int>()->default_value(def_max_clients), "Maximum number of clients from which connections are accepted, use 0 for no limit")
          ( "connection-cleanup-period", bpo::value<int>()->default_value(def_conn_retry_wait), "number of seconds to wait before cleaning up dead connections")
          ( "max-cleanup-time-msec", bpo::value<int>()->default_value(10), "max connection cleanup time per cleanup call in millisec")
@@ -3004,6 +3007,13 @@ namespace eosio {
                auto key_id_to_wif_pair = dejsonify<std::pair<chain::public_key_type, std::string>>(
                      key_id_to_wif_pair_string );
                my->private_keys[key_id_to_wif_pair.first] = fc::crypto::private_key( key_id_to_wif_pair.second );
+            }
+         }
+
+         if( options.count( "private-peer" )) {
+            const auto& private_peers = options.at("private-peer").as<std::vector<std::string>>();
+            for (const std::string& private_peer : private_peers) {
+               my->private_peers.insert(private_peer);
             }
          }
 
