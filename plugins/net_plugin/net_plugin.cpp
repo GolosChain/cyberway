@@ -788,7 +788,7 @@ namespace eosio {
    }
 
    bool connection::connected() {
-      return (socket && socket->is_open() && state != connection_state::connected);
+      return (socket && socket->is_open() && state != connection_state::connecting);
    }
 
    bool connection::current() {
@@ -1877,7 +1877,6 @@ namespace eosio {
                   connect( c, endpoint_itr );
                } else {
                   fc_elog( logger, "connection failed to ${peer}: ${error}", ("peer", c->peer_name())( "error", err.message()));
-                  c->state = connection_state::none;
                   my_impl->close( c );
                }
             }
@@ -1891,7 +1890,6 @@ namespace eosio {
       con->socket->set_option( nodelay, ec );
       if (ec) {
          fc_elog( logger, "connection failed to ${peer}: ${error}", ( "peer", con->peer_name())("error",ec.message()) );
-         con->state = connection_state::none;
          close(con);
          return false;
       }
