@@ -480,6 +480,9 @@ struct controller_impl {
    }
 
     void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
+        snapshot->write_section<block_state>([this]( auto &section ){
+           section.add_row(*fork_db.head());
+        });
         std::vector<cyberway::chaindb::abi_info> abis = dump_accounts(snapshot);
 
         for (const auto& abi : abis) {
