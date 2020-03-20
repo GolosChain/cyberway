@@ -106,6 +106,8 @@ namespace eosio {
       string                           p2p_address;
       string                           p2p_server_address;
       uint32_t                         max_client_count = 0;
+      uint32_t                         max_gray_client_count = 0;
+      uint32_t                         max_gray_lifetime_msec = 0;
       uint32_t                         max_nodes_per_host = 1;
       uint32_t                         num_clients = 0;
 
@@ -313,6 +315,8 @@ namespace eosio {
    constexpr auto     def_max_reads_in_flight = 1000;
    constexpr auto     def_max_trx_in_progress_size = 100*1024*1024; // 100 MB
    constexpr auto     def_max_clients = 25; // 0 for unlimited clients
+   constexpr auto     def_max_gray_clients = 5; // can be 0 - do not allow gray clients
+   constexpr auto     def_max_gray_lifetime_msec = 1000;
    constexpr auto     def_max_nodes_per_host = 1;
    constexpr auto     def_conn_retry_wait = 30;
    constexpr auto     def_txn_expire_wait = std::chrono::seconds(3);
@@ -1934,7 +1938,7 @@ namespace eosio {
                      fc_ilog( logger,"checking max client, visitors = ${v} num clients ${n}",("v",visitors)("n",num_clients) );
                      num_clients = visitors;
                   }
-                  if( from_addr < max_nodes_per_host && (max_client_count == 0 || num_clients < max_client_count )) {
+                  if( from_addr < max_nodes_per_host && (max_client_count == 0 || num_clients < max_client_count + max_gray_client_count)) {
                      ++num_clients;
                      connection_ptr c = std::make_shared<connection>( socket );
                      connections.insert( c );
@@ -1947,8 +1951,8 @@ namespace eosio {
                                 ("n", from_addr+1)("ra",paddr.to_string()));
                      }
                      else {
-                        fc_elog(logger, "Error max_client_count ${m} exceeded",
-                                ( "m", max_client_count) );
+                        fc_elog(logger, "Error: max_client_count and max_gray_client_count ${m} exceeded",
+                                ( "m", max_client_count + max_gray_client_count) );
                      }
                      socket->close();
                   }
@@ -2910,6 +2914,8 @@ namespace eosio {
            "Tuple of [PublicKey, WIF private key] (may specify multiple times)")
          ( "private-peer", bpo::value<vector<string>>()->composing(), "The public endpoints of peers to do not advertise in address exchange. You can use multiple options.")
          ( "max-clients", bpo::value<int>()->default_value(def_max_clients), "Maximum number of clients from which connections are accepted, use 0 for no limit")
+         ( "max-gray-clients", bpo::value<int>()->default_value(def_max_gray_clients), "Maximum number of clients from which connections are accepted (plus to max-clients), but only for return addresses to connect to another nodes.")
+         ( "max-gray-timeout", bpo::value<int>()->default_value(def_max_gray_lifetime_msec), "Maximum lifetime of \"gray\" client before auto-close connection.")
          ( "connection-cleanup-period", bpo::value<int>()->default_value(def_conn_retry_wait), "number of seconds to wait before cleaning up dead connections")
          ( "max-cleanup-time-msec", bpo::value<int>()->default_value(10), "max connection cleanup time per cleanup call in millisec")
          ( "network-version-match", bpo::value<bool>()->default_value(false),
@@ -2951,6 +2957,8 @@ namespace eosio {
          my->txn_exp_period = def_txn_expire_wait;
          my->resp_expected_period = def_resp_expected_wait;
          my->max_client_count = options.at( "max-clients" ).as<int>();
+         my->max_gray_client_count = options.at( "max-gray-clients" ).as<int>();
+         my->max_gray_lifetime_msec = options.at( "max-gray-timeout" ).as<int>();
          my->max_nodes_per_host = options.at( "p2p-max-nodes-per-host" ).as<int>();
          my->num_clients = 0;
          my->started_sessions = 0;
