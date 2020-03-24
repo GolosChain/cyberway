@@ -327,6 +327,8 @@ namespace eosio {
 
 
    class connection : public std::enable_shared_from_this<connection> {
+   private:
+      connection_state _state = connection_state::none;
    public:
       explicit connection( string endpoint );
 
@@ -390,6 +392,8 @@ namespace eosio {
       char                           ts[ts_buffer_size];          //!< working buffer for making human readable timestamps
       /** @} */
 
+      connection_state get_state() const;
+      void set_state(connection_state state);
       bool connected();
       bool current();
       void reset();
@@ -475,6 +479,17 @@ namespace eosio {
          return *_logger_variant;
       }
    };
+
+   struct by_state;
+   struct by_addr;
+
+   using connection_index = multi_index_container<
+      connection,
+      indexed_by<
+         ordered_unique<tag<by_state>, const_mem_fun<connection, connection_state, &connection::get_state>>,
+         ordered_unique<tag<by_addr>, member<connection, string, &connection::peer_addr>>
+      >
+   >;
 
    class sync_manager {
    private:
@@ -733,7 +748,8 @@ namespace eosio {
    //---------------------------------------------------------------------------
 
    connection::connection( string endpoint )
-      : blk_state(),
+      : _state(connection_state::none),
+        blk_state(),
         trx_state(),
         peer_requested(),
         server_ioc( my_impl->server_ioc ),
@@ -758,7 +774,8 @@ namespace eosio {
    }
 
    connection::connection( socket_ptr s )
-      : blk_state(),
+      : _state(connection_state::connecting),
+        blk_state(),
         trx_state(),
         peer_requested(),
         server_ioc( my_impl->server_ioc ),
@@ -789,6 +806,15 @@ namespace eosio {
       rnd[0] = 0;
       response_expected.reset(new boost::asio::steady_timer( *my_impl->server_ioc ));
       read_delay_timer.reset(new boost::asio::steady_timer( *my_impl->server_ioc ));
+   }
+
+   connection_state connection::get_state() const {
+      if (!socket || !socket->is_open()) return connection_state::none;
+      return _state;
+   }
+
+   void connection::set_state(connection_state state) {
+   	  _state = state;
    }
 
    bool connection::connected() {
