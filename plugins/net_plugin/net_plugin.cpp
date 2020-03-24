@@ -354,6 +354,7 @@ namespace eosio {
       handshake_message       last_handshake_sent;
       int16_t                 sent_handshake_count = 0;
       connection_state        state = connection_state::none;
+      bool                    is_gray = false;
       uint16_t                protocol_version  = 0;
       string                  peer_addr;
       unique_ptr<boost::asio::steady_timer> response_expected;
@@ -1408,7 +1409,6 @@ namespace eosio {
       uint32_t lib_num = cc.last_irreversible_block_num();
       uint32_t peer_lib = msg.last_irreversible_block_num;
       reset_lib_num(c);
-      c->state = connection_state::connected;
 
       //--------------------------------
       // sync need checks; (lib == last irreversible block)
@@ -1936,11 +1936,13 @@ namespace eosio {
                      num_clients = visitors;
                   }
                   if( from_addr < max_nodes_per_host && (max_client_count == 0 || num_clients < max_client_count + max_gray_client_count)) {
-                     ++num_clients;
                      connection_ptr c = std::make_shared<connection>( socket );
+                     if (max_client_count != 0 && num_clients >= max_client_count) {
+                         c->is_gray = true;
+                     }
+                     ++num_clients;
                      connections.insert( c );
                      start_session( c );
-
                   }
                   else {
                      if (from_addr >= max_nodes_per_host) {
@@ -2227,6 +2229,11 @@ namespace eosio {
          c->state = connection_state::connected;
       }
       if (msg.generation == 1) {
+         if (c->is_gray && c->protocol_version < proto_address_advertising) {
+            my_impl->close(c);
+            return;
+         }
+
          if( msg.node_id == node_id) {
             fc_elog( logger, "Self connection detected. Closing connection" );
             c->enqueue( go_away_message( self ) );
@@ -2321,7 +2328,10 @@ namespace eosio {
 
       c->last_handshake_recv = msg;
       c->_logger_variant.reset();
-      sync_master->recv_handshake(c,msg);
+      c->state = connection_state::connected;
+      if (!c->is_gray) {
+          sync_master->recv_handshake(c,msg);
+      }
    }
 
    void net_plugin_impl::handle_message(const connection_ptr& c, const go_away_message& msg) {
