@@ -43,6 +43,8 @@ namespace cyberway { namespace chaindb {
          */
         void commit(revision_t rev) const;
 
+        void force_undo(const table_info&, object_value obj) const;
+
         /**
          * Event on create objects
          */
