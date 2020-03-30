@@ -33,6 +33,8 @@ namespace fc {
 }
 
 namespace eosio {
+   FC_DECLARE_EXCEPTION(gray_peer_exception, 10000000, "peer is gray");
+
    static appbase::abstract_plugin& _net_plugin = app().register_plugin<net_plugin>();
 
    using std::vector;
@@ -243,7 +245,7 @@ namespace eosio {
    };
 
    struct handshake_initializer {
-      static void populate(handshake_message &hello);
+      static void populate(handshake_message &hello, bool gray);
    };
 
    class queued_buffer : boost::noncopyable {
@@ -703,6 +705,20 @@ namespace eosio {
       connection_ptr c;
       msg_handler( net_plugin_impl &imp, const connection_ptr& conn) : impl(imp), c(conn) {}
 
+      void check_for_gray() const {
+         EOS_ASSERT(!c->is_gray, gray_peer_exception, "gray connection cannot receive such message");
+      }
+
+      template<typename T>
+      void handle_message(T& msg) const {
+         impl.handle_message( c, std::forward<T>(msg) );
+      }
+
+      void operator()(handshake_message& msg) const { handle_message(msg); }
+      void operator()(go_away_message& msg) const { handle_message(msg); }
+      void operator()(time_message& msg) const { handle_message(msg); }
+      void operator()(address_request_message& msg) const { handle_message(msg); }
+
       void operator()( const signed_block& msg ) const {
          EOS_ASSERT( false, plugin_config_exception, "operator()(signed_block&&) should be called" );
       }
@@ -717,16 +733,19 @@ namespace eosio {
       }
 
       void operator()( signed_block&& msg ) const {
+         check_for_gray();
          impl.handle_message( c, std::make_shared<signed_block>( std::move( msg ) ) );
       }
       void operator()( packed_transaction&& msg ) const {
+         check_for_gray();
          impl.handle_message( c, std::make_shared<packed_transaction>( std::move( msg ) ) );
       }
 
       template <typename T>
       void operator()( T&& msg ) const
       {
-         impl.handle_message( c, std::forward<T>(msg) );
+         check_for_gray();
+         handle_message(msg);
       }
    };
 
@@ -909,7 +928,7 @@ namespace eosio {
    }
 
    void connection::send_handshake() {
-      handshake_initializer::populate(last_handshake_sent);
+      handshake_initializer::populate(last_handshake_sent, is_gray);
       last_handshake_sent.generation = ++sent_handshake_count;
       fc_dlog(logger, "Sending handshake generation ${g} to ${ep}",
               ("g",last_handshake_sent.generation)("ep", peer_name()));
@@ -1405,6 +1424,9 @@ namespace eosio {
    }
 
    void sync_manager::recv_handshake(const connection_ptr& c, const handshake_message& msg) {
+      if (c->is_gray) {
+         return;
+      }
       controller& cc = chain_plug->chain();
       uint32_t lib_num = cc.last_irreversible_block_num();
       uint32_t peer_lib = msg.last_irreversible_block_num;
@@ -2158,6 +2180,10 @@ namespace eosio {
          } else {
             msg.visit( m );
          }
+      } catch(const gray_peer_exception& e) {
+         conn->enqueue(go_away_message(gray_peer));
+         close(conn);
+         return false;
       } catch( const fc::exception& e ) {
          edump( (e.to_detail_string()) );
          close( conn );
@@ -2329,9 +2355,7 @@ namespace eosio {
       c->last_handshake_recv = msg;
       c->_logger_variant.reset();
       c->state = connection_state::connected;
-      if (!c->is_gray) {
-          sync_master->recv_handshake(c,msg);
-      }
+      sync_master->recv_handshake(c,msg);
    }
 
    void net_plugin_impl::handle_message(const connection_ptr& c, const go_away_message& msg) {
@@ -2851,7 +2875,7 @@ namespace eosio {
    }
 
    void
-   handshake_initializer::populate( handshake_message &hello) {
+   handshake_initializer::populate(handshake_message &hello, bool is_gray) {
       hello.network_version = net_version_base + net_version;
       hello.chain_id = my_impl->chain_id;
       hello.node_id = my_impl->node_id;
@@ -2873,7 +2897,7 @@ namespace eosio {
       hello.os = "other";
 #endif
       hello.agent = my_impl->user_agent_name;
-
+      if (is_gray) hello.agent += "|gray_mode";
 
       controller& cc = my_impl->chain_plug->chain();
       hello.head_id = fc::sha256();
