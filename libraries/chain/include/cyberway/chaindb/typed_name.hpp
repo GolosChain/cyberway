@@ -89,6 +89,8 @@ namespace cyberway { namespace chaindb {
 
         static primary_key from_table(const table_info&, value_type);
 
+        static primary_key from_variant(const table_info&, const variant&);
+
         variant to_variant(const table_info&) const;
         static variant to_variant(const table_info& info, value_type value);
 
