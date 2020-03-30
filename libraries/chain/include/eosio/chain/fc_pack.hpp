@@ -3,6 +3,15 @@
 #include <chainbase/chainbase.hpp>
 #include <cyberway/chaindb/index_object.hpp>
 
+// Forward declaration
+namespace eosio { namespace chain {
+   struct asset_info;
+   struct asset;
+   struct symbol_code;
+   struct symbol_info;
+   class  symbol;
+} } // namespace eosio::chain
+
 namespace fc {
     class variant;
 
@@ -16,6 +25,16 @@ namespace fc {
 
     inline void to_variant(const std::vector<bool>& t, variant& vo);
 
+    inline void from_variant(const variant&, eosio::chain::asset_info&);
+    inline void to_variant(const eosio::chain::asset&, variant&);
+    inline void from_variant(const fc::variant&, eosio::chain::asset&);
+
+    inline void from_variant(const variant&, eosio::chain::symbol_info&);
+    inline void to_variant(const eosio::chain::symbol&, fc::variant&);
+    inline void from_variant(const fc::variant&, eosio::chain::symbol&);
+    inline void to_variant(const eosio::chain::symbol_code&, fc::variant&);
+    inline void from_variant(const fc::variant&, eosio::chain::symbol_code&);
+
     namespace raw {
         template<typename Stream, typename T> inline void pack(Stream& s, const chainbase::oid<T>& o);
         template<typename Stream, typename T> inline void unpack(Stream& s, chainbase::oid<T>& o);
@@ -24,6 +43,12 @@ namespace fc {
         template<typename Stream, typename T> inline void unpack(Stream& s, cyberway::chaindb::oid<T>& o);
 
         template<typename Stream> inline void unpack(Stream& s, std::vector<bool>& value);
+
+        template<typename Stream> void pack(Stream&, const eosio::chain::symbol_info&);
+        template<typename Stream> void unpack(Stream&, eosio::chain::symbol_info&);
+
+        template<typename Stream> void pack(Stream&, const eosio::chain::asset_info&);
+        template<typename Stream> void unpack(Stream&, eosio::chain::asset_info&);
     } // namespace raw
 } // namespace fc
 
