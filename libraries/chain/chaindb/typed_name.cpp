@@ -246,6 +246,46 @@ namespace cyberway { namespace chaindb {
         return create(kind_from_string(info.pk_order->type), value);
     }
 
+    primary_key primary_key::from_variant(const table_info& info, const variant& row) {
+        assert(info.pk_order);
+        assert(!info.pk_order->type.empty());
+
+        auto& path  = info.pk_order->path;
+        auto  pos   = path.size();
+        auto* value = &row;
+        for (auto& key: path) {
+            CYBERWAY_ASSERT(value->is_object(), primary_key_exception,
+                "The part ${key} in the primary key is not an object in the row ${row} from the table ${table}",
+                ("key", key)("row", row)("table", get_full_table_name(info)));
+
+            auto& object = value->get_object();
+            auto  itr = object.find(key);
+            CYBERWAY_ASSERT(object.end() != itr, primary_key_exception,
+                "Can't find the part ${key} for the primary key in the row ${row} from the table ${table}",
+                ("key", key)("row", row)("table", get_full_table_name(info)));
+
+            value = &(*itr).value();
+        }
+
+        switch (value->get_type()) {
+            case variant::type_id::int64_type:
+                return from_value(info, value->as_int64());
+
+            case variant::type_id::uint64_type:
+                return from_value(info, value->as_uint64());
+
+            case variant::type_id::string_type:
+                return from_value(info, value->as_string());
+
+            default:
+                break;
+        }
+
+        CYBERWAY_THROW(primary_key_exception,
+            "Invalid type of primary key value in the row ${row} from the table ${table}",
+            ("row", row)("table", get_full_table_name(info)));
+    }
+
     variant primary_key::to_variant(const table_info& info) const {
         assert(info.pk_order);
         assert(!info.pk_order->path.empty());

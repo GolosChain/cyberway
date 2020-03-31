@@ -687,8 +687,17 @@ namespace cyberway { namespace chaindb {
                 ("field", names::service_field)("table", get_full_table_name(table)));
         }
 
+        void validate_pk_value(const table_info& table, const object_value& obj) const {
+            CYBERWAY_ASSERT(primary_key::from_variant(table, obj.value).value() == obj.pk(), primary_key_exception,
+                "Object '${obj}' from the table ${table} has wrong value '${pk}' in the primary key",
+                ("obj", obj.value)
+                ("pk", primary_key::from_value(table, obj.pk()).to_string())
+                ("table", get_full_table_name(table)));
+        }
+
         int insert(const table_info& table, storage_payer_info charge, object_value& obj) {
             validate_object(table, obj, obj.pk());
+            validate_pk_value(table, obj);
 
             charge.size   = calc_storage_usage(table, obj.value);
             charge.in_ram = true;
@@ -710,6 +719,7 @@ namespace cyberway { namespace chaindb {
 
         int update(const table_info& table, storage_payer_info charge, object_value& obj, object_value orig_obj) {
             validate_object(table, obj, obj.pk());
+            validate_pk_value(table, obj);
 
             charge.size   = calc_storage_usage(table, obj.value);
             charge.delta += charge.size - orig_obj.service.size;
