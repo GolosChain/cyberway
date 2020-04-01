@@ -145,6 +145,7 @@ namespace eosio {
    constexpr boost::asio::chrono::milliseconds def_read_delay_for_full_write_queue{100};
    constexpr auto     def_max_reads_in_flight = 1000;
    constexpr auto     def_max_trx_in_progress_size = 100*1024*1024; // 100 MB
+   constexpr auto     def_max_addresses_tried = 50;
    constexpr auto     def_max_clients = 25; // 0 for unlimited clients
    constexpr auto     def_max_gray_clients = 5; // can be 0 - do not allow gray clients
    constexpr auto     def_max_gray_lifetime_msec = 1000;
@@ -550,6 +551,8 @@ namespace eosio {
                chain::private_key_type> private_keys; ///< overlapping with producer keys, also authenticating non-producing nodes
 
       std::set<string>                   private_peers;
+
+      uint32_t                         max_addresses_tried;
 
       enum possible_connections : char {
          None = 0,
@@ -2518,11 +2521,16 @@ namespace eosio {
    }
 
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_message& msg) {
+      int i = 0;
       for( auto& host : msg.addresses) {
          if (!find_connection(host)) {
+            if (i == max_addresses_tried) {
+              return;
+            }
             connection_ptr con = std::make_shared<connection>(host);
             connections.insert( con );
             connect( con );
+            i++;
          }
       }
    }
@@ -2944,6 +2952,7 @@ namespace eosio {
          ( "peer-private-key", boost::program_options::value<vector<string>>()->composing()->multitoken(),
            "Tuple of [PublicKey, WIF private key] (may specify multiple times)")
          ( "private-peer", bpo::value<vector<string>>()->composing(), "The public endpoints of peers to do not advertise in address exchange. You can use multiple options.")
+         ( "max-addresses-tried", bpo::value<int>()->default_value(def_max_addresses_tried), "Maximum number of addresses tried to connect per each address_message received.")
          ( "max-clients", bpo::value<int>()->default_value(def_max_clients), "Maximum number of clients from which connections are accepted, use 0 for no limit")
          ( "max-gray-clients", bpo::value<int>()->default_value(def_max_gray_clients), "Maximum number of clients from which connections are accepted (plus to max-clients), but only for return addresses to connect to another nodes.")
          ( "max-gray-timeout", bpo::value<int>()->default_value(def_max_gray_lifetime_msec), "Maximum lifetime of \"gray\" client before auto-close connection.")
@@ -3055,6 +3064,8 @@ namespace eosio {
                my->private_peers.insert(private_peer);
             }
          }
+
+         my->max_addresses_tried = options.at("max-addresses-tried").as<int>();
 
          my->chain_plug = app().find_plugin<chain_plugin>();
          EOS_ASSERT( my->chain_plug, chain::missing_chain_plugin_exception, ""  );
