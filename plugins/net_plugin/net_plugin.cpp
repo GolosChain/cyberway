@@ -361,6 +361,7 @@ namespace eosio {
       string                  peer_addr;
       unique_ptr<boost::asio::steady_timer> response_expected;
       unique_ptr<boost::asio::steady_timer> read_delay_timer;
+      unique_ptr<boost::asio::steady_timer> gray_close_timer;
       go_away_reason         no_retry = no_reason;
       block_id_type          fork_head;
       uint32_t               fork_head_num = 0;
@@ -606,6 +607,7 @@ namespace eosio {
       void connect(const connection_ptr& c, tcp::resolver::iterator endpoint_itr);
       bool start_session(const connection_ptr& c);
       void start_listen_loop();
+      void mark_gray(const connection_ptr& conn);
       void start_read_message(const connection_ptr& c);
 
       /** \brief Process the next message from the pending message buffer
@@ -767,6 +769,7 @@ namespace eosio {
         peer_addr(endpoint),
         response_expected(),
         read_delay_timer(),
+        gray_close_timer(),
         no_retry(no_reason),
         fork_head(),
         fork_head_num(0),
@@ -792,6 +795,7 @@ namespace eosio {
         peer_addr(),
         response_expected(),
         read_delay_timer(),
+        gray_close_timer(),
         no_retry(no_reason),
         fork_head(),
         fork_head_num(0),
@@ -808,6 +812,7 @@ namespace eosio {
       rnd[0] = 0;
       response_expected.reset(new boost::asio::steady_timer( *my_impl->server_ioc ));
       read_delay_timer.reset(new boost::asio::steady_timer( *my_impl->server_ioc ));
+      gray_close_timer.reset(new boost::asio::steady_timer( *my_impl->server_ioc ));
    }
 
    bool connection::connected() {
@@ -848,6 +853,7 @@ namespace eosio {
       fc_dlog(logger, "canceling wait on ${p}", ("p",peer_name()));
       cancel_wait();
       if( read_delay_timer ) read_delay_timer->cancel();
+      if( gray_close_timer ) gray_close_timer->cancel();
    }
 
    void connection::blk_send_branch() {
@@ -1960,7 +1966,7 @@ namespace eosio {
                   if( from_addr < max_nodes_per_host && (max_client_count == 0 || num_clients < max_client_count + max_gray_client_count)) {
                      connection_ptr c = std::make_shared<connection>( socket );
                      if (max_client_count != 0 && num_clients >= max_client_count) {
-                         c->is_gray = true;
+                        mark_gray(c);
                      }
                      ++num_clients;
                      connections.insert( c );
@@ -1994,6 +2000,19 @@ namespace eosio {
                }
             }
             start_listen_loop();
+         });
+      });
+   }
+
+   void net_plugin_impl::mark_gray(const connection_ptr& c) {
+      c->is_gray = true;
+      connection_wptr weak_conn = c;
+      c->gray_close_timer->expires_from_now(boost::asio::chrono::milliseconds{max_gray_lifetime_msec});
+      c->gray_close_timer->async_wait([weak_conn](boost::system::error_code ec) {
+         app().post(priority::low, [weak_conn]() {
+            auto conn = weak_conn.lock();
+            if (!conn) return;
+            conn->close();
          });
       });
    }
