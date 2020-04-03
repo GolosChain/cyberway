@@ -180,6 +180,7 @@ namespace eosio {
    constexpr uint16_t proto_base = 0;
    constexpr uint16_t proto_explicit_sync = 1;
    constexpr uint16_t proto_address_advertising = 2;
+   constexpr uint16_t proto_considered_gray = 3;
 
    constexpr uint16_t net_version = proto_address_advertising;
 
@@ -860,6 +861,9 @@ namespace eosio {
    }
 
    void connection::blk_send_branch() {
+	  if (protocol_version == proto_considered_gray) {
+          return;
+	  }
       controller& cc = my_impl->chain_plug->chain();
       uint32_t head_num = cc.fork_db_head_block_num();
       notice_message note;
@@ -910,6 +914,9 @@ namespace eosio {
    }
 
    void connection::blk_send(const block_id_type& blkid) {
+	  if (protocol_version == proto_considered_gray) {
+          return;
+	  }
       controller &cc = my_impl->chain_plug->chain();
       try {
          signed_block_ptr b = cc.fetch_block_by_id(blkid);
@@ -2924,7 +2931,7 @@ namespace eosio {
       hello.os = "other";
 #endif
       hello.agent = my_impl->user_agent_name;
-      if (is_gray) hello.agent += "|gray_mode";
+      if (is_gray) hello.network_version = net_version_base + proto_considered_gray;
 
       controller& cc = my_impl->chain_plug->chain();
       hello.head_id = fc::sha256();
