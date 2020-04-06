@@ -176,8 +176,7 @@ public:
    //txn_msg_rate_limits              rate_limits;
    fc::optional<vm_type>            wasm_runtime;
    fc::microseconds                 abi_serializer_max_time_ms;
-   //fc::optional<bfs::path>          snapshot_path;   // TODO: removed by CyberWay
-
+   fc::optional<bfs::path>          snapshot_path;
 
    // retained references to channels for easy publication
    channels::pre_accepted_block::channel_type&     pre_accepted_block_channel;
@@ -705,8 +704,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       }
 
       if (options.count( "snapshot" )) {
-         EOS_ASSERT( false, plugin_config_exception, "Snapshot options disabled");
-//         my->snapshot_path = options.at( "snapshot" ).as<bfs::path>();
+         my->snapshot_path = options.at( "snapshot" ).as<bfs::path>();
       } else {
          bfs::path genesis_file;
          bool genesis_timestamp_specified = false;
@@ -879,16 +877,15 @@ void chain_plugin::plugin_startup()
    }
    try {
       auto shutdown = [](){ return app().is_quiting(); };
-// TODO: removed by CyberWay
-//      if (my->snapshot_path) {
-//         auto infile = std::ifstream(my->snapshot_path->generic_string(), (std::ios::in | std::ios::binary));
-//         auto reader = std::make_shared<istream_snapshot_reader>(infile);
-//         my->chain->startup(shutdown, reader);
-//         infile.close();
-//      } else {
-//         my->chain->startup(shutdown);
-//      }
-      my->chain->startup(shutdown);
+      if (my->snapshot_path) {
+         auto infile = std::ifstream(my->snapshot_path->generic_string(), (std::ios::in | std::ios::binary));
+         auto reader = std::make_shared<istream_snapshot_reader>(infile);
+         my->chain->startup(shutdown, reader);
+         infile.close();
+      } else {
+         my->chain->startup(shutdown);
+      }
+
 
       if (my->revert_to_lib) {
          auto lib = std::max(my->chain->last_irreversible_block_num(), uint32_t(1));

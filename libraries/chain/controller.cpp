@@ -389,9 +389,10 @@ struct controller_impl {
       bool report_integrity_hash = !!snapshot;
       bool initialized = false;
 
-      EOS_ASSERT( !snapshot, fork_database_exception, "Snapshot not supported");
       if (snapshot) {
-         EOS_ASSERT( !head, fork_database_exception, "" );
+
+         chaindb.drop_db();
+
          snapshot->validate();
 
          read_from_snapshot( snapshot );
