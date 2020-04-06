@@ -267,20 +267,6 @@ namespace eosio { namespace chain {
                   return _reader.read_row(reader);
                }
 
-               template<typename T>
-               auto read_row( T& out, chainbase::database& ) -> std::enable_if_t<std::is_same<std::decay_t<T>, typename detail::snapshot_row_traits<T>::snapshot_type>::value,bool> {
-                  return read_row(out);
-               }
-
-               template<typename T>
-               auto read_row( T& out, chainbase::database& db ) -> std::enable_if_t<!std::is_same<std::decay_t<T>, typename detail::snapshot_row_traits<T>::snapshot_type>::value,bool> {
-                  auto temp = typename detail::snapshot_row_traits<T>::snapshot_type();
-                  auto reader = detail::make_row_reader(temp);
-                  bool result = _reader.read_row(reader);
-                  detail::snapshot_row_traits<T>::from_snapshot_row(std::move(temp), out, db);
-                  return result;
-               }
-
                bool empty() {
                   return _reader.empty();
                }

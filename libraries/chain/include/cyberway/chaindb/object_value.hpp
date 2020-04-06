@@ -79,6 +79,7 @@ namespace cyberway { namespace chaindb {
 
 
     struct reflectable_service_state {
+        reflectable_service_state() = default;
 
         reflectable_service_state(const cyberway::chaindb::service_state& service_state) :
             pk(service_state.pk),

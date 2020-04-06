@@ -256,7 +256,6 @@ namespace eosio { namespace chain {
 
                 open_block_mapped_file();
                 open_index_mapped_file();
-
                 block_mapped_file.resize(sizeof(uint32_t));
                 auto* ptr = block_mapped_file.data();
                 *reinterpret_cast<uint32_t*>(ptr) = max_supported_version;
@@ -498,9 +497,6 @@ namespace eosio { namespace chain {
    }
 
    void block_log::reset(const genesis_state& gs, const signed_block_ptr& first_block, uint32_t first_block_num) {
-       EOS_ASSERT(first_block_num == 1, block_log_exception,
-            "Unsupported first_block_num (can be only 1)");
-
        std::vector<char> data;
        if (first_block) {
            data = fc::raw::pack(*first_block);

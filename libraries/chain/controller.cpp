@@ -479,10 +479,6 @@ struct controller_impl {
       stake::stake_index_set::add_tables(chaindb);
    }
 
-   void read_contract_tables_from_snapshot( const snapshot_reader_ptr& snapshot ) {
-       // TODO: Removed by CyberWay
-   }
-
     void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
         std::vector<cyberway::chaindb::abi_info> abis = dump_accounts(snapshot);
 
@@ -538,13 +534,89 @@ struct controller_impl {
     }
 
    void read_from_snapshot( const snapshot_reader_ptr& snapshot ) {
-      // TODO: Removed by CyberWay
+       snapshot->read_section<block_state>([this]( auto &section ){
+          block_header_state head_header_state;
+          section.read_row(head_header_state);
 
-      authorization.read_from_snapshot(snapshot);
-      resource_limits.read_from_snapshot(snapshot);
+          auto head_state = std::make_shared<block_state>(head_header_state);
+          fork_db.set(head_state);
+          fork_db.set_validity(head_state, true);
+          fork_db.mark_in_current_chain(head_state, true);
+          head = head_state;
+          snapshot_head_block = head->block_num;
+       });
 
-      set_revision( head->block_num );
+       std::vector<cyberway::chaindb::abi_info> abis = restore_accounts(snapshot);
+
+       for (const auto& abi : abis) {
+          restore_contract(snapshot, abi);
+       }
    }
+
+    std::vector<cyberway::chaindb::abi_info> restore_accounts(const snapshot_reader_ptr& snapshot) {
+        account_table accounts(chaindb);
+        std::vector<cyberway::chaindb::abi_info> abis;
+        snapshot->read_section("account_table", [&](auto& section){
+            account_object object(name(), [](auto){});
+            if (section.empty()) {
+                return;
+            }
+
+            bool hasMore = true;
+            do {
+                hasMore = section.read_row(object);
+                accounts.emplace(object.name, storage_payer_info(), [&](auto& value) {
+                    value = object;
+                    if (!value.abi.empty()) {
+                        abis.emplace_back(value.name, value.get_abi());
+                    }
+                });
+            } while(hasMore);
+        });
+        return abis;
+    }
+
+    void restore_contract(const snapshot_reader_ptr& snapshot, const cyberway::chaindb::abi_info& abi) {
+        for (const auto& table : abi.tables()) {
+            restore_table(snapshot, table.second, abi);
+        }
+    }
+
+    void restore_table(const snapshot_reader_ptr& snapshot, const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi) {
+        if (cyberway::chaindb::is_system_code(abi.code()) && table.name == account_table::table_name()) {
+            return;
+        }
+
+        snapshot->read_section(abi.code().to_string() + "_" + table.name.to_string(), [&, this] (auto& section) {
+            if (section.empty()) {
+                return;
+            }
+
+            bool hasMore = true;
+            fc::variant value;
+
+            do {
+                hasMore = section.read_row(value);
+
+                restore_object(table, abi, value);
+
+            } while(hasMore);
+        });
+        chaindb.apply_all_changes();
+    }
+
+    void restore_object(const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi, const fc::variant& value) {
+        mutable_variant_object value_obj = value.get_object();
+        fc::variant service = value_obj["_SERVICE_"];
+        value_obj.erase("_SERVICE_");
+
+        cyberway::chaindb::reflectable_service_state service_obj;
+        fc::from_variant(service, service_obj);
+
+        storage_payer_info payer(resource_limits, service_obj.payer, service_obj.payer, 0);
+
+        chaindb.insert(table.name, abi.code(), {service_obj, value_obj}, std::move(payer));
+    }
 
    sha256 calculate_integrity_hash() const {
       sha256::encoder enc;
