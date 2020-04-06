@@ -133,7 +133,7 @@ namespace eosio { namespace chain {
             }
 
             signed_block_ptr read_head() const {
-                if (get_mapped_size(block_mapped_file) == 0) {
+                if (!has_block_records()) {
                     return {};
                 }
                 auto pos = get_last_uint64(block_mapped_file);
