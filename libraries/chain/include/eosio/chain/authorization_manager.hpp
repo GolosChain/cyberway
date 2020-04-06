@@ -37,8 +37,6 @@ namespace eosio { namespace chain {
 
          void add_indices();
          void initialize_database();
-         void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const;
-         void read_from_snapshot( const snapshot_reader_ptr& snapshot );
 
          const permission_object& create_permission( const storage_payer_info& ram,
                                                      account_name account,

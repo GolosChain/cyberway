@@ -37,14 +37,6 @@ namespace eosio { namespace chain {
       _chaindb.emplace<permission_object>([](auto&){}); /// reserve perm 0 (used else where)
    }
 
-   void authorization_manager::add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
-      // TODO: Removed by CyberWay
-   }
-
-   void authorization_manager::read_from_snapshot( const snapshot_reader_ptr& snapshot ) {
-      // TODO: Removed by CyberWay
-   }
-
    const permission_object& authorization_manager::create_permission( const storage_payer_info& payer,
                                                                       account_name account,
                                                                       permission_name name,

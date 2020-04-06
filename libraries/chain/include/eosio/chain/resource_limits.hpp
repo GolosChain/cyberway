@@ -55,8 +55,6 @@ namespace resource_limits {
 
          void add_indices();
          void initialize_database();
-         void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const;
-         void read_from_snapshot( const snapshot_reader_ptr& snapshot );
 
          storage_payer_info get_storage_payer(uint32_t time_slot, account_name owner);
 

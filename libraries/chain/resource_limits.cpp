@@ -82,14 +82,6 @@ void resource_limits_manager::initialize_database() {
 
 }
 
-void resource_limits_manager::add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
-   // TODO: Removed by CyberWay
-}
-
-void resource_limits_manager::read_from_snapshot( const snapshot_reader_ptr& snapshot ) {
-   // TODO: Removed by CyberWay
-}
-
 storage_payer_info resource_limits_manager::get_storage_payer(uint32_t time_slot, account_name owner) {
     return {*this, owner, owner, time_slot};
 }
