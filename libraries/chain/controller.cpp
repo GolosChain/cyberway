@@ -456,6 +456,8 @@ struct controller_impl {
          }
       }
 
+      chain_id = conf.genesis.compute_chain_id();
+
       if( shutdown() ) return;
 
       const auto& ubi = reversible_blocks.get_index<reversible_block_index,by_num>();

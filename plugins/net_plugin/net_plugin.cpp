@@ -3154,7 +3154,6 @@ namespace eosio {
 
          my->chain_plug = app().find_plugin<chain_plugin>();
          EOS_ASSERT( my->chain_plug, chain::missing_chain_plugin_exception, ""  );
-         my->chain_id = my->chain_plug->get_chain_id();
          fc::rand_pseudo_bytes( my->node_id.data(), my->node_id.data_size());
          fc_ilog( logger, "my node_id is ${id}", ("id", my->node_id ));
 
@@ -3163,6 +3162,10 @@ namespace eosio {
 
    void net_plugin::plugin_startup() {
       handle_sighup();
+
+      my->chain_id = my->chain_plug->get_chain_id();
+      fc_ilog(logger, "net_plugin received chain_id: ${id}", ("id", my->chain_id.str()));
+
       my->producer_plug = app().find_plugin<producer_plugin>();
 
       my->thread_pool.emplace( my->thread_pool_size );
