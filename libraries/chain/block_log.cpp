@@ -23,10 +23,6 @@ namespace eosio { namespace chain {
     */
 
    namespace detail {
-
-    //   using read_write_mutex = boost::shared_mutex;
-    //   using read_lock = boost::shared_lock<read_write_mutex>;
-    //   using write_lock = boost::unique_lock<read_write_mutex>;
       using boost::iostreams::mapped_file;
       static constexpr boost::iostreams::stream_offset min_valid_file_size = sizeof(uint32_t);
       static constexpr uint32_t min_supported_version = 1;
@@ -44,10 +40,6 @@ namespace eosio { namespace chain {
             // read_write_mutex         mutex;
 
             uint32_t                 version = 0;
-
-            // TODO: removed by CyberWay
-            //bool                     genesis_written_to_block_log = false;
-            //uint32_t                 first_block_num = 0;
 
             bool has_block_records() const {
                 auto size = block_mapped_file.size();
@@ -368,30 +360,6 @@ namespace eosio { namespace chain {
                 uint32_t first_block_num = 1;
                 EOS_ASSERT(version == 1, block_log_exception, "Block log other versions than 1 isn't supported");
 
-// TODO: removed in CyberWay
-//                if (version != 1) {
-//                    old_block_stream.read((char*)&first_block_num, sizeof(first_block_num));
-//                    new_block_stream.write((char*)&first_block_num, sizeof(first_block_num));
-//                }
-//
-//                genesis_state gs;
-//                fc::raw::unpack(old_block_stream, gs);
-//
-//                auto data = fc::raw::pack(gs);
-//                new_block_stream.write(data.data(), data.size());
-//
-//                if (version != 1) {
-//                    auto expected_totem = npos;
-//                    std::decay_t<decltype(npos)> actual_totem;
-//                    old_block_stream.read((char*)&actual_totem, sizeof(actual_totem));
-//
-//                    EOS_ASSERT(actual_totem == expected_totem, block_log_exception,
-//                               "Expected separator between block log header and blocks was not found(expected: ${e}, actual: ${a})",
-//                               ("e", fc::to_hex((char*)&expected_totem, sizeof(expected_totem)))("a", fc::to_hex((char*)&actual_totem, sizeof(actual_totem))));
-//
-//                    new_block_stream.write((char*)&actual_totem, sizeof(actual_totem));
-//                }
-
                 std::exception_ptr     except_ptr;
                 vector<char>           incomplete_block_data;
                 optional<signed_block> bad_block;
@@ -517,13 +485,11 @@ namespace eosio { namespace chain {
    }
 
    void block_log::open(const fc::path& data_dir) {
-        // detail::write_lock lock(my->mutex);
         my->open(data_dir);
    }
 
    uint64_t block_log::append(const signed_block_ptr& block) try {
         auto data = fc::raw::pack(*block);
-        // detail::write_lock lock(my->mutex);
         return my->append(block, data);
    } FC_LOG_AND_RETHROW()
 
@@ -539,45 +505,10 @@ namespace eosio { namespace chain {
        if (first_block) {
            data = fc::raw::pack(*first_block);
        }
-
-    //    detail::write_lock lock(my->mutex);
        my->reset(first_block, data);
-
-// TODO: removed by CyberWay
-//      auto data = fc::raw::pack(gs);
-//      my->version = 0; // version of 0 is invalid; it indicates that the genesis was not properly written to the block log
-//      my->first_block_num = first_block_num;
-//      my->block_stream.write((char*)&my->version, sizeof(my->version));
-//      my->block_stream.write((char*)&my->first_block_num, sizeof(my->first_block_num));
-//      my->block_stream.write(data.data(), data.size());
-//      my->genesis_written_to_block_log = true;
-//
-//      // append a totem to indicate the division between blocks and header
-//      auto totem = npos;
-//      my->block_stream.write((char*)&totem, sizeof(totem));
-//
-//      if (first_block) {
-//         append(first_block);
-//      }
-//
-//      auto pos = my->block_stream.tellp();
-//
-//      my->block_stream.close();
-//      my->block_stream.open(my->block_file.generic_string().c_str(), std::ios::in | std::ios::out | std::ios::binary ); // Bypass append-only writing just once
-//
-//      static_assert( block_log::max_supported_version > 0, "a version number of zero is not supported" );
-//      my->version = block_log::max_supported_version;
-//      my->block_stream.seekp( 0 );
-//      my->block_stream.write( (char*)&my->version, sizeof(my->version) );
-//      my->block_stream.seekp( pos );
-//      flush();
-//
-//      my->block_write = false;
-//      my->check_block_write(); // Reset to append-only writing.
    }
 
    std::pair<signed_block_ptr, uint64_t> block_log::read_block(uint64_t pos) const {
-        // detail::read_lock lock(my->mutex);
         std::pair<signed_block_ptr, uint64_t> result;
         result.first = std::make_shared<signed_block>();
         result.second = my->read_block(pos, *result.first);
@@ -585,7 +516,6 @@ namespace eosio { namespace chain {
     }
 
    signed_block_ptr block_log::read_block_by_num(uint32_t block_num) const try {
-    //    detail::read_lock lock(my->mutex);
        signed_block_ptr block;
        uint64_t pos = my->get_block_pos(block_num);
        if (pos != npos) {
@@ -600,89 +530,19 @@ namespace eosio { namespace chain {
    } FC_LOG_AND_RETHROW()
 
    uint64_t block_log::get_block_pos(uint32_t block_num) const {
-        // detail::read_lock lock(my->mutex);
         return my->get_block_pos(block_num);
    }
 
    signed_block_ptr block_log::read_head()const {
-    //    detail::read_lock lock(my->mutex);
        return my->read_head();
    }
 
    const signed_block_ptr& block_log::head()const {
-    //   detail::read_lock lock(my->mutex);
       return my->head;
    }
-
-// TODO: removed by CyberWay
-//   uint32_t block_log::first_block_num() const {
-//      return my->first_block_num;
-//   }
-//
-//   void block_log::construct_index() {
-//      ilog("Reconstructing Block Log Index...");
-//      my->index_stream.close();
-//      fc::remove_all(my->index_file);
-//      my->index_stream.open(my->index_file.generic_string().c_str(), LOG_WRITE);
-//      my->index_write = true;
-//
-//      uint64_t end_pos;
-//      my->check_block_read();
-//
-//      my->block_stream.seekg(-sizeof( uint64_t), std::ios::end);
-//      my->block_stream.read((char*)&end_pos, sizeof(end_pos));
-//      signed_block tmp;
-//
-//      uint64_t pos = 0;
-//      if (my->version == 1) {
-//         pos = 4; // Skip version which should have already been checked.
-//      } else {
-//         pos = 8; // Skip version and first block offset which should have already been checked
-//      }
-//      my->block_stream.seekg(pos);
-//
-//      genesis_state gs;
-//      fc::raw::unpack(my->block_stream, gs);
-//
-//      // skip the totem
-//      if (my->version > 1) {
-//         uint64_t totem;
-//         my->block_stream.read((char*) &totem, sizeof(totem));
-//      }
-//
-//      while( pos < end_pos ) {
-//         fc::raw::unpack(my->block_stream, tmp);
-//         my->block_stream.read((char*)&pos, sizeof(pos));
-//         my->index_stream.write((char*)&pos, sizeof(pos));
-//      }
-//   } // construct_index
 
    fc::path block_log::repair_log(const fc::path& data_dir, const uint32_t truncate_at_block) {
       return detail::block_log_impl::repair(data_dir, truncate_at_block);
    }
-
-//   genesis_state block_log::extract_genesis_state( const fc::path& data_dir ) {
-//      EOS_ASSERT( fc::is_directory(data_dir) && fc::is_regular_file(data_dir / "blocks.log"), block_log_not_found,
-//                 "Block log not found in '${blocks_dir}'", ("blocks_dir", data_dir)          );
-//
-//      std::fstream  block_stream;
-//      block_stream.open( (data_dir / "blocks.log").generic_string().c_str(), LOG_READ );
-//
-//      uint32_t version = 0;
-//      block_stream.read( (char*)&version, sizeof(version) );
-//      EOS_ASSERT( version > 0, block_log_exception, "Block log was not setup properly." );
-//      EOS_ASSERT( version >= min_supported_version && version <= max_supported_version, block_log_unsupported_version,
-//                 "Unsupported version of block log. Block log version is ${version} while code supports version(s) [${min},${max}]",
-//                 ("version", version)("min", block_log::min_supported_version)("max", block_log::max_supported_version) );
-//
-//      uint32_t first_block_num = 1;
-//      if (version != 1) {
-//         block_stream.read ( (char*)&first_block_num, sizeof(first_block_num) );
-//      }
-//
-//      genesis_state gs;
-//      fc::raw::unpack(block_stream, gs);
-//      return gs;
-//   }
 
 } } /// eosio::chain

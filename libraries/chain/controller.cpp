@@ -52,43 +52,29 @@ class maybe_session {
       maybe_session() = default;
 
       maybe_session( maybe_session&& other)
-// TODO: removed by CyberWay
-//      : _session(move(other._session)),
       : _chaindb_session(move(other._chaindb_session))
       {
       }
 
       explicit maybe_session(chaindb_controller& chaindb) {
-// TODO: removed by CyberWay
-//      explicit maybe_session(database& db, chaindb_controller& chaindb) {
-//         _session = db.start_undo_session(true);
          _chaindb_session = chaindb.start_undo_session(true);
       }
 
       maybe_session(const maybe_session&) = delete;
 
       void squash() {
-// TODO: removed by CyberWay
-//         if (_session)
-//            _session->squash();
          if (_chaindb_session) {
             _chaindb_session->squash();
          }
       }
 
       void undo() {
-// TODO: removed by CyberWay
-//         if (_session)
-//            _session->undo();
          if (_chaindb_session) {
             _chaindb_session->undo();
          }
       }
 
       void push() {
-// TODO: removed by CyberWay
-//         if (_session)
-//            _session->push();
          if (_chaindb_session) {
             _chaindb_session->push();
          }
@@ -101,14 +87,6 @@ class maybe_session {
       }
 
       maybe_session& operator = ( maybe_session&& mv ) {
-// TODO: removed by CyberWay
-//         if (mv._session) {
-//            _session = move(*mv._session);
-//            mv._session.reset();
-//         } else {
-//            _session.reset();
-//         }
-
          if (mv._chaindb_session) {
             _chaindb_session = move(*mv._chaindb_session);
             mv._chaindb_session.reset();
@@ -120,8 +98,6 @@ class maybe_session {
       };
 
    private:
-// TODO: removed by CyberWay
-//      optional<database::session>     _session;
       optional<chaindb_session>       _chaindb_session;
 };
 
@@ -201,8 +177,6 @@ struct controller_impl {
             unapplied_transactions[t->signed_id] = t;
       }
       head = prev;
-// TODO: removed by CyberWay
-//      db.undo();
       chaindb.undo_last_revision();
    }
 
@@ -214,10 +188,6 @@ struct controller_impl {
    controller_impl( const controller::config& cfg, controller& s  )
    :self(s),
     chaindb(cfg.chaindb_address_type, cfg.chaindb_address, cfg.chaindb_sys_name),
-// TODO: removed by CyberWay
-//    db( cfg.state_dir,
-//        cfg.read_only ? database::read_only : database::read_write,
-//        cfg.state_size ),
     reversible_blocks( cfg.blocks_dir/config::reversible_blocks_dir_name,
         cfg.read_only ? database::read_only : database::read_write,
         cfg.reversible_cache_size ),
@@ -323,8 +293,6 @@ struct controller_impl {
          }
       }
 
-// TODO: removed by CyberWay
-//      db.commit( s->block_num );
       chaindb.commit_revision( s->block_num );
 
       if( append_to_blog ) {
@@ -362,8 +330,6 @@ struct controller_impl {
    }
 
    void set_revision(uint64_t revision) {
-// TODO: removed by CyberWay
-//      db.set_revision(revision);
       chaindb.set_revision(revision);
    }
 
@@ -481,8 +447,6 @@ struct controller_impl {
                ("db",chaindb.revision())("head",head->block_num) );
       }
       while (chaindb.revision() > head->block_num) {
-// TODO: removed by CyberWay
-//         db.undo();
          chaindb.undo_last_revision();
       }
 
@@ -491,18 +455,12 @@ struct controller_impl {
       }
 
       if( report_integrity_hash ) {
-// TODO: removed by CyberWay
-//         const auto hash = calculate_integrity_hash();
-//         ilog( "database initialized with hash: ${hash}", ("hash", hash) );
           wlog( "integrity hash is disabled" );
       }
    }
 
    ~controller_impl() {
       pending.reset();
-
-// TODO: removed by CyberWay
-//      db.flush();
 
       reversible_blocks.flush();
       try {
@@ -521,12 +479,6 @@ struct controller_impl {
       resource_limits.add_indices();
       stake::stake_index_set::add_indices(chaindb);
    }
-
-// TODO: removed by CyberWay
-//   void clear_all_undo() {
-//      // Rewind the database to the last irreversible block
-//      db.undo_all();
-//   }
 
    void add_contract_tables_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
        // TODO: Removed by CyberWay
@@ -630,14 +582,6 @@ struct controller_impl {
 
       // Does exist any reason to calculate ram usage for system accounts?
 
-// TODO: Removed by CyberWay
-//      int64_t ram_delta = config::overhead_per_account_ram_bytes;
-//      ram_delta += 2*config::billable_size_v<permission_object>;
-//      ram_delta += owner_permission.auth.get_billable_size();
-//      ram_delta += active_permission.auth.get_billable_size();
-//
-//      resource_limits.add_pending_ram_usage(name, ram_delta);
-//      resource_limits.verify_account_ram_usage(name);
    }
 
    void initialize_database(bool need_native_accounts = true) {
@@ -811,11 +755,6 @@ struct controller_impl {
    }
 
    void remove_scheduled_transaction( const generated_transaction_object& gto ) {
-// TODO: Removed by CyberWay
-//      resource_limits.add_pending_ram_usage(
-//         gto.payer,
-//         -(config::billable_size_v<generated_transaction_object> + gto.packed_trx.size())
-//      );
       // No need to verify_account_ram_usage since we are only reducing memory
       chaindb.erase( gto, resource_limits.get_storage_payer(self.pending_block_slot(), account_name()));
    }
@@ -828,43 +767,6 @@ struct controller_impl {
       EOS_ASSERT( itr != idx.end(), unknown_transaction_exception, "unknown transaction" );
       return push_scheduled_transaction( *itr, deadline, billed );
    }
-
-// TODO: request bw, why provided?
-//    void call_approvebw_actions(signed_transaction& call_provide_trx, transaction_context& trx_context) {
-//        call_provide_trx.expiration = self.pending_block_time() + fc::microseconds(999'999); // Round up to avoid appearing expired
-//        call_provide_trx.set_reference_block( self.head_block_id() );
-//
-//        trx_context.init_for_implicit_trx();
-//        trx_context.exec();
-//        trx_context.validate_bw_usage();
-//
-//        auto restore = make_block_restore_point();
-//        fc::move_append( pending->_actions, move(trx_context.executed) );
-//        trx_context.squash();
-//        restore.cancel();
-//    }
-//
-//    bandwith_request_result get_provided_bandwith(const vector<action>& actions, fc::time_point deadline)  {
-//        signed_transaction call_provide_trx;
-//        transaction_context trx_context( self, call_provide_trx, call_provide_trx.id());
-//        for (const auto& action : actions) {
-//            if (action.account == config::system_account_name && action.name == config::request_bw_action) {
-//                const auto request_bw = action.data_as<requestbw>();
-//                call_provide_trx.actions.emplace_back(
-//                    vector<permission_level>{{request_bw.provider, config::active_name}},
-//                    request_bw.provider,
-//                    config::approve_bw_action,
-//                    fc::raw::pack(approvebw(request_bw.account)));
-//            }
-//        }
-//
-//        if (!call_provide_trx.actions.empty()) {
-//            trx_context.deadline = deadline;
-//            call_approvebw_actions(call_provide_trx, trx_context);
-//        }
-//
-//        return {trx_context.get_provided_bandwith(), trx_context.get_net_usage(), trx_context.get_cpu_usage()};
-//    }
 
    bool is_softfail_transaction( const transaction_trace& trace ) const {
        if (skip_bad_blocks_check) {
@@ -2019,11 +1921,6 @@ void controller::add_indices() {
 
 void controller::startup( std::function<bool()> shutdown, const snapshot_reader_ptr& snapshot ) {
    my->head = my->fork_db.head();
-// TODO: Removed by CyberWay
-//   if( snapshot ) {
-//      ilog( "Starting initialization from snapshot, this may take a significant amount of time" );
-//   }
-//   else
    if( !my->head ) {
       elog( "No head block in fork db, perhaps we need to replay" );
    }
@@ -2035,10 +1932,6 @@ void controller::startup( std::function<bool()> shutdown, const snapshot_reader_
          elog( "db storage not configured to have enough storage for the provided snapshot, please increase and retry snapshot" );
       throw e;
    }
-// TODO: Removed by CyberWay
-//   if( snapshot ) {
-//      ilog( "Finished initialization from snapshot" );
-//   }
 }
 
 fork_database& controller::fork_db() const { return my->fork_db; }

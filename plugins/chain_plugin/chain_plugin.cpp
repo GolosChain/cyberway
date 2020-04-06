@@ -624,32 +624,6 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
 
       if( options.count( "extract-genesis-json" ) || options.at( "print-genesis-json" ).as<bool>()) {
            ilog("Options 'extract-genesis-json' and 'print-genesis-json' doesn't work now");
-// TODO: removed by CyberWay
-//         genesis_state gs;
-//
-//         if( fc::exists( my->blocks_dir / "blocks.log" )) {
-//            gs = block_log::extract_genesis_state( my->blocks_dir );
-//         } else {
-//            wlog( "No blocks.log found at '${p}'. Using default genesis state.",
-//                  ("p", (my->blocks_dir / "blocks.log").generic_string()));
-//         }
-//
-//         if( options.at( "print-genesis-json" ).as<bool>()) {
-//            ilog( "Genesis JSON:\n${genesis}", ("genesis", json::to_pretty_string( gs )));
-//         }
-//
-//         if( options.count( "extract-genesis-json" )) {
-//            auto p = options.at( "extract-genesis-json" ).as<bfs::path>();
-//
-//            if( p.is_relative()) {
-//               p = bfs::current_path() / p;
-//            }
-//
-//            fc::json::save_to_file( gs, p, true );
-//            ilog( "Saved genesis JSON to '${path}'", ("path", p.generic_string()));
-//         }
-//
-//         EOS_THROW( extract_genesis_state_exception, "extracted genesis state from blocks.log" );
       }
 
       if( options.count("export-reversible-blocks") ) {
@@ -689,11 +663,6 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
                ilog( "Reversible blocks database was not corrupted. Copying from backup to blocks directory." );
                fc::copy( backup_dir / config::reversible_blocks_dir_name,
                          my->chain_config->blocks_dir / config::reversible_blocks_dir_name );
-// TODO: Removed by CyberWay
-//               fc::copy( backup_dir / config::reversible_blocks_dir_name / "shared_memory.bin",
-//                         my->chain_config->blocks_dir / config::reversible_blocks_dir_name / "shared_memory.bin" );
-//               fc::copy( backup_dir / config::reversible_blocks_dir_name / "shared_memory.meta",
-//                         my->chain_config->blocks_dir / config::reversible_blocks_dir_name / "shared_memory.meta" );
             }
          }
       } else if( options.at( "replay-blockchain" ).as<bool>()) {
@@ -737,36 +706,7 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
 
       if (options.count( "snapshot" )) {
          EOS_ASSERT( false, plugin_config_exception, "Snapshot options disabled");
-// TODO: removed by CyberWay
 //         my->snapshot_path = options.at( "snapshot" ).as<bfs::path>();
-//         EOS_ASSERT( fc::exists(*my->snapshot_path), plugin_config_exception,
-//                     "Cannot load snapshot, ${name} does not exist", ("name", my->snapshot_path->generic_string()) );
-//
-//         // recover genesis information from the snapshot
-//         auto infile = std::ifstream(my->snapshot_path->generic_string(), (std::ios::in | std::ios::binary));
-//         auto reader = std::make_shared<istream_snapshot_reader>(infile);
-//         reader->validate();
-//         reader->read_section<genesis_state>([this]( auto &section ){
-//            section.read_row(my->chain_config->genesis);
-//         });
-//         infile.close();
-//
-//         EOS_ASSERT( options.count( "genesis-json" ) == 0 &&  options.count( "genesis-timestamp" ) == 0,
-//                 plugin_config_exception,
-//                 "--snapshot is incompatible with --genesis-json and --genesis-timestamp as the snapshot contains genesis information");
-//
-//         auto shared_mem_path = my->chain_config->state_dir / "shared_memory.bin";
-//         EOS_ASSERT( !fc::exists(shared_mem_path),
-//                 plugin_config_exception,
-//                 "Snapshot can only be used to initialize an empty database." );
-//
-//         if( fc::is_regular_file( my->blocks_dir / "blocks.log" )) {
-//            auto log_genesis = block_log::extract_genesis_state(my->blocks_dir);
-//            EOS_ASSERT( log_genesis.compute_chain_id() == my->chain_config->genesis.compute_chain_id(),
-//                    plugin_config_exception,
-//                    "Genesis information in blocks.log does not match genesis information in the snapshot");
-//         }
-
       } else {
          bfs::path genesis_file;
          bool genesis_timestamp_specified = false;
@@ -812,12 +752,6 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
             } else {
                wlog( "Starting up fresh blockchain with default genesis state." );
             }
-// TODO: removed by CyberWay
-//         } else {
-//            EOS_ASSERT( genesis_file.empty() /*my->chain_config->genesis == *existing_genesis*/, plugin_config_exception,
-//                        //"Genesis state provided via command line arguments does not match the existing genesis state in blocks.log. "
-//                        "It is not necessary to provide genesis state arguments when a blocks.log file already exists."
-//                      );
          }
       }
 

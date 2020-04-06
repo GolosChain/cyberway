@@ -64,13 +64,11 @@ namespace eosio { namespace chain {
 
          static fc::path repair_log(const fc::path& data_dir, uint32_t truncate_at_block = 0);
 
-         // TODO: removed by CyberWay
-         //static genesis_state extract_genesis_state( const fc::path& data_dir );
-
       private:
          void open(const fc::path& data_dir);
 
          std::unique_ptr<detail::block_log_impl> my;
+
    };
 
 } }
