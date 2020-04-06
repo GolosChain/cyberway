@@ -77,7 +77,60 @@ namespace cyberway { namespace chaindb {
         }
     }; // struct object_value
 
+
+    struct reflectable_service_state {
+
+        reflectable_service_state(const cyberway::chaindb::service_state& service_state) :
+            pk(service_state.pk),
+            payer(service_state.payer),
+            size(service_state.size),
+            in_ram(service_state.in_ram),
+            code(service_state.code),
+            scope(service_state.scope),
+            table(service_state.table),
+            revision(service_state.revision),
+            undo_pk(service_state.undo_pk),
+            undo_rec(service_state.undo_rec),
+            undo_revision(service_state.undo_revision),
+            undo_payer(service_state.undo_payer),
+            undo_size(service_state.undo_size),
+            undo_in_ram(service_state.undo_in_ram) {}
+
+        operator cyberway::chaindb::service_state () {
+            return { pk,
+                     payer,
+                     size,
+                     in_ram,
+                     code,
+                     scope,
+                     table,
+                     revision,
+                     undo_pk,
+                     undo_rec,
+                     undo_revision,
+                     undo_payer,
+                     undo_size,
+                     undo_in_ram};
+        }
+
+        primary_key_t  pk;
+        account_name_t payer;
+        int            size;
+        bool           in_ram;
+        account_name_t code;
+        scope_name_t   scope;
+        table_name_t   table;
+        revision_t     revision;
+        primary_key_t  undo_pk;
+        undo_record    undo_rec;
+        revision_t     undo_revision;
+        account_name_t undo_payer;
+        size_t         undo_size;
+        bool           undo_in_ram;
+    }; // struct reflectable_service_state
+
 } } // namespace cyberway::chaindb
 
 FC_REFLECT_ENUM(cyberway::chaindb::undo_record, (Unknown)(OldValue)(RemovedValue)(NewValue)(NextPk))
 FC_REFLECT(cyberway::chaindb::service_state, (payer)(size)(in_ram))
+FC_REFLECT(cyberway::chaindb::reflectable_service_state, (pk)(payer)(size)(in_ram)(code)(scope)(table)(revision)(undo_pk)(undo_rec)(undo_revision)(undo_payer)(undo_size)(undo_in_ram))
