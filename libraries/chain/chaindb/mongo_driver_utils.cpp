@@ -513,7 +513,6 @@ namespace cyberway { namespace chaindb {
         if (obj.pk() == primary_key::Unset) {
             obj.service.pk    = get_pk_value(info, src);
             obj.service.code  = info.code;
-            obj.service.scope = info.scope;
             obj.service.table = info.table_name();
         }
         return obj;
@@ -757,7 +756,9 @@ namespace cyberway { namespace chaindb {
     }
 
     sub_document& append_scope_value(sub_document& doc, const table_info& table) {
-        append_typed_value(doc, names::scope_path, scope_name::from_table(table));
+        auto scope = ignore_scope(table) ? scope_name::from_string(table, "") : scope_name::from_table(table) ;
+
+        append_typed_value(doc, names::scope_path, scope);
         return doc;
     }
 
