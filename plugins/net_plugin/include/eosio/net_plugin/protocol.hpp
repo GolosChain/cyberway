@@ -37,6 +37,7 @@ namespace eosio {
       string                     os;
       string                     agent;
       int16_t                    generation;
+      chain::may_not_exist<bool> considers_gray; // defaults to false due to {} in may_not_exist
    };
 
 
@@ -164,7 +165,7 @@ FC_REFLECT( eosio::handshake_message,
             (time)(token)(sig)(p2p_address)
             (last_irreversible_block_num)(last_irreversible_block_id)
             (head_num)(head_id)
-            (os)(agent)(generation) )
+            (os)(agent)(generation))
 FC_REFLECT( eosio::go_away_message, (reason)(node_id) )
 FC_REFLECT( eosio::time_message, (org)(rec)(xmt)(dst) )
 FC_REFLECT( eosio::notice_message, (known_trx)(known_blocks) )

@@ -180,7 +180,6 @@ namespace eosio {
    constexpr uint16_t proto_base = 0;
    constexpr uint16_t proto_explicit_sync = 1;
    constexpr uint16_t proto_address_advertising = 2;
-   constexpr uint16_t proto_considered_gray = 3;
 
    constexpr uint16_t net_version = proto_address_advertising;
 
@@ -359,6 +358,7 @@ namespace eosio {
       int16_t                 sent_handshake_count = 0;
       connection_state        state = connection_state::none;
       bool                    is_gray = false;
+      bool                    considers_gray = false;
       uint16_t                protocol_version  = 0;
       string                  peer_addr;
       unique_ptr<boost::asio::steady_timer> response_expected;
@@ -861,9 +861,6 @@ namespace eosio {
    }
 
    void connection::blk_send_branch() {
-	  if (protocol_version == proto_considered_gray) {
-          return;
-	  }
       controller& cc = my_impl->chain_plug->chain();
       uint32_t head_num = cc.fork_db_head_block_num();
       notice_message note;
@@ -914,9 +911,6 @@ namespace eosio {
    }
 
    void connection::blk_send(const block_id_type& blkid) {
-	  if (protocol_version == proto_considered_gray) {
-          return;
-	  }
       controller &cc = my_impl->chain_plug->chain();
       try {
          signed_block_ptr b = cc.fetch_block_by_id(blkid);
@@ -1643,7 +1637,7 @@ namespace eosio {
 
       std::shared_ptr<std::vector<char>> send_buffer;
       for( auto& cp : my_impl->connections ) {
-         if( skips.find( cp ) != skips.end() || !cp->current() ) {
+         if( skips.find( cp ) != skips.end() || !cp->current() || cp->is_gray || cp->considers_gray ) {
             continue;
          }
          bool has_block = cp->last_handshake_recv.last_irreversible_block_num >= bnum;
@@ -2235,7 +2229,7 @@ namespace eosio {
    template<typename VerifierFunc>
    void net_plugin_impl::send_transaction_to_all(const std::shared_ptr<std::vector<char>>& send_buffer, VerifierFunc verify) {
       for( auto &c : connections) {
-         if( c->current() && verify( c )) {
+         if( c->current() && verify( c ) && !c->is_gray && !c->considers_gray) {
             c->enqueue_buffer( send_buffer, true, priority::low, no_reason );
          }
       }
@@ -2327,6 +2321,7 @@ namespace eosio {
             return;
          }
          c->protocol_version = to_protocol_version(msg.network_version);
+         c->considers_gray = msg.considers_gray.value;
          if(c->protocol_version != net_version) {
             if (network_version_match) {
                fc_elog( logger, "Peer network version does not match expected ${nv} but got ${mnv}",
@@ -2931,7 +2926,7 @@ namespace eosio {
       hello.os = "other";
 #endif
       hello.agent = my_impl->user_agent_name;
-      if (is_gray) hello.network_version = net_version_base + proto_considered_gray;
+      if (is_gray) hello.considers_gray.value = true;
 
       controller& cc = my_impl->chain_plug->chain();
       hello.head_id = fc::sha256();
