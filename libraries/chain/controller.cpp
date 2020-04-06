@@ -483,6 +483,11 @@ struct controller_impl {
         snapshot->write_section<block_state>([this]( auto &section ){
            section.add_row(*fork_db.head());
         });
+
+        snapshot->write_section<genesis_state>([this]( auto &section ){
+           section.add_row(conf.genesis);
+        });
+
         std::vector<cyberway::chaindb::abi_info> abis = dump_accounts(snapshot);
 
         for (const auto& abi : abis) {
@@ -547,6 +552,10 @@ struct controller_impl {
           fork_db.mark_in_current_chain(head_state, true);
           head = head_state;
           snapshot_head_block = head->block_num;
+       });
+
+       snapshot->read_section<genesis_state>([this]( auto &section ){
+          section.read_row(conf.genesis);
        });
 
        std::vector<cyberway::chaindb::abi_info> abis = restore_accounts(snapshot);
