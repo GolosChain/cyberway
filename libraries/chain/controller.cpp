@@ -493,6 +493,10 @@ struct controller_impl {
         for (const auto& abi : abis) {
            dump_contract_tables(snapshot, abi);
         }
+
+        snapshot->write_section<cyberway::chaindb::revision_t>([this]( auto &section ) {
+           section.add_row(chaindb.revision());
+        });
     }
 
     std::vector<cyberway::chaindb::abi_info> dump_accounts(const snapshot_writer_ptr& snapshot) const {
@@ -563,6 +567,13 @@ struct controller_impl {
        for (const auto& abi : abis) {
           restore_contract(snapshot, abi);
        }
+
+       snapshot->read_section<cyberway::chaindb::revision_t>([this]( auto &section ) {
+           cyberway::chaindb::revision_t revision = 0;
+           section.read_row(revision);
+           chaindb.set_revision(revision);
+       });
+
    }
 
     std::vector<cyberway::chaindb::abi_info> restore_accounts(const snapshot_reader_ptr& snapshot) {
