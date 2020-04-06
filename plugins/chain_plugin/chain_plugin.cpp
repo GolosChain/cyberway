@@ -784,8 +784,6 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          std::cout << "Genesis data HASH: " << h.str() << std::endl;
       }
       my->chain.emplace( *my->chain_config );
-      my->chain_id.emplace( my->chain->get_chain_id());
-      std::cout << "chain_id: " << my->chain_id->str() << std::endl;
 
       if ( options.at("skip-bad-blocks-check").as<bool>() ) {
          my->chain->skip_bad_blocks_check();
@@ -886,6 +884,8 @@ void chain_plugin::plugin_startup()
          my->chain->startup(shutdown);
       }
 
+      my->chain_id.emplace( my->chain->get_chain_id());
+      std::cout << "chain_plugin received chain_id: " << my->chain_id->str() << std::endl;
 
       if (my->revert_to_lib) {
          auto lib = std::max(my->chain->last_irreversible_block_num(), uint32_t(1));
