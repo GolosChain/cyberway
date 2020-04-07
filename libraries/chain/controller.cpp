@@ -18,7 +18,6 @@
 #include <eosio/chain/stake.hpp>
 #include <eosio/chain/thread_utils.hpp>
 
-#include <chainbase/chainbase.hpp>
 #include <fc/io/json.hpp>
 #include <fc/scoped_exit.hpp>
 #include <fc/variant_object.hpp>
@@ -480,20 +479,63 @@ struct controller_impl {
       stake::stake_index_set::add_tables(chaindb);
    }
 
-   void add_contract_tables_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
-       // TODO: Removed by CyberWay
-   }
-
    void read_contract_tables_from_snapshot( const snapshot_reader_ptr& snapshot ) {
        // TODO: Removed by CyberWay
    }
 
-   void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
-      // TODO: Removed by CyberWay
+    void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
+        std::vector<cyberway::chaindb::abi_info> abis = dump_accounts(snapshot);
 
-      authorization.add_to_snapshot(snapshot);
-      resource_limits.add_to_snapshot(snapshot);
-   }
+        for (const auto& abi : abis) {
+           dump_contract_tables(snapshot, abi);
+        }
+    }
+
+    std::vector<cyberway::chaindb::abi_info> dump_accounts(const snapshot_writer_ptr& snapshot) const {
+        std::vector<cyberway::chaindb::abi_info> abis;
+        snapshot->write_section("account_table", [&] (auto& section) {
+            table_utils<account_table>::walk(chaindb, [&](const auto& account) {
+                if (!account.abi.empty()) {
+                    abis.emplace_back(account.name, account.get_abi());
+                }
+                section.add_row(account);
+            });
+        });
+        return abis;
+    }
+
+    void dump_contract_tables(const snapshot_writer_ptr& snapshot, const cyberway::chaindb::abi_info& abi) const {
+       for (const auto& table : abi.tables()) {
+           if (cyberway::chaindb::is_system_code(abi.code()) && table.first == account_table::table_name()) {
+               continue;
+           }
+           dump_table(snapshot, table.second, abi);
+       }
+    }
+
+    void dump_table(const snapshot_writer_ptr& snapshot, const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi) const {
+        const cyberway::chaindb::index_request request = {abi.code(), config::snapshot_writer_name, table.name, abi.find_pk_index(table)->name};
+
+        snapshot->write_section(abi.code().to_string() + "_" + table.name.to_string(), [&, this](auto& section){
+            auto begin = chaindb.begin(request);
+            const auto end = chaindb.end(request);
+            for (cyberway::chain::primary_key_t key = begin.pk; key != end.pk; key = chaindb.next({abi.code(), begin.cursor})) {
+                const auto object = chaindb.object_at_cursor({abi.code(), begin.cursor});
+                dump_object(section, object);
+            }
+        });
+    }
+
+    void dump_object(snapshot_writer::section_writer& section, const cyberway::chaindb::object_value& object) const {
+        const auto& value = object.value;
+        const auto& service = cyberway::chaindb::reflectable_service_state(object.service);
+
+        fc::variant service_variant;
+        fc::to_variant(service, service_variant);
+
+        const fc::variant full_object = fc::mutable_variant_object(value.get_object())("_SERVICE_", service_variant);
+        section.add_row<fc::variant>(full_object);
+    }
 
    void read_from_snapshot( const snapshot_reader_ptr& snapshot ) {
       // TODO: Removed by CyberWay

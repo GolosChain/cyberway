@@ -4,11 +4,16 @@
  */
 #pragma once
 
+#include <ostream>
+
+#include <boost/core/demangle.hpp>
+
+#include <fc/variant_object.hpp>
+
 #include <eosio/chain/database_utils.hpp>
 #include <eosio/chain/exceptions.hpp>
-#include <fc/variant_object.hpp>
-#include <boost/core/demangle.hpp>
-#include <ostream>
+
+#include <cyberway/chaindb/controller.hpp>
 
 namespace eosio { namespace chain {
    /**
@@ -30,9 +35,9 @@ namespace eosio { namespace chain {
          using value_type = std::decay_t<T>;
          using snapshot_type = value_type;
 
-         static const snapshot_type& to_snapshot_row( const value_type& value, const chainbase::database& ) {
+         static const snapshot_type& to_snapshot_row( const value_type& value) {
             return value;
-         };
+         }
       };
 
       /**
@@ -98,9 +103,7 @@ namespace eosio { namespace chain {
          }
 
          fc::variant to_variant() const override {
-            variant var;
-            fc::to_variant(data, var);
-            return var;
+            return variant(data);
          }
 
          std::string row_type_name() const override {
@@ -108,6 +111,35 @@ namespace eosio { namespace chain {
          }
 
          const T& data;
+      };
+
+      template<>
+      struct snapshot_row_writer<fc::variant> : abstract_snapshot_row_writer {
+         explicit snapshot_row_writer( const fc::variant& data )
+         :data(data) {}
+
+         template<typename DataStream>
+         void write_stream(DataStream& out) const {
+            fc::raw::pack(out, data);
+         }
+
+         void write(ostream_wrapper& out) const override {
+            write_stream(out);
+         }
+
+         void write(fc::sha256::encoder& out) const override {
+            write_stream(out);
+         }
+
+         fc::variant to_variant() const override {
+            return data;
+         }
+
+         std::string row_type_name() const override {
+            return boost::core::demangle( typeid( fc::variant ).name() );
+         }
+
+         const fc::variant& data;
       };
 
       template<typename T>
@@ -121,8 +153,8 @@ namespace eosio { namespace chain {
          class section_writer {
             public:
                template<typename T>
-               void add_row( const T& row, const chainbase::database& db ) {
-                  _writer.write_row(detail::make_row_writer(detail::snapshot_row_traits<T>::to_snapshot_row(row, db)));
+               void add_row( const T& row) {
+                  _writer.write_row(detail::make_row_writer(detail::snapshot_row_traits<T>::to_snapshot_row(row)));
                }
 
             private:
@@ -136,7 +168,7 @@ namespace eosio { namespace chain {
          };
 
          template<typename F>
-         void write_section(const std::string section_name, F f) {
+         void write_section(const std::string& section_name, F f) {
             write_start_section(section_name);
             auto section = section_writer(*this);
             f(section);
