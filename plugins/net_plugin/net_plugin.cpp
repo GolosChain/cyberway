@@ -25,6 +25,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/host_name.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/multi_index/identity.hpp>
 
 #include <random>
 
@@ -45,6 +46,7 @@ namespace eosio {
    using boost::asio::ip::address_v4;
    using boost::asio::ip::host_name;
    using boost::multi_index_container;
+   using boost::multi_index::identity;
 
    using fc::time_point;
    using fc::time_point_sec;
@@ -499,6 +501,18 @@ namespace eosio {
       }
    };
 
+   struct by_addr;
+   struct by_fork_head;
+
+   using connection_index = multi_index_container<connection_ptr, indexed_by<
+      ordered_non_unique<member<connection, connection_state, &connection::state>>,
+      ordered_unique<tag<by_id>, identity<connection_ptr>>,
+      ordered_non_unique<tag<by_addr>, member<connection, string, &connection::peer_addr>>,
+      ordered_non_unique<tag<by_fork_head>, composite_key<connection,
+         member<connection, block_id_type, &connection::fork_head>,
+         member<connection, uint32_t, &connection::fork_head_num>>>
+   >>;
+
    class sync_manager {
    private:
       enum stages {
@@ -582,9 +596,7 @@ namespace eosio {
             };
       possible_connections             allowed_connections{None};
 
-      connection_ptr find_connection(const string& host)const;
-
-      std::set< connection_ptr >       connections;
+      connection_index                 connections;
       bool                             done = false;
       unique_ptr< sync_manager >       sync_master;
       unique_ptr< dispatch_manager >   dispatcher;
@@ -1345,28 +1357,29 @@ namespace eosio {
          source = conn;
       }
       else {
+         const auto& ptr_idx = my_impl->connections.get<by_id>();
          if (my_impl->connections.size() == 1) {
             if (!source) {
-               source = *my_impl->connections.begin();
+               source = *ptr_idx.begin();
             }
          }
          else {
             // init to a linear array search
-            auto cptr = my_impl->connections.begin();
-            auto cend = my_impl->connections.end();
+            auto cptr = ptr_idx.begin();
+            auto cend = ptr_idx.end();
             // do we remember the previous source?
             if (source) {
                //try to find it in the list
-               cptr = my_impl->connections.find(source);
+               cptr = ptr_idx.find(source);
                cend = cptr;
-               if (cptr == my_impl->connections.end()) {
-                  //not there - must have been closed! cend is now connections.end, so just flatten the ring.
+               if (cptr == ptr_idx.end()) {
+                  //not there - must have been closed! cend is now ptr_idx.end, so just flatten the ring.
                   source.reset();
-                  cptr = my_impl->connections.begin();
+                  cptr = ptr_idx.begin();
                } else {
                   //was found - advance the start to the next. cend is the old source.
-                  if (++cptr == my_impl->connections.end() && cend != my_impl->connections.end() ) {
-                     cptr = my_impl->connections.begin();
+                  if (++cptr == ptr_idx.end() && cend != ptr_idx.end() ) {
+                     cptr = ptr_idx.begin();
                   }
                }
             }
@@ -1379,8 +1392,8 @@ namespace eosio {
                   source = *cptr;
                   break;
                }
-               if(++cptr == my_impl->connections.end())
-                     cptr = my_impl->connections.begin();
+               if(++cptr == ptr_idx.end())
+                     cptr = ptr_idx.begin();
             } while(cptr != cstart_it);
             // no need to check the result, either source advanced or the whole list was checked and the old source is reused.
          }
@@ -1411,10 +1424,9 @@ namespace eosio {
 
    void sync_manager::send_handshakes()
    {
-      for( auto &ci : my_impl->connections) {
-         if( ci->current()) {
-            ci->send_handshake();
-         }
+      auto itr = my_impl->connections.find(connection_state::syncing);
+      for (; itr != my_impl->connections.end(); ++itr) {
+          (*itr)->send_handshake();
       }
    }
 
@@ -1538,12 +1550,10 @@ namespace eosio {
    void sync_manager::verify_catchup(const connection_ptr& c, uint32_t num, const block_id_type& id) {
       request_message req;
       req.req_blocks.mode = catch_up;
-      for (const auto& cc : my_impl->connections) {
-         if (cc->fork_head == id ||
-             cc->fork_head_num > num) {
-            req.req_blocks.mode = none;
-            break;
-         }
+      const auto& idx = my_impl->connections.get<by_fork_head>();
+      auto itr = idx.upper_bound(std::make_tuple(id, num));
+      if (itr != idx.end() && (*itr)->fork_head == id) { // itr->fork_head_num > num
+        req.req_blocks.mode = none;
       }
       if( req.req_blocks.mode == catch_up ) {
          c->fork_head = id;
@@ -1609,11 +1619,9 @@ namespace eosio {
          source.reset();
 
          block_id_type null_id;
-         for (const auto& cp : my_impl->connections) {
-            if (cp->fork_head == null_id) {
-               continue;
-            }
-            if (cp->fork_head == blk_id || cp->fork_head_num < blk_num) {
+         const auto& idx = my_impl->connections.get<by_fork_head>();
+         for (auto itr = idx.upper_bound(null_id); itr != idx.end(); ++itr) {
+            if ((*itr)->fork_head == blk_id || (*itr)->fork_head_num < blk_num) {
                c->fork_head = null_id;
                c->fork_head_num = 0;
             }
@@ -1656,8 +1664,10 @@ namespace eosio {
       peer_block_state pbstate{bs->id, bnum};
 
       std::shared_ptr<std::vector<char>> send_buffer;
-      for( auto& cp : my_impl->connections ) {
-         if( skips.find( cp ) != skips.end() || !cp->current() || cp->is_gray || cp->considers_gray ) {
+      auto itr = my_impl->connections.lower_bound(connection_state::connected);
+      for (; itr != my_impl->connections.end() && (*itr)->state == connection_state::connected; ++itr) {
+         auto& cp = *itr;
+         if (skips.find(cp) != skips.end() || !cp->current() || cp->is_gray || cp->considers_gray ) {
             continue;
          }
          bool has_block = cp->last_handshake_recv.last_irreversible_block_num >= bnum;
@@ -1835,7 +1845,7 @@ namespace eosio {
                   ("b",modes_str(c->last_req->req_blocks.mode))("t",modes_str(c->last_req->req_trx.mode)));
          return;
       }
-      for (auto& conn : my_impl->connections) {
+      for (auto& conn : my_impl->connections.get<by_id>()) {
          if (conn == c || conn->last_req) {
             continue;
          }
@@ -1879,13 +1889,12 @@ namespace eosio {
       auto colon = c->peer_addr.find(':');
       if (colon == std::string::npos || colon == 0) {
          fc_elog( logger, "Invalid peer address. must be \"host:port\": ${p}", ("p",c->peer_addr) );
-         for ( auto itr : connections ) {
-            if((*itr).peer_addr == c->peer_addr) {
-               (*itr).reset();
-               close(itr);
-               connections.erase(itr);
-               break;
-            }
+         auto& idx = connections.get<by_addr>();
+         auto itr = idx.find(c->peer_addr);
+         if (itr != idx.end()) {
+            (*itr)->reset();
+            close(*itr);
+            idx.erase(itr);
          }
          return;
       }
@@ -1982,7 +1991,7 @@ namespace eosio {
                   fc_elog(logger,"Error getting remote endpoint: ${m}",("m", rec.message()));
                }
                else {
-                  for (auto &conn : connections) {
+                  for (auto &conn : connections.get<by_id>()) {
                      if(conn->socket->is_open()) {
                         if (conn->peer_addr.empty()) {
                            visitors++;
@@ -2003,7 +2012,7 @@ namespace eosio {
                         mark_gray(c);
                      }
                      ++num_clients;
-                     connections.insert( c );
+                     connections.emplace(c);
                      start_session( c );
                   }
                   else {
@@ -2248,7 +2257,7 @@ namespace eosio {
    size_t net_plugin_impl::count_open_sockets() const
    {
       size_t count = 0;
-      for( auto &c : connections) {
+      for( auto &c : connections.get<by_id>()) {
          if(c->socket->is_open())
             ++count;
       }
@@ -2258,9 +2267,9 @@ namespace eosio {
 
    template<typename VerifierFunc>
    void net_plugin_impl::send_transaction_to_all(const std::shared_ptr<std::vector<char>>& send_buffer, VerifierFunc verify) {
-      for( auto &c : connections) {
-         if( c->current() && verify( c ) && !c->is_gray && !c->considers_gray) {
-            c->enqueue_buffer( send_buffer, true, priority::low, no_reason );
+      for (auto itr = connections.lower_bound(connection_state::syncing); itr != connections.end(); ++itr) {
+         if (verify(*itr) && !(*itr)->is_gray && !(*itr)->considers_gray) {
+            (*itr)->enqueue_buffer(send_buffer, true, priority::low, no_reason);
          }
       }
    }
@@ -2323,10 +2332,11 @@ namespace eosio {
 
          if( c->peer_addr.empty() || c->last_handshake_recv.node_id == fc::sha256()) {
             fc_dlog(logger, "checking for duplicate" );
-            for(const auto &check : connections) {
+            for (auto itr = connections.lower_bound(connection_state::connected); itr != connections.end(); ++itr) {
+               const auto& check = *itr;
                if(check == c)
                   continue;
-               if(check->connected() && check->peer_name() == msg.p2p_address) {
+               if (check->peer_name() == msg.p2p_address) {
                   // It's possible that both peers could arrive here at relatively the same time, so
                   // we need to avoid the case where they would both tell a different connection to go away.
                   // Using the sum of the initial handshake times of the two connections, we will
@@ -2572,12 +2582,11 @@ namespace eosio {
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_request_message& msg) {
       address_message amsg;
       if (address_exchange) {
-         for( auto& con : connections ) {
-            if (con->connected()) {
-               auto peer_addr = con->get_peer_addr();
-               if (!peer_addr.empty() && private_peers.find(peer_addr) == private_peers.end())
-                   amsg.addresses.push_back(peer_addr);
-            }
+         for (auto itr = connections.lower_bound(connection_state::connected); itr != connections.end(); ++itr) {
+            auto& con = *itr;
+            auto peer_addr = con->get_peer_addr();
+            if (!peer_addr.empty() && private_peers.find(peer_addr) == private_peers.end())
+                amsg.addresses.push_back(peer_addr);
          }
       }
       peer_ilog( c, "send address_message: ${msg}", ("msg", amsg));
@@ -2597,7 +2606,7 @@ namespace eosio {
          for(unsigned i = n; i > 0; --i) {
             std::swap(index[i-1], index[rd()%(i)]);
             auto &host = msg.addresses[index[i-1]];
-            if (!find_connection(host)) {
+            if (idx.find(host) == idx.end()) {
                connection_ptr con = std::make_shared<connection>(host, false);
                connections.insert( con );
                connect( con );
@@ -2760,7 +2769,7 @@ namespace eosio {
             if( ec ) {
                fc_wlog( logger, "Peer keepalive ticked sooner than expected: ${m}", ("m", ec.message()) );
             }
-            for( auto& c : connections ) {
+            for (auto& c : connections.get<by_id>()) {
                if( c->socket->is_open()) {
                   c->send_time();
                }
@@ -2777,8 +2786,9 @@ namespace eosio {
             if( ec ) {
                fc_wlog( logger, "Addresses fetching ticked sooner than expected: ${m}", ("m", ec.message()) );
             }
-            for( auto& c : connections ) {
-               if (c->connected() && c->protocol_version >= proto_address_advertising) {
+            for (auto itr = connections.lower_bound(connection_state::connected); itr != connections.end(); ++itr) {
+               auto& c = *itr;
+               if (c->protocol_version >= proto_address_advertising) {
                   c->enqueue(address_request_message());
                }
             }
@@ -2804,7 +2814,7 @@ namespace eosio {
       controller& cc = chain_plug->chain();
       uint32_t lib = cc.last_irreversible_block_num();
       dispatcher->expire_blocks( lib );
-      for ( auto &c : connections ) {
+      for (auto& c : connections.get<by_id>()) {
          auto &stale_txn = c->trx_state.get<by_block_num>();
          stale_txn.erase( stale_txn.lower_bound(1), stale_txn.upper_bound(lib) );
          auto &stale_txn_e = c->trx_state.get<by_expiry>();
@@ -2832,9 +2842,10 @@ namespace eosio {
       auto max_time = fc::time_point::now();
       max_time += fc::milliseconds(max_cleanup_time_ms);
       auto from = from_connection.lock();
-      auto it = (from ? connections.find(from) : connections.begin());
-      if (it == connections.end()) it = connections.begin();
-      while (it != connections.end()) {
+      auto& ptr_idx = connections.get<by_id>();
+      auto it = (from ? ptr_idx.find(from) : ptr_idx.begin());
+      if (it == ptr_idx.end()) it = ptr_idx.begin();
+      while (it != ptr_idx.end()) {
          if (fc::time_point::now() >= max_time) {
             start_conn_timer(std::chrono::milliseconds(1), *it); // avoid exhausting
             return;
@@ -2847,7 +2858,7 @@ namespace eosio {
                if( (*it)->peer_addr.length() > 0 ) {
                   fc_ilog(logger, "Remove connection to ${host}", ("host", (*it)->peer_addr));
                }
-               it = connections.erase(it);
+               it = ptr_idx.erase(it);
                continue;
             }
          }
@@ -3296,38 +3307,39 @@ namespace eosio {
     *  Used to trigger a new connection from RPC API
     */
    string net_plugin::connect( const string& host ) {
-      auto con = my->find_connection( host );
-      if( con ) {
-         if (!con->persistent) {
-            con->persistent = true;
+      auto con = my->connections.get<by_addr>().find(host);
+      if( con != my->connections.get<by_addr>().end() ) {
+         if (!(*con)->persistent) {
+            (*con)->persistent = true;
          }
          return "already connected";
       }
 
       connection_ptr c = std::make_shared<connection>(host, true);
       fc_dlog(logger,"adding new connection to the list");
-      my->connections.insert( c );
+      my->connections.emplace( c );
       fc_dlog(logger,"calling active connector");
       my->connect( c );
       return "added connection";
    }
 
    string net_plugin::disconnect( const string& host ) {
-      for( auto itr = my->connections.begin(); itr != my->connections.end(); ++itr ) {
-         if( (*itr)->peer_addr == host ) {
-            (*itr)->reset();
-            my->close(*itr);
-            my->connections.erase(itr);
-            return "connection removed";
-         }
+      auto& idx = my->connections.get<by_addr>();
+      auto itr = idx.find(host);
+      if (itr != idx.end()) {
+         (*itr)->reset();
+         my->close(*itr);
+         idx.erase(itr);
+         return "connection removed";
       }
       return "no known connection for host";
    }
 
    optional<connection_status> net_plugin::status( const string& host )const {
-      auto con = my->find_connection( host );
-      if( con )
-         return con->get_status();
+      const auto& idx = my->connections.get<by_addr>();
+      auto itr = idx.find(host);
+      if (itr != idx.end())
+        return (*itr)->get_status();
       return optional<connection_status>();
    }
 
@@ -3338,11 +3350,6 @@ namespace eosio {
          result.push_back( c->get_status() );
       }
       return result;
-   }
-   connection_ptr net_plugin_impl::find_connection(const string& host )const {
-      for( const auto& c : connections )
-         if( c->peer_addr == host ) return c;
-      return connection_ptr();
    }
 
    uint16_t net_plugin_impl::to_protocol_version(uint16_t v) {
