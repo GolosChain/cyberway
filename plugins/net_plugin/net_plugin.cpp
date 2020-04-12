@@ -1665,9 +1665,9 @@ namespace eosio {
 
       std::shared_ptr<std::vector<char>> send_buffer;
       auto itr = my_impl->connections.lower_bound(connection_state::connected);
-      for (; itr != my_impl->connections.end() && (*itr)->state == connection_state::connected; ++itr) {
+      for (; itr != my_impl->connections.end() && (*itr)->state != connection_state::syncing; ++itr) {
          auto& cp = *itr;
-         if (skips.find(cp) != skips.end() || !cp->current() || cp->is_gray || cp->considers_gray ) {
+         if (skips.find(cp) != skips.end() || cp->is_gray || cp->considers_gray ) {
             continue;
          }
          bool has_block = cp->last_handshake_recv.last_irreversible_block_num >= bnum;
