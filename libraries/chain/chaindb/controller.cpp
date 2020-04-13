@@ -729,7 +729,7 @@ namespace cyberway { namespace chaindb {
             undo_.insert(table, obj);
 
             // don't charge on genesis
-            if (undo_.revision() != start_revision) {
+            if (undo_.revision() > start_revision) {
                 charge.add_usage();
             }
 
@@ -749,7 +749,7 @@ namespace cyberway { namespace chaindb {
             charge.get_payer_from(orig_obj);
 
             // don't charge on genesis
-            if (undo_.revision() != start_revision) {
+            if (undo_.revision() > start_revision) {
                 charge.add_usage();
             }
 
@@ -770,7 +770,9 @@ namespace cyberway { namespace chaindb {
             refund.delta = -orig_obj.service.size;
 
             // refund the payer
-            refund.add_usage();
+             if (undo_.revision() > start_revision) {
+                refund.add_usage();
+             }
 
             undo_.remove(table, std::move(orig_obj));
             cache_.remove(table, pk);
