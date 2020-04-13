@@ -277,6 +277,23 @@ void apply_cyber_setabi(apply_context& context) {
 //   }
 }
 
+void apply_cyber_checkversion(apply_context& context) {
+    auto& chaindb = context.chaindb;
+    auto  act = context.act.data_as<checkversion>();
+
+    const auto& account = chaindb.get<account_object>(act.account);
+    EOS_ASSERT(act.code_version.valid() || act.abi_version.valid(), action_validate_exception,
+            "At least one of code or abi version must be specified");
+
+    if(act.code_version.valid()) {
+        EOS_ASSERT(account.code_version == *act.code_version, action_validate_exception, "Wrong code version");
+    }
+
+    if(act.abi_version.valid()) {
+        EOS_ASSERT(account.abi_version == *act.abi_version, action_validate_exception, "Wrong abi version");
+    }
+}
+
 void apply_cyber_updateauth(apply_context& context) {
 
    auto update = context.act.data_as<updateauth>();

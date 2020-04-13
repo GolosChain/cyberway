@@ -241,6 +241,7 @@ struct controller_impl {
    SET_APP_HANDLER(cyber, cyber, newaccount);
    SET_APP_HANDLER(cyber, cyber, setcode);
    SET_APP_HANDLER(cyber, cyber, setabi);
+   SET_APP_HANDLER(cyber, cyber, checkversion);
    SET_APP_HANDLER(cyber, cyber, updateauth);
    SET_APP_HANDLER(cyber, cyber, deleteauth);
    SET_APP_HANDLER(cyber, cyber, linkauth);
