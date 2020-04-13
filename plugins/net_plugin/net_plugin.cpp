@@ -26,6 +26,7 @@
 #include <boost/asio/ip/host_name.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/multi_index/identity.hpp>
+#include <functional>
 
 #include <random>
 
@@ -374,6 +375,15 @@ namespace eosio {
       optional<request_message> last_req;
       bool                   persistent;
       fc::time_point         reconnect_after = fc::time_point();
+      function<void(function<void(connection_ptr&)>)> bmi_modify;
+
+      void set_state(connection_state s) {
+         bmi_modify([&](connection_ptr& conn) { conn->state = s; });
+      }
+
+      void set_fork_head(block_id_type block, uint32_t num) {
+         bmi_modify([&](connection_ptr& conn) { conn->fork_head = block; conn->fork_head_num = num; });
+      }
 
       connection_status get_status()const {
          connection_status stat;
@@ -661,6 +671,8 @@ namespace eosio {
       template<typename VerifierFunc>
       void send_transaction_to_all( const std::shared_ptr<std::vector<char>>& send_buffer, VerifierFunc verify );
 
+      void emplace_connection(connection_ptr& conn);
+
       void accepted_block(const block_state_ptr&);
       void transaction_ack(const std::pair<fc::exception_ptr, transaction_metadata_ptr>&);
 
@@ -877,7 +889,7 @@ namespace eosio {
          fc_wlog( logger, "no socket to close!" );
       }
       flush_queues();
-      state = connection_state::none;
+      set_state(connection_state::none);
       if( last_req ) {
          my_impl->dispatcher->retry_fetch(shared_from_this());
       }
@@ -939,7 +951,7 @@ namespace eosio {
       enqueue_sync_block();
 
       // still want to send transactions along during blk branch sync
-      state = connection_state::connected;
+      set_state(connection_state::connected);
    }
 
    void connection::blk_send(const block_id_type& blkid) {
@@ -966,7 +978,7 @@ namespace eosio {
    }
 
    void connection::stop_send() {
-      state = connection_state::connected;
+      set_state(connection_state::connected);
    }
 
    void connection::send_handshake() {
@@ -1516,7 +1528,7 @@ namespace eosio {
             note.known_blocks.pending = head;
             c->enqueue( note );
          }
-         c->state = connection_state::syncing;
+         c->set_state(connection_state::syncing);
          return;
       }
       // TODO: added by CyberWay
@@ -1541,7 +1553,7 @@ namespace eosio {
             note.known_blocks.ids.push_back(head_id);
             c->enqueue( note );
          }
-         c->state = connection_state::syncing;
+         c->set_state(connection_state::syncing);
          return;
       }
       fc_elog( logger, "sync check failed to resolve status" );
@@ -1556,8 +1568,7 @@ namespace eosio {
         req.req_blocks.mode = none;
       }
       if( req.req_blocks.mode == catch_up ) {
-         c->fork_head = id;
-         c->fork_head_num = num;
+         c->set_fork_head(id, num);
          fc_ilog( logger, "got a catch_up notice while in ${s}, fork head num = ${fhn} target LIB = ${lib} next_expected = ${ne}",
                   ("s",stage_str(state))("fhn",num)("lib",sync_known_lib_num)("ne", sync_next_expected_num) );
          if (state == lib_catchup)
@@ -1565,8 +1576,7 @@ namespace eosio {
          set_state(head_catchup);
       }
       else {
-         c->fork_head = block_id_type();
-         c->fork_head_num = 0;
+         c->set_fork_head(block_id_type(), 0);
       }
       req.req_trx.mode = none;
       c->enqueue( req );
@@ -1622,8 +1632,7 @@ namespace eosio {
          const auto& idx = my_impl->connections.get<by_fork_head>();
          for (auto itr = idx.upper_bound(null_id); itr != idx.end(); ++itr) {
             if ((*itr)->fork_head == blk_id || (*itr)->fork_head_num < blk_num) {
-               c->fork_head = null_id;
-               c->fork_head_num = 0;
+               c->set_fork_head(null_id, 0);
             }
             else {
                set_state(head_catchup);
@@ -1933,7 +1942,7 @@ namespace eosio {
 
       auto current_endpoint = *endpoint_itr;
       ++endpoint_itr;
-      c->state = connection_state::connecting;
+      c->set_state(connection_state::connecting);
       c->pending_message_buffer.reset();
       connection_wptr weak_conn = c;
       c->socket->async_connect( current_endpoint, boost::asio::bind_executor( c->strand,
@@ -2012,7 +2021,7 @@ namespace eosio {
                         mark_gray(c);
                      }
                      ++num_clients;
-                     connections.emplace(c);
+                     emplace_connection(c);
                      start_session( c );
                   }
                   else {
@@ -2274,6 +2283,11 @@ namespace eosio {
       }
    }
 
+   void net_plugin_impl::emplace_connection(connection_ptr& conn) {
+      auto itr = connections.emplace(conn).first;
+      conn->bmi_modify = [&](auto&& func) { connections.modify(itr, func); };
+   }
+
    bool net_plugin_impl::is_valid(const handshake_message& msg) {
       // Do some basic validation of an incoming handshake_message, so things
       // that really aren't handshake messages can be quickly discarded without
@@ -2420,7 +2434,7 @@ namespace eosio {
 
       c->last_handshake_recv = msg;
       c->_logger_variant.reset();
-      c->state = connection_state::connected;
+      c->set_state(connection_state::connected);
       sync_master->recv_handshake(c,msg);
    }
 
@@ -2480,7 +2494,7 @@ namespace eosio {
       // notices of previously unknown blocks or txns,
       //
       peer_ilog(c, "received notice_message");
-      c->state = connection_state::connected;
+      c->set_state(connection_state::connected);
       request_message req;
       bool send_req = false;
       if (msg.known_trx.mode != none) {
@@ -2613,6 +2627,10 @@ namespace eosio {
                ++num_outgoing;
                if (num_outgoing >= max_outgoing_count) break;
             }
+            connection_ptr con = std::make_shared<connection>(host);
+            emplace_connection(con);
+            connect( con );
+            i++;
          }
       }
    }
@@ -3317,7 +3335,7 @@ namespace eosio {
 
       connection_ptr c = std::make_shared<connection>(host, true);
       fc_dlog(logger,"adding new connection to the list");
-      my->connections.emplace( c );
+      my->emplace_connection(c);
       fc_dlog(logger,"calling active connector");
       my->connect( c );
       return "added connection";
