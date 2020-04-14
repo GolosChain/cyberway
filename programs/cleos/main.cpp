@@ -3797,6 +3797,7 @@ int main( int argc, char** argv ) {
    string proposed_contract;
    string proposed_action;
    string proposer;
+   string proposal_description;
    unsigned int proposal_expiration_hours = 24;
    CLI::callback_t parse_expiration_hours = [&](CLI::results_t res) -> bool {
       unsigned int value_s;
@@ -3818,6 +3819,7 @@ int main( int argc, char** argv ) {
    propose_action->add_option("data", proposed_transaction, localized("The JSON string or filename defining the action to propose"))->required();
    propose_action->add_option("proposer", proposer, localized("Account proposing the transaction"));
    propose_action->add_option("proposal_expiration", parse_expiration_hours, localized("Proposal expiration interval in hours"));
+   propose_action->add_option("description", proposal_description, localized("Optional proposal description"));
 
    propose_action->set_callback([&] {
       fc::variant requested_perm_var;
@@ -3876,6 +3878,9 @@ int main( int argc, char** argv ) {
          ("proposal_name", proposal_name)
          ("requested", requested_perm_var)
          ("trx", trx_var);
+      if (proposal_description.size() > 0) {
+         args("description", proposal_description);
+      }
 
       send_actions({chain::action{accountPermissions, msig_contract, "propose", variant_to_bin( msig_contract, N(propose), args ) }});
    });
@@ -3887,6 +3892,7 @@ int main( int argc, char** argv ) {
    propose_trx->add_option("requested_permissions", requested_perm, localized("The JSON string or filename defining requested permissions"))->required();
    propose_trx->add_option("transaction", trx_to_push, localized("The JSON string or filename defining the transaction to push"))->required();
    propose_trx->add_option("proposer", proposer, localized("Account proposing the transaction"));
+   propose_trx->add_option("description", proposal_description, localized("Optional proposal description"));
 
    propose_trx->set_callback([&] {
       fc::variant requested_perm_var;
@@ -3916,6 +3922,9 @@ int main( int argc, char** argv ) {
          ("proposal_name", proposal_name)
          ("requested", requested_perm_var)
          ("trx", trx_var);
+      if (proposal_description.size() > 0) {
+         args("description", proposal_description);
+      }
 
       send_actions({chain::action{accountPermissions, msig_contract, "propose", variant_to_bin( msig_contract, N(propose), args ) }});
    });
@@ -3959,11 +3968,10 @@ int main( int argc, char** argv ) {
       std::map<permission_level, std::pair<fc::time_point, approval_status>>                               all_approvals;
       std::map<eosio::account_name, std::pair<fc::time_point, vector<decltype(all_approvals)::iterator>>>  provided_approvers;
 
-      bool new_multisig = true;
       if( show_approvals_in_multisig_review ) {
          fc::variants rows2;
 
-         try {
+         {
             const auto& result2 = call(get_table_func, fc::mutable_variant_object("json", true)
                                        ("code", msig_contract_str)
                                        ("scope", proposer)
@@ -3974,8 +3982,6 @@ int main( int argc, char** argv ) {
                                        ("limit", 1)
                                  );
             rows2 = result2.get_object()["rows"].get_array();
-         } catch( ... ) {
-            new_multisig = false;
          }
 
          if( !rows2.empty() && rows2[0].get_object()["proposal_name"] == proposal_name ) {
@@ -3993,37 +3999,9 @@ int main( int argc, char** argv ) {
                auto res = all_approvals.emplace( pl, std::make_pair(pa["time"].as<fc::time_point>(), approval_status::approved) );
                provided_approvers[pl.actor].second.push_back( res.first );
             }
-         } else {
-            const auto result3 = call(get_table_func, fc::mutable_variant_object("json", true)
-                                       ("code", msig_contract_str)
-                                       ("scope", proposer)
-                                       ("table", "approvals")
-                                       ("table_key", "")
-                                       ("lower_bound", fc::mutable_variant_object("proposal_name", proposal_name))
-                                       ("index", "primary")
-                                       ("limit", 1)
-                                 );
-            const auto& rows3 = result3.get_object()["rows"].get_array();
-            if( rows3.empty() || rows3[0].get_object()["proposal_name"] != proposal_name ) {
-               std::cerr << "Proposal not found" << std::endl;
-               return;
-            }
-
-            const auto& approvals_object = rows3[0].get_object();
-
-            for( const auto& ra : approvals_object["requested_approvals"].get_array() ) {
-               auto pl = ra.as<permission_level>();
-               all_approvals.emplace( pl, std::make_pair(fc::time_point{}, approval_status::unapproved) );
-            }
-
-            for( const auto& pa : approvals_object["provided_approvals"].get_array() ) {
-               auto pl = pa.as<permission_level>();
-               auto res = all_approvals.emplace( pl, std::make_pair(fc::time_point{}, approval_status::approved) );
-               provided_approvers[pl.actor].second.push_back( res.first );
-            }
          }
 
-         if( new_multisig ) {
+         {
             for( auto& a : provided_approvers ) {
                const auto result4 = call(get_table_func, fc::mutable_variant_object("json", true)
                                           ("code", msig_contract_str)
@@ -4088,9 +4066,7 @@ int main( int argc, char** argv ) {
                case approval_status::approved:
                {
                   approval_obj["status"] = "approved";
-                  if( new_multisig ) {
-                     approval_obj["last_approval_time"] = approval.second.first;
-                  }
+                  approval_obj["last_approval_time"] = approval.second.first;
                }
                break;
                case approval_status::invalidated:
@@ -4217,6 +4193,36 @@ int main( int argc, char** argv ) {
       send_actions({chain::action{accountPermissions, msig_contract, "exec", variant_to_bin( msig_contract, N(exec), args ) }});
       }
    );
+
+   // multisig schedule
+   string actor;
+   auto schedule = msig->add_subcommand("schedule", localized("Schedule delayed proposed transaction"));
+   add_standard_transaction_options(schedule, "actor@active");
+   schedule->add_option("proposer", proposer, localized("proposer name (string)"))->required();
+   schedule->add_option("proposal_name", proposal_name, localized("proposal name (string)"))->required();
+   schedule->add_option("actor", actor, localized("account paying for scheduling (string)"));
+   schedule->set_callback([&] {
+      auto accountPermissions = get_account_permissions(tx_permission);
+      if (accountPermissions.empty()) {
+         if (!actor.empty()) {
+            accountPermissions = vector<permission_level>{{actor, config::active_name}};
+         } else {
+            EOS_THROW(missing_auth_exception, "Authority is not provided (either by multisig parameter <actor> or -p)");
+         }
+      }
+      if (actor.empty()) {
+         actor = name(accountPermissions.at(0).actor).to_string();
+      }
+
+      auto args = fc::mutable_variant_object()
+         ("proposer", proposer)
+         ("proposal_name", proposal_name)
+         ("actor", actor);
+
+      send_actions({
+         chain::action{accountPermissions, msig_contract, "schedule", variant_to_bin(msig_contract, N(schedule), args)}
+      });
+   });
 
    // wrap subcommand
    app.add_subcommand("wrap", localized("Deprecated. Do nothing."), false);
