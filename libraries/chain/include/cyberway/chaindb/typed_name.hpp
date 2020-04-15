@@ -85,6 +85,10 @@ namespace cyberway { namespace chaindb {
             return typed_name::from_value(kind_from_table(info), std::forward<Args>(args)...);
         }
 
+        static primary_key from_raw(const table_info& info, value_type value) {
+            return typed_name::create(kind_from_table(info), value);
+        }
+
         static primary_key from_string(const table_info&, const string&);
 
         static primary_key from_table(const table_info&, value_type);
