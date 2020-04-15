@@ -691,7 +691,7 @@ namespace cyberway { namespace chaindb {
             CYBERWAY_ASSERT(primary_key::from_variant(table, obj.value).value() == obj.pk(), primary_key_exception,
                 "Object '${obj}' from the table ${table} has wrong value '${pk}' in the primary key",
                 ("obj", obj.value)
-                ("pk", primary_key::from_value(table, obj.pk()).to_string())
+                ("pk", primary_key::from_raw(table, obj.pk()).to_string())
                 ("table", get_full_table_name(table)));
         }
 
