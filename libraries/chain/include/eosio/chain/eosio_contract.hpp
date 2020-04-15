@@ -22,6 +22,7 @@ namespace eosio { namespace chain {
    void apply_cyber_unlinkauth(apply_context&);
    void apply_cyber_setcode(apply_context&);
    void apply_cyber_setabi(apply_context&);
+   void apply_cyber_checkversion(apply_context&);
    void apply_cyber_canceldelay(apply_context&);
    ///@}  end action handlers
 

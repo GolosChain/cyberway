@@ -137,12 +137,6 @@ void apply_cyber_newaccount(apply_context& context) {
 
 } FC_CAPTURE_AND_RETHROW( (create) ) }
 
-// system account and accounts with system prefix (cyber.*) are protected
-bool is_protected_account(name acc) {
-    auto mask = name_to_mask( config::system_account_name );
-    return (mask & acc.value) == config::system_account_name;
-}
-
 fc::sha256 bytes_hash(bytes data) {
     fc::sha256 h;
     if (data.size() > 0) {
@@ -187,18 +181,6 @@ void apply_cyber_setcode(apply_context& context) {
    int64_t new_size  = code_size * (config::setcode_storage_bytes_multiplier - 1);
 
    EOS_ASSERT( account.code_version != code_id, set_exact_code, "contract is already running this version of code" );
-    const auto& account_sequence = chaindb.get<account_sequence_object>(act.account);
-    if (is_protected_account(act.account)) {
-        const auto seq = account_sequence.code_sequence;
-        bool allowed = false;
-#ifdef ALLOW_INITIAL_CONTRACT_SET
-        allowed = seq == 0 && account.code_version == fc::sha256();   // 1st set is allowed
-#endif
-        if (!allowed) {
-            allowed = check_hash_for_accseq(code_id, allowed_code_hashes, act.account, seq);
-        }
-        EOS_ASSERT(allowed, protected_contract_code, "can't change code of protected account");
-    }
 
    auto storage_payer = context.get_storage_payer(act.account);
    storage_payer.delta = new_size - old_size;
@@ -214,6 +196,7 @@ void apply_cyber_setcode(apply_context& context) {
 
    });
 
+   const auto& account_sequence = chaindb.get<account_sequence_object>(act.account);
    chaindb.modify( account_sequence, storage_payer, [&]( auto& aso ) {
       aso.code_sequence += 1;
    });
@@ -244,29 +227,18 @@ void apply_cyber_setabi(apply_context& context) {
    int64_t old_size = (int64_t)account.abi.size() * (config::setcode_storage_bytes_multiplier - 1 /*one abi_size is already in size*/);
    int64_t new_size = abi_size * (config::setcode_storage_bytes_multiplier - 1 /*one abi_size is already in size*/);
 
-    const auto& account_sequence = chaindb.get<account_sequence_object>(act.account);
-    auto hash = bytes_hash(act.abi);
-    if (is_protected_account(act.account)) {
-        const auto seq = account_sequence.abi_sequence;
-        bool allowed = false;
-#ifdef ALLOW_INITIAL_CONTRACT_SET
-        allowed = seq == 0 && account.abi_version == fc::sha256();  // auto-enable initial set
-#endif
-        if (!allowed) {
-            allowed = check_hash_for_accseq(hash, allowed_abi_hashes, act.account, seq);
-        }
-        EOS_ASSERT(allowed, protected_contract_code, "can't change abi of protected account");
-    }
 
    auto storage_payer = context.get_storage_payer(act.account);
    storage_payer.delta = new_size - old_size;
 
+   auto hash = bytes_hash(act.abi);
    EOS_ASSERT( account.abi_version != hash, set_exact_abi, "contract is already has this version of abi" );
    chaindb.modify( account, storage_payer, [&]( auto& a ) {
       a.abi_version = hash;
       a.set_abi( std::move(act.abi) );
    });
 
+   const auto& account_sequence = chaindb.get<account_sequence_object>(act.account);
    chaindb.modify( account_sequence, storage_payer, [&]( auto& aso ) {
       aso.abi_sequence += 1;
    });
@@ -275,6 +247,23 @@ void apply_cyber_setabi(apply_context& context) {
 //   if (new_size != old_size) {
 //      context.add_ram_usage( act.account, new_size - old_size );
 //   }
+}
+
+void apply_cyber_checkversion(apply_context& context) {
+    auto& chaindb = context.chaindb;
+    auto  act = context.act.data_as<checkversion>();
+
+    const auto& account = chaindb.get<account_object>(act.account);
+    EOS_ASSERT(act.code_version.valid() || act.abi_version.valid(), action_validate_exception,
+            "At least one of code or abi version must be specified");
+
+    if(act.code_version.valid()) {
+        EOS_ASSERT(account.code_version == *act.code_version, action_validate_exception, "Wrong code version");
+    }
+
+    if(act.abi_version.valid()) {
+        EOS_ASSERT(account.abi_version == *act.abi_version, action_validate_exception, "Wrong abi version");
+    }
 }
 
 void apply_cyber_updateauth(apply_context& context) {

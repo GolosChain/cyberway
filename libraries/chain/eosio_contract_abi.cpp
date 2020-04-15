@@ -610,6 +610,14 @@ abi_def eosio_contract_abi(abi_def eos_abi)
    });
 
    eos_abi.structs.emplace_back( struct_def {
+      "checkversion", "", {
+        {"account", "account_name"},
+        {"abi_version", "checksum256?"},
+        {"code_version", "checksum256?"}
+      }
+   });
+
+   eos_abi.structs.emplace_back( struct_def {
       "updateauth", "", {
          {"account", "account_name"},
          {"permission", "permission_name"},
@@ -691,6 +699,7 @@ abi_def eosio_contract_abi(abi_def eos_abi)
    eos_abi.actions.push_back( action_def{name("newaccount"), "newaccount"} );
    eos_abi.actions.push_back( action_def{name("setcode"), "setcode"} );
    eos_abi.actions.push_back( action_def{name("setabi"), "setabi"} );
+   eos_abi.actions.push_back( action_def{name("checkversion"), "checkversion"} );
    eos_abi.actions.push_back( action_def{name("updateauth"), "updateauth"} );
    eos_abi.actions.push_back( action_def{name("deleteauth"), "deleteauth"} );
    eos_abi.actions.push_back( action_def{name("linkauth"), "linkauth"} );

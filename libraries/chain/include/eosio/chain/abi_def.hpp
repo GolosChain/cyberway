@@ -132,11 +132,6 @@ struct variant_def {
    vector<type_name>    types;
 };
 
-template<typename T>
-struct may_not_exist {
-   T value{};
-};
-
 struct abi_def {
    abi_def() = default;
    abi_def(const vector<type_def>& types, const vector<struct_def>& structs, const vector<action_def>& actions, const vector<event_def>& events, const vector<table_def>& tables, const vector<error_message>& error_msgs)
@@ -166,33 +161,6 @@ vector<type_def> common_type_defs();
 void set_common_defs(abi_def& abi);
 
 } } /// namespace eosio::chain
-
-namespace fc {
-
-template<typename ST, typename T>
-datastream<ST>& operator << (datastream<ST>& s, const eosio::chain::may_not_exist<T>& v) {
-   raw::pack(s, v.value);
-   return s;
-}
-
-template<typename ST, typename T>
-datastream<ST>& operator >> (datastream<ST>& s, eosio::chain::may_not_exist<T>& v) {
-   if (s.remaining())
-      raw::unpack(s, v.value);
-   return s;
-}
-
-template<typename T>
-void to_variant(const eosio::chain::may_not_exist<T>& e, fc::variant& v) {
-   to_variant( e.value, v);
-}
-
-template<typename T>
-void from_variant(const fc::variant& v, eosio::chain::may_not_exist<T>& e) {
-   from_variant( v, e.value );
-}
-
-} // namespace fc
 
 FC_REFLECT( eosio::chain::type_def                         , (new_type_name)(type) )
 FC_REFLECT( eosio::chain::field_def                        , (name)(type) )

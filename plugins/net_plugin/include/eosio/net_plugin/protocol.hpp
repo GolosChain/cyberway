@@ -37,6 +37,7 @@ namespace eosio {
       string                     os;
       string                     agent;
       int16_t                    generation;
+      chain::may_not_exist<bool> considers_gray; // defaults to false due to {} in may_not_exist
    };
 
 
@@ -52,7 +53,8 @@ namespace eosio {
     validation, ///< the peer sent a block that failed validation
     benign_other, ///< reasons such as a timeout. not fatal but warrant resetting
     fatal_other, ///< a catch-all for errors we don't have discriminated
-    authentication ///< peer failed authenicatio
+    authentication, ///< peer failed authentication
+    gray_peer ///< gray peer sent message which wasn't should
   };
 
   constexpr auto reason_str( go_away_reason rsn ) {
@@ -69,6 +71,7 @@ namespace eosio {
     case authentication : return "authentication failure";
     case fatal_other : return "some other failure";
     case benign_other : return "some other non-fatal condition";
+    case gray_peer : return "gray peer connection";
     default : return "some crazy reason";
     }
   }
@@ -162,7 +165,7 @@ FC_REFLECT( eosio::handshake_message,
             (time)(token)(sig)(p2p_address)
             (last_irreversible_block_num)(last_irreversible_block_id)
             (head_num)(head_id)
-            (os)(agent)(generation) )
+            (os)(agent)(generation))
 FC_REFLECT( eosio::go_away_message, (reason)(node_id) )
 FC_REFLECT( eosio::time_message, (org)(rec)(xmt)(dst) )
 FC_REFLECT( eosio::notice_message, (known_trx)(known_blocks) )
