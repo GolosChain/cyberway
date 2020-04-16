@@ -1998,12 +1998,9 @@ void controller::add_indices() {
 
 void controller::startup( std::function<bool()> shutdown, snapshot_reader_ptr snapshot ) {
    my->head = my->fork_db.head();
-// TODO: Removed by CyberWay
-//   if( snapshot ) {
-//      ilog( "Starting initialization from snapshot, this may take a significant amount of time" );
-//   }
-//   else
-   if( !my->head ) {
+   if( snapshot ) {
+      ilog( "Starting initialization from snapshot, this may take a significant amount of time" );
+   } else if( !my->head ) {
       elog( "No head block in fork db, perhaps we need to replay" );
    }
 
