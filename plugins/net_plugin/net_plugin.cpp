@@ -2285,7 +2285,7 @@ namespace eosio {
 
    void net_plugin_impl::emplace_connection(connection_ptr& conn) {
       auto itr = connections.emplace(conn).first;
-      conn->bmi_modify = [&](auto&& func) { connections.modify(itr, func); };
+      conn->bmi_modify = [&itr](auto&& func) { my_impl->connections.modify(itr, func); };
    }
 
    bool net_plugin_impl::is_valid(const handshake_message& msg) {
@@ -2620,17 +2620,14 @@ namespace eosio {
          for(unsigned i = n; i > 0; --i) {
             std::swap(index[i-1], index[rd()%(i)]);
             auto &host = msg.addresses[index[i-1]];
+            const auto& idx = my_impl->connections.get<by_addr>();
             if (idx.find(host) == idx.end()) {
                connection_ptr con = std::make_shared<connection>(host, false);
-               connections.insert( con );
+               emplace_connection(con);
                connect( con );
                ++num_outgoing;
                if (num_outgoing >= max_outgoing_count) break;
             }
-            connection_ptr con = std::make_shared<connection>(host);
-            emplace_connection(con);
-            connect( con );
-            i++;
          }
       }
    }
