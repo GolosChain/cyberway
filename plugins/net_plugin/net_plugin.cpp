@@ -597,7 +597,7 @@ namespace eosio {
       boost::asio::steady_timer::duration   txn_exp_period;
       boost::asio::steady_timer::duration   resp_expected_period;
       boost::asio::steady_timer::duration   keepalive_interval{std::chrono::seconds{32}};
-      boost::asio::steady_timer::duration   fetch_addresses_interval{std::chrono::minutes{3}};  // Only for testing purposes!!!
+      boost::asio::steady_timer::duration   fetch_addresses_interval{std::chrono::minutes{15}};
       int                           max_cleanup_time_ms = 0;
 
       const std::chrono::system_clock::duration peer_authentication_interval{std::chrono::seconds{1}}; ///< Peer clock may be no more than 1 second skewed from our clock, including network latency.
