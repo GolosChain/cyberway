@@ -26,6 +26,8 @@
 #include <boost/asio/ip/host_name.hpp>
 #include <boost/asio/steady_timer.hpp>
 
+#include <random>
+
 using namespace eosio::chain::plugin_interface::compat;
 
 namespace fc {
@@ -145,8 +147,8 @@ namespace eosio {
    constexpr boost::asio::chrono::milliseconds def_read_delay_for_full_write_queue{100};
    constexpr auto     def_max_reads_in_flight = 1000;
    constexpr auto     def_max_trx_in_progress_size = 100*1024*1024; // 100 MB
-   constexpr auto     def_max_addresses_tried = 50;
    constexpr auto     def_max_clients = 25; // 0 for unlimited clients
+   constexpr auto     def_max_outgoing = 100; // can be 0 - do not allow outgoing
    constexpr auto     def_max_gray_clients = 5; // can be 0 - do not allow gray clients
    constexpr auto     def_max_gray_lifetime_msec = 1000;
    constexpr auto     def_max_nodes_per_host = 1;
@@ -331,7 +333,7 @@ namespace eosio {
 
    class connection : public std::enable_shared_from_this<connection> {
    public:
-      explicit connection( string endpoint );
+      explicit connection( string endpoint, bool persistent );
 
       explicit connection( socket_ptr s );
       ~connection();
@@ -368,6 +370,8 @@ namespace eosio {
       block_id_type          fork_head;
       uint32_t               fork_head_num = 0;
       optional<request_message> last_req;
+      bool                   persistent;
+      fc::time_point         reconnect_after = fc::time_point();
 
       connection_status get_status()const {
          connection_status stat;
@@ -376,6 +380,20 @@ namespace eosio {
          stat.syncing = (state == connection_state::syncing);
          stat.last_handshake = last_handshake_recv;
          return stat;
+      }
+
+      string get_peer_addr() const {
+         if (!peer_addr.empty()) return peer_addr;
+         if (state == connection_state::none || state == connection_state::connecting)
+            return string();
+         auto p2p_name = last_handshake_recv.p2p_address;
+         auto colon = p2p_name.find(':');
+         auto space = p2p_name.find(' ');
+         if (colon == string::npos || space == string::npos || colon > space)
+            return string();
+         boost::system::error_code ec;
+         auto host = socket->remote_endpoint(ec).address().to_string();
+         return host + p2p_name.substr(colon, space-colon);
       }
 
       /** \name Peer Timestamps
@@ -546,6 +564,8 @@ namespace eosio {
       uint32_t                         max_gray_lifetime_msec = 0;
       uint32_t                         max_nodes_per_host = 1;
       uint32_t                         num_clients = 0;
+      uint32_t                         num_outgoing = 0;
+      uint32_t                         max_outgoing_count = 0;
 
       vector<string>                   supplied_peers;
       vector<chain::public_key_type>   allowed_peers; ///< peer keys allowed to connect
@@ -553,8 +573,6 @@ namespace eosio {
                chain::private_key_type> private_keys; ///< overlapping with producer keys, also authenticating non-producing nodes
 
       std::set<string>                   private_peers;
-
-      uint32_t                         max_addresses_tried;
 
       enum possible_connections : char {
          None = 0,
@@ -585,6 +603,7 @@ namespace eosio {
       const std::chrono::system_clock::duration peer_authentication_interval{std::chrono::seconds{1}}; ///< Peer clock may be no more than 1 second skewed from our clock, including network latency.
 
       bool                          network_version_match = false;
+      bool                          address_exchange = true;
       chain_id_type                 chain_id;
       fc::sha256                    node_id;
 
@@ -757,7 +776,7 @@ namespace eosio {
 
    //---------------------------------------------------------------------------
 
-   connection::connection( string endpoint )
+   connection::connection( string endpoint, bool persistent )
       : blk_state(),
         trx_state(),
         peer_requested(),
@@ -777,7 +796,8 @@ namespace eosio {
         no_retry(no_reason),
         fork_head(),
         fork_head_num(0),
-        last_req()
+        last_req(),
+        persistent(persistent)
    {
       fc_ilog( logger, "created connection to ${n}", ("n", endpoint) );
       initialize();
@@ -1850,8 +1870,13 @@ namespace eosio {
          return;
       }
 
-      auto colon = c->peer_addr.find(':');
+      if( c->reconnect_after > fc::time_point::now() ) {
+         return;
+      }
 
+      c->state = connection_state::connecting;
+
+      auto colon = c->peer_addr.find(':');
       if (colon == std::string::npos || colon == 0) {
          fc_elog( logger, "Invalid peer address. must be \"host:port\": ${p}", ("p",c->peer_addr) );
          for ( auto itr : connections ) {
@@ -1882,6 +1907,7 @@ namespace eosio {
                       } else {
                          fc_elog( logger, "Unable to resolve ${peer_addr}: ${error}",
                                   ("peer_addr", c->peer_name())( "error", err.message()) );
+                         close( c );
                       }
                    } );
                 } ) );
@@ -1892,6 +1918,10 @@ namespace eosio {
          string rsn = reason_str(c->no_retry);
          return;
       }
+      if( c->reconnect_after > fc::time_point::now() ) {
+         return;
+      }
+
       auto current_endpoint = *endpoint_itr;
       ++endpoint_itr;
       c->state = connection_state::connecting;
@@ -1907,7 +1937,7 @@ namespace eosio {
                   c->send_handshake();
                }
             } else {
-               if( endpoint_itr != tcp::resolver::iterator()) {
+               if( c->persistent && endpoint_itr != tcp::resolver::iterator()) {
                   close( c );
                   connect( c, endpoint_itr );
                } else {
@@ -2016,7 +2046,7 @@ namespace eosio {
          app().post(priority::low, [weak_conn]() {
             auto conn = weak_conn.lock();
             if (!conn) return;
-            conn->close();
+            my_impl->close(conn);
          });
       });
    }
@@ -2278,7 +2308,9 @@ namespace eosio {
          c->state = connection_state::connected;
       }
       if (msg.generation == 1) {
-         if (c->is_gray && c->protocol_version < proto_address_advertising) {
+         auto protocol_version = to_protocol_version(msg.network_version); 
+         if (c->is_gray && protocol_version < proto_address_advertising) {
+            peer_wlog(c, "Old client version for gray connection");
             my_impl->close(c);
             return;
          }
@@ -2320,7 +2352,7 @@ namespace eosio {
             c->enqueue( go_away_message(go_away_reason::wrong_chain) );
             return;
          }
-         c->protocol_version = to_protocol_version(msg.network_version);
+         c->protocol_version = protocol_version;
          c->considers_gray = msg.considers_gray.value;
          if(c->protocol_version != net_version) {
             if (network_version_match) {
@@ -2371,7 +2403,7 @@ namespace eosio {
             c->send_handshake();
          }
 
-         if (c->protocol_version >= proto_address_advertising) {
+         if (address_exchange && c->protocol_version >= proto_address_advertising) {
             c->enqueue(address_request_message());
          }
       }
@@ -2387,9 +2419,14 @@ namespace eosio {
       peer_wlog(c, "received go_away_message");
       fc_wlog( logger, "received a go away message from ${p}, reason = ${r}",
                ("p", c->peer_name())("r",rsn) );
-      c->no_retry = msg.reason;
-      if(msg.reason == duplicate ) {
-         c->node_id = msg.node_id;
+      if(msg.reason == gray_peer) {
+         auto delay = std::chrono::duration_cast<std::chrono::seconds>(fetch_addresses_interval);
+         c->reconnect_after = fc::time_point::now() + fc::seconds(delay.count());
+      } else {
+         c->no_retry = msg.reason;
+         if(msg.reason == duplicate ) {
+            c->node_id = msg.node_id;
+         }
       }
       c->flush_queues();
       close(c);
@@ -2534,24 +2571,39 @@ namespace eosio {
 
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_request_message& msg) {
       address_message amsg;
-      for( auto& con : connections ) {
-         if (con->connected() && private_peers.find(con->peer_addr) == private_peers.end())
-            amsg.addresses.push_back(con->peer_addr);
+      if (address_exchange) {
+         for( auto& con : connections ) {
+            if (con->connected()) {
+               auto peer_addr = con->get_peer_addr();
+               if (!peer_addr.empty() && private_peers.find(peer_addr) == private_peers.end())
+                   amsg.addresses.push_back(peer_addr);
+            }
+         }
       }
+      peer_ilog( c, "send address_message: ${msg}", ("msg", amsg));
       c->enqueue(amsg);
    }
 
    void net_plugin_impl::handle_message(const connection_ptr& c, const address_message& msg) {
-      int i = 0;
-      for( auto& host : msg.addresses) {
-         if (!find_connection(host)) {
-            if (i == max_addresses_tried) {
-              return;
+      peer_ilog( c, "received address_message: ${msg}", ("msg", msg));
+      if (address_exchange && num_outgoing < max_outgoing_count) {
+         unsigned n = msg.addresses.size();
+         unsigned count = min(n, max_outgoing_count - num_outgoing);
+
+         std::random_device rd;
+         std::vector<unsigned> index;
+         index.reserve(n);
+         for(unsigned i = 0; i < n; ++i) index[i] = i;
+         for(unsigned i = n; i > 0; --i) {
+            std::swap(index[i-1], index[rd()%(i)]);
+            auto &host = msg.addresses[index[i-1]];
+            if (!find_connection(host)) {
+               connection_ptr con = std::make_shared<connection>(host, false);
+               connections.insert( con );
+               connect( con );
+               ++num_outgoing;
+               if (num_outgoing >= max_outgoing_count) break;
             }
-            connection_ptr con = std::make_shared<connection>(host);
-            connections.insert( con );
-            connect( con );
-            i++;
          }
       }
    }
@@ -2788,10 +2840,13 @@ namespace eosio {
             return;
          }
          if( !(*it)->socket->is_open() && (*it)->state != connection_state::connecting) {
-            if( (*it)->peer_addr.length() > 0) {
+            if( (*it)->peer_addr.length() > 0 && (*it)->persistent ) {
                connect(*it);
             }
             else {
+               if( (*it)->peer_addr.length() > 0 ) {
+                  fc_ilog(logger, "Remove connection to ${host}", ("host", (*it)->peer_addr));
+               }
                it = connections.erase(it);
                continue;
             }
@@ -2802,6 +2857,13 @@ namespace eosio {
    }
 
    void net_plugin_impl::close(const connection_ptr& c) {
+      if( !c->peer_addr.empty() && !c->persistent && c->state != connection_state::none ) {
+         if (num_outgoing == 0) {
+            fc_wlog( logger, "num_outgoing already at 0");
+         } else {
+            --num_outgoing;
+         }
+      }
       if( c->peer_addr.empty() && c->socket->is_open() ) {
          if (num_clients == 0) {
             fc_wlog( logger, "num_clients already at 0");
@@ -2972,9 +3034,10 @@ namespace eosio {
          ( "peer-key", bpo::value<vector<string>>()->composing()->multitoken(), "Optional public key of peer allowed to connect.  May be used multiple times.")
          ( "peer-private-key", boost::program_options::value<vector<string>>()->composing()->multitoken(),
            "Tuple of [PublicKey, WIF private key] (may specify multiple times)")
+         ( "p2p-address-exchange", bpo::value<bool>()->default_value(true), "Enable p2p-address exchange between nodes")
          ( "private-peer", bpo::value<vector<string>>()->composing(), "The public endpoints of peers to do not advertise in address exchange. You can use multiple options.")
-         ( "max-addresses-tried", bpo::value<int>()->default_value(def_max_addresses_tried), "Maximum number of addresses tried to connect per each address_message received.")
          ( "max-clients", bpo::value<int>()->default_value(def_max_clients), "Maximum number of clients from which connections are accepted, use 0 for no limit")
+         ( "max-outgoing", bpo::value<int>()->default_value(def_max_outgoing), "Maximum number of outgoing connections that will be created based on the received addresses")
          ( "max-gray-clients", bpo::value<int>()->default_value(def_max_gray_clients), "Maximum number of clients from which connections are accepted (plus to max-clients), but only for return addresses to connect to another nodes.")
          ( "max-gray-timeout", bpo::value<int>()->default_value(def_max_gray_lifetime_msec), "Maximum lifetime of \"gray\" client before auto-close connection.")
          ( "connection-cleanup-period", bpo::value<int>()->default_value(def_conn_retry_wait), "number of seconds to wait before cleaning up dead connections")
@@ -3009,6 +3072,7 @@ namespace eosio {
          peer_log_format = options.at( "peer-log-format" ).as<string>();
 
          my->network_version_match = options.at( "network-version-match" ).as<bool>();
+         my->address_exchange = options.at( "p2p-address-exchange" ).as<bool>();
 
          my->sync_master.reset( new sync_manager( options.at( "sync-fetch-span" ).as<uint32_t>()));
          my->dispatcher.reset( new dispatch_manager );
@@ -3018,10 +3082,12 @@ namespace eosio {
          my->txn_exp_period = def_txn_expire_wait;
          my->resp_expected_period = def_resp_expected_wait;
          my->max_client_count = options.at( "max-clients" ).as<int>();
+         my->max_outgoing_count = options.at( "max-outgoing" ).as<int>();
          my->max_gray_client_count = options.at( "max-gray-clients" ).as<int>();
          my->max_gray_lifetime_msec = options.at( "max-gray-timeout" ).as<int>();
          my->max_nodes_per_host = options.at( "p2p-max-nodes-per-host" ).as<int>();
          my->num_clients = 0;
+         my->num_outgoing = 0;
          my->started_sessions = 0;
 
          my->use_socket_read_watermark = options.at( "use-socket-read-watermark" ).as<bool>();
@@ -3086,8 +3152,6 @@ namespace eosio {
             }
          }
 
-         my->max_addresses_tried = options.at("max-addresses-tried").as<int>();
-
          my->chain_plug = app().find_plugin<chain_plugin>();
          EOS_ASSERT( my->chain_plug, chain::missing_chain_plugin_exception, ""  );
          my->chain_id = my->chain_plug->get_chain_id();
@@ -3098,6 +3162,7 @@ namespace eosio {
    }
 
    void net_plugin::plugin_startup() {
+      handle_sighup();
       my->producer_plug = app().find_plugin<producer_plugin>();
 
       my->thread_pool.emplace( my->thread_pool_size );
@@ -3137,6 +3202,8 @@ namespace eosio {
          }
       }
 
+      fc_ilog( logger, "My p2p_address: ${p2p_address}", ("p2p_address", my->p2p_address));
+
       my->keepalive_timer.reset( new boost::asio::steady_timer( *my->server_ioc ) );
       my->ticker();
 
@@ -3167,13 +3234,14 @@ namespace eosio {
       }
 
       my->start_monitors();
-      my->fetch_addresses_timer.reset( new boost::asio::steady_timer( *my->server_ioc ) );
-      my->fetch_addresses();
+      if (my->address_exchange) {
+         my->fetch_addresses_timer.reset( new boost::asio::steady_timer( *my->server_ioc ) );
+         my->fetch_addresses();
+      }
 
       for( auto seed_node : my->supplied_peers ) {
          connect( seed_node );
       }
-      handle_sighup();
    }
 
    void net_plugin::handle_sighup() {
@@ -3228,10 +3296,15 @@ namespace eosio {
     *  Used to trigger a new connection from RPC API
     */
    string net_plugin::connect( const string& host ) {
-      if( my->find_connection( host ) )
+      auto con = my->find_connection( host );
+      if( con ) {
+         if (!con->persistent) {
+            con->persistent = true;
+         }
          return "already connected";
+      }
 
-      connection_ptr c = std::make_shared<connection>(host);
+      connection_ptr c = std::make_shared<connection>(host, true);
       fc_dlog(logger,"adding new connection to the list");
       my->connections.insert( c );
       fc_dlog(logger,"calling active connector");
