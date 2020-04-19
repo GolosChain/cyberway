@@ -4,10 +4,14 @@ set -euo pipefail
 GIT_REVISION=$(git rev-parse HEAD)
 VERSION_STRING=$(git describe --tags --dirty)
 
-COMPILETYPE=RelWithDebInfo
+case "${BUILDKITE_BRANCH}" in
+   v*.*.*|master) COMPILETYPE=Release;;
+   *) COMPILETYPE=RelWithDebInfo;;
+esac
 
-if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-    COMPILETYPE=Release
-fi
+echo "BUILDKITE_BRANCH: ${BUILDKITE_BRANCH}"
+echo "GIT_REVISION: ${GIT_REVISION}"
+echo "VERSION_STRING: ${VERSION_STRING}"
+echo "COMPILETYPE: ${COMPILETYPE}"
 
 docker build -t cyberway/cyberway:${GIT_REVISION} --build-arg=builder=${GIT_REVISION} --build-arg=compiletype=${COMPILETYPE} --build-arg=revision=${GIT_REVISION} --build-arg=versionstring=${VERSION_STRING} -f Docker/Dockerfile .
