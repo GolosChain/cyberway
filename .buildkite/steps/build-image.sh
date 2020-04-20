@@ -1,13 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
-GIT_REVISION=$(git rev-parse HEAD)
-VERSION_STRING=$(git describe --tags --dirty)
-
 case "${BUILDKITE_BRANCH}" in
-   v*.*.*|master) COMPILETYPE=Release;;
+   v*.*.*)
+      COMPILETYPE=Release
+      git fetch origin --tags "${BUILDKITE_BRANCH}"
+      ;;
+   master) COMPILETYPE=Release;;
    *) COMPILETYPE=RelWithDebInfo;;
 esac
+
+GIT_REVISION=$(git rev-parse HEAD)
+VERSION_STRING=$(git describe --tags --dirty)
 
 echo "BUILDKITE_BRANCH: ${BUILDKITE_BRANCH}"
 echo "GIT_REVISION: ${GIT_REVISION}"
