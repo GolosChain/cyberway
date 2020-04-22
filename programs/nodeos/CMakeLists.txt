@@ -16,9 +16,9 @@ endif()
 
 if(DEFINED ENV{REVISION})
     string(SUBSTRING ENV{REVISION} 0 8 nodeos_BUILD_REVISION)
-else
+else()
     set(nodeos_BUILD_REVISION 0)
-endif
+endif()
 
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../../.git)
   find_package(Git)
