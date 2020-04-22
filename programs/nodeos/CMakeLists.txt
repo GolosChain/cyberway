@@ -30,10 +30,10 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../../.git)
       ERROR_QUIET
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   else()
-    set(nodeos_BUILD_VERSION nodeos_BUILD_REVISION)
+    set(nodeos_BUILD_VERSION ${nodeos_BUILD_REVISION})
   endif()
 else()
-  set(nodeos_BUILD_VERSION nodeos_BUILD_REVISION)
+  set(nodeos_BUILD_VERSION ${nodeos_BUILD_REVISION})
 endif()
 message(STATUS "Git commit revision: ${nodeos_BUILD_VERSION}")
 
