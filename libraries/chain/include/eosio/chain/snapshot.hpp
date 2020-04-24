@@ -148,7 +148,10 @@ namespace eosio { namespace chain {
             write_section(detail::snapshot_section_traits<T>::section_name(), f);
          }
 
-      virtual ~snapshot_writer(){};
+         virtual void finalize() = 0;
+
+
+      virtual ~snapshot_writer(){}
 
       protected:
          virtual void write_start_section( const std::string& section_name ) = 0;
@@ -302,7 +305,7 @@ namespace eosio { namespace chain {
          void write_start_section( const std::string& section_name ) override;
          void write_row( const detail::abstract_snapshot_row_writer& row_writer ) override;
          void write_end_section( ) override;
-         void finalize();
+         void finalize() override;
 
       private:
          fc::mutable_variant_object& snapshot;
@@ -334,7 +337,7 @@ namespace eosio { namespace chain {
          void write_start_section( const std::string& section_name ) override;
          void write_row( const detail::abstract_snapshot_row_writer& row_writer ) override;
          void write_end_section( ) override;
-         void finalize();
+         void finalize() override;
 
          static const uint32_t magic_number = 0x30510550;
 
@@ -373,7 +376,7 @@ namespace eosio { namespace chain {
          void write_start_section( const std::string& section_name ) override;
          void write_row( const detail::abstract_snapshot_row_writer& row_writer ) override;
          void write_end_section( ) override;
-         void finalize();
+         void finalize() override;
 
       private:
          fc::sha256::encoder&  enc;
