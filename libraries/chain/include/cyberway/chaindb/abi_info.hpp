@@ -48,6 +48,10 @@ namespace cyberway { namespace chaindb {
             return nullptr;
         }
 
+        const fc::flat_map<table_name_t, table_def>& tables() const {
+            return table_map_;
+        }
+
         const index_def* find_index(const table_def& table, const index_name_t index) const {
             for (auto& idx: table.indexes) if (index == idx.name.value) {
                 return &idx;

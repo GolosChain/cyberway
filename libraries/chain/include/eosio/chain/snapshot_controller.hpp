@@ -30,9 +30,14 @@ namespace eosio { namespace chain {
     private:
         void dump_accounts();
         void dump_undo_state() const;
+        void dump_contract_tables(const cyberway::chaindb::abi_info& abi) const;
+        void dump_table(const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi) const;
         void restore_accounts();
         void restore_undo_state();
         void insert_undo(cyberway::chaindb::service_state service, fc::variant value);
+        void restore_contract(const cyberway::chaindb::abi_info& abi);
+        void restore_table(const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi);
+        void restore_object(cyberway::chaindb::reflectable_service_state service, bytes bytes, const cyberway::chaindb::table_name& table, const cyberway::chaindb::abi_info& abi);
         void insert_object(cyberway::chaindb::service_state service, fc::variant value, cyberway::chaindb::table_name_t table, account_name code);
 
     private:

@@ -21,6 +21,15 @@ namespace eosio { namespace chain {
 
         const std::string ACCOUNTS_TABLE_SECTION = "account_table";
         const std::string UNDO_TABLE_SECTION = "undo_table";
+
+
+        bool skip_processing_table(cyberway::chaindb::table_name_t table) {
+            return table == UNDO_TABLE || table == account_table::table_name();
+        }
+
+        bool skip_processing_table(account_name code, cyberway::chaindb::table_name_t table) {
+            return cyberway::chaindb::is_system_code(code) && (skip_processing_table(table));
+        }
     }
 
     snapshot_controller::snapshot_controller(cyberway::chaindb::chaindb_controller& chaindb_controller,
@@ -38,7 +47,12 @@ namespace eosio { namespace chain {
         this->writer = std::move(writer);
 
         dump_accounts();
+
         dump_undo_state();
+
+        for (const auto& abi : abies) {
+           dump_contract_tables(abi.second);
+        }
         this->writer->finalize();
     }
 
@@ -83,6 +97,32 @@ namespace eosio { namespace chain {
             }
         });
     }
+
+    void snapshot_controller::dump_contract_tables(const cyberway::chaindb::abi_info& abi) const {
+       for (const auto& table : abi.tables()) {
+           if (skip_processing_table(abi.code(), table.first)) {
+               continue;
+           }
+           dump_table(table.second, abi);
+       }
+    }
+
+    void snapshot_controller::dump_table(const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi) const {
+        const cyberway::chaindb::index_request request = {abi.code(), config::ignore_scope_account, table.name, abi.find_pk_index(table)->name};
+
+        writer->write_section(abi.code().to_string() + "_" + table.name.to_string(), [&, this](auto& section){
+            auto begin = chaindb_controller.begin(request);
+            const auto end = chaindb_controller.end(request);
+            for (cyberway::chaindb::primary_key_t key = begin.pk; key != end.pk; key = chaindb_controller.next({abi.code(), begin.cursor})) {
+                auto object = chaindb_controller.object_at_cursor({abi.code(), begin.cursor});
+                const auto serialized = chaindb_controller.serialize(abi, object);
+
+                section.add_row(cyberway::chaindb::reflectable_service_state(object.service));
+                section.add_row(serialized);
+            }
+        });
+    }
+
     uint32_t snapshot_controller::read_snapshot(std::unique_ptr<snapshot_reader> reader) {
         this->reader = std::move(reader);
         this->reader->validate();
@@ -90,6 +130,10 @@ namespace eosio { namespace chain {
         restore_accounts();
 
         restore_undo_state();
+
+        for (const auto& abi : abies) {
+           restore_contract(abi.second);
+        }
 
         return 0;
     }
@@ -157,6 +201,45 @@ namespace eosio { namespace chain {
         const auto code = abies.at(config::system_account_name).code();
 
         insert_object(std::move(service), std::move(value), UNDO_TABLE, code);
+    }
+
+    void snapshot_controller::restore_contract(const cyberway::chaindb::abi_info& abi) {
+        for (const auto& table : abi.tables()) {
+            if (skip_processing_table(abi.code(), table.first)) {
+                continue;
+            }
+            restore_table(table.second, abi);
+        }
+    }
+
+    void snapshot_controller::restore_table(const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi) {
+        reader->read_section(abi.code().to_string() + "_" + table.name.to_string(), [&, this] (auto& section) {
+            if (section.empty()) {
+                return;
+            }
+
+            bool has_more = false;
+
+            do {
+               cyberway::chaindb::reflectable_service_state service;
+               section.read_row(service);
+
+               bytes bytes;
+               has_more = section.read_row(bytes);
+
+               restore_object(std::move(service), std::move(bytes), table.name, abi);
+            } while(has_more);
+        });
+        chaindb_controller.apply_all_changes();
+    }
+
+    void snapshot_controller::restore_object(cyberway::chaindb::reflectable_service_state service,
+                                             bytes bytes,
+                                             const cyberway::chaindb::table_name& table,
+                                             const cyberway::chaindb::abi_info& abi) {
+        auto value = chaindb_controller.deserialize({service.code, service.scope, service.table}, abi, bytes);
+
+        insert_object(service, value, table, abi.code());
     }
 
     void snapshot_controller::insert_object(cyberway::chaindb::service_state service,
