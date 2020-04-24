@@ -189,7 +189,7 @@ namespace eosio { namespace chain {
          virtual void write_end_section() = 0;
    };
 
-   using snapshot_writer_ptr = std::shared_ptr<snapshot_writer>;
+   using snapshot_writer_ptr = std::unique_ptr<snapshot_writer>;
 
    namespace detail {
       struct abstract_snapshot_row_reader {
@@ -326,7 +326,7 @@ namespace eosio { namespace chain {
          virtual void clear_section() = 0;
    };
 
-   using snapshot_reader_ptr = std::shared_ptr<snapshot_reader>;
+   using snapshot_reader_ptr = std::unique_ptr<snapshot_reader>;
 
    class variant_snapshot_writer : public snapshot_writer {
       public:

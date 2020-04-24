@@ -420,7 +420,7 @@ struct controller_impl {
       replay_head_time.reset();
    }
 
-   void init(std::function<bool()> shutdown, const snapshot_reader_ptr& snapshot) {
+   void init(std::function<bool()> shutdown, snapshot_reader_ptr snapshot) {
 
       bool report_integrity_hash = !!snapshot;
       bool initialized = false;
@@ -537,7 +537,7 @@ struct controller_impl {
        // TODO: Removed by CyberWay
    }
 
-   void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
+   void add_to_snapshot(snapshot_writer_ptr snapshot ) const {
       // TODO: Removed by CyberWay
 
       authorization.add_to_snapshot(snapshot);
@@ -555,8 +555,8 @@ struct controller_impl {
 
    sha256 calculate_integrity_hash() const {
       sha256::encoder enc;
-      auto hash_writer = std::make_shared<integrity_hash_snapshot_writer>(enc);
-      add_to_snapshot(hash_writer);
+      auto hash_writer = std::make_unique<integrity_hash_snapshot_writer>(enc);
+      add_to_snapshot(std::move(hash_writer));
       hash_writer->finalize();
 
       return enc.result();
@@ -2018,7 +2018,7 @@ void controller::add_indices() {
    my->add_indices();
 }
 
-void controller::startup( std::function<bool()> shutdown, const snapshot_reader_ptr& snapshot ) {
+void controller::startup( std::function<bool()> shutdown, snapshot_reader_ptr snapshot ) {
    my->head = my->fork_db.head();
 // TODO: Removed by CyberWay
 //   if( snapshot ) {
@@ -2030,7 +2030,7 @@ void controller::startup( std::function<bool()> shutdown, const snapshot_reader_
    }
 
    try {
-      my->init(shutdown, snapshot);
+      my->init(shutdown, std::move(snapshot));
    } catch (boost::interprocess::bad_alloc& e) {
       if ( snapshot )
          elog( "db storage not configured to have enough storage for the provided snapshot, please increase and retry snapshot" );
@@ -2230,9 +2230,9 @@ sha256 controller::calculate_integrity_hash()const { try {
    return my->calculate_integrity_hash();
 } FC_LOG_AND_RETHROW() }
 
-void controller::write_snapshot( const snapshot_writer_ptr& snapshot ) const {
+void controller::write_snapshot(snapshot_writer_ptr snapshot ) {
    EOS_ASSERT( !my->pending, block_validate_exception, "cannot take a consistent snapshot with a pending block" );
-   return my->add_to_snapshot(snapshot);
+   return my->add_to_snapshot(std::move(snapshot));
 }
 
 void controller::pop_block() {
