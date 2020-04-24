@@ -17,6 +17,7 @@
 #include <eosio/chain/resource_limits.hpp>
 #include <eosio/chain/stake.hpp>
 #include <eosio/chain/thread_utils.hpp>
+#include <eosio/chain/snapshot_controller.hpp>
 
 #include <chainbase/chainbase.hpp>
 #include <fc/io/json.hpp>
@@ -425,12 +426,11 @@ struct controller_impl {
       bool report_integrity_hash = !!snapshot;
       bool initialized = false;
 
-      EOS_ASSERT( !snapshot, fork_database_exception, "Snapshot not supported");
       if (snapshot) {
-         EOS_ASSERT( !head, fork_database_exception, "" );
-         snapshot->validate();
 
-         read_from_snapshot( snapshot );
+         chaindb.drop_db();
+
+         snapshot_head_block = snapshot_controller(chaindb, resource_limits, fork_db, head, conf.genesis).read_snapshot(std::move(snapshot));
 
          auto end = blog.read_head();
          if( !end ) {
@@ -529,35 +529,11 @@ struct controller_impl {
 //      db.undo_all();
 //   }
 
-   void add_contract_tables_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
-       // TODO: Removed by CyberWay
-   }
-
-   void read_contract_tables_from_snapshot( const snapshot_reader_ptr& snapshot ) {
-       // TODO: Removed by CyberWay
-   }
-
-   void add_to_snapshot(snapshot_writer_ptr snapshot ) const {
-      // TODO: Removed by CyberWay
-
-      authorization.add_to_snapshot(snapshot);
-      resource_limits.add_to_snapshot(snapshot);
-   }
-
-   void read_from_snapshot( const snapshot_reader_ptr& snapshot ) {
-      // TODO: Removed by CyberWay
-
-      authorization.read_from_snapshot(snapshot);
-      resource_limits.read_from_snapshot(snapshot);
-
-      set_revision( head->block_num );
-   }
-
-   sha256 calculate_integrity_hash() const {
+   sha256 calculate_integrity_hash() {
       sha256::encoder enc;
       auto hash_writer = std::make_unique<integrity_hash_snapshot_writer>(enc);
-      add_to_snapshot(std::move(hash_writer));
-      hash_writer->finalize();
+
+      snapshot_controller(chaindb, resource_limits, fork_db, head, conf.genesis).write_snapshot(std::move(hash_writer));
 
       return enc.result();
    }
@@ -2232,7 +2208,7 @@ sha256 controller::calculate_integrity_hash()const { try {
 
 void controller::write_snapshot(snapshot_writer_ptr snapshot ) {
    EOS_ASSERT( !my->pending, block_validate_exception, "cannot take a consistent snapshot with a pending block" );
-   return my->add_to_snapshot(std::move(snapshot));
+   snapshot_controller(my->chaindb, my->resource_limits, my->fork_db, my->head, my->conf.genesis).write_snapshot(std::move(snapshot));
 }
 
 void controller::pop_block() {
