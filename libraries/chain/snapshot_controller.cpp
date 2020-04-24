@@ -46,6 +46,14 @@ namespace eosio { namespace chain {
     void snapshot_controller::write_snapshot(std::unique_ptr<snapshot_writer> writer) {
         this->writer = std::move(writer);
 
+        this->writer->write_section<block_state>([this]( auto &section ){
+           section.add_row(*fork_db.head());
+        });
+
+        this->writer->write_section<genesis_state>([this]( auto &section ){
+           section.add_row(genesis);
+        });
+
         dump_accounts();
 
         dump_undo_state();
@@ -127,6 +135,12 @@ namespace eosio { namespace chain {
         this->reader = std::move(reader);
         this->reader->validate();
 
+        const auto snapshot_head_block = restore_forkdb();
+
+        this->reader->read_section<genesis_state>([this]( auto &section ){
+           section.read_row(genesis);
+        });
+
         restore_accounts();
 
         restore_undo_state();
@@ -135,7 +149,24 @@ namespace eosio { namespace chain {
            restore_contract(abi.second);
         }
 
-        return 0;
+        return snapshot_head_block;
+    }
+
+    uint32_t snapshot_controller::restore_forkdb() {
+        uint32_t snapshot_head_block;
+        reader->read_section<block_state>([&, this]( auto &section ){
+           block_header_state head_header_state;
+           section.read_row(head_header_state);
+
+           auto head_state = std::make_shared<block_state>(head_header_state);
+           fork_db.set(head_state);
+           fork_db.set_validity(head_state, true);
+           fork_db.mark_in_current_chain(head_state, true);
+
+           head = head_state;
+           snapshot_head_block = head->block_num;
+        });
+        return snapshot_head_block;
     }
 
     void snapshot_controller::restore_accounts() {

@@ -32,6 +32,8 @@ namespace eosio { namespace chain {
         void dump_undo_state() const;
         void dump_contract_tables(const cyberway::chaindb::abi_info& abi) const;
         void dump_table(const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi) const;
+
+        uint32_t restore_forkdb();
         void restore_accounts();
         void restore_undo_state();
         void insert_undo(cyberway::chaindb::service_state service, fc::variant value);
