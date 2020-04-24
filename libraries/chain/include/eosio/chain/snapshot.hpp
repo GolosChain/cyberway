@@ -4,11 +4,14 @@
  */
 #pragma once
 
+#include <ostream>
+
+#include <boost/core/demangle.hpp>
+
+#include <fc/variant_object.hpp>
+
 #include <eosio/chain/database_utils.hpp>
 #include <eosio/chain/exceptions.hpp>
-#include <fc/variant_object.hpp>
-#include <boost/core/demangle.hpp>
-#include <ostream>
 
 namespace eosio { namespace chain {
    /**
@@ -98,9 +101,7 @@ namespace eosio { namespace chain {
          }
 
          fc::variant to_variant() const override {
-            variant var;
-            fc::to_variant(data, var);
-            return var;
+           return fc::variant(data);
          }
 
          std::string row_type_name() const override {
@@ -109,6 +110,35 @@ namespace eosio { namespace chain {
 
          const T& data;
       };
+
+    template<>
+    struct snapshot_row_writer<fc::variant> : abstract_snapshot_row_writer {
+       explicit snapshot_row_writer( const fc::variant& data )
+       :data(data) {}
+
+       template<typename DataStream>
+       void write_stream(DataStream& out) const {
+          fc::raw::pack(out, data);
+       }
+
+       void write(ostream_wrapper& out) const override {
+          write_stream(out);
+       }
+
+       void write(fc::sha256::encoder& out) const override {
+          write_stream(out);
+       }
+
+       fc::variant to_variant() const override {
+          return data;
+       }
+
+      std::string row_type_name() const override {
+          return boost::core::demangle( typeid( fc::variant ).name() );
+       }
+
+       const fc::variant& data;
+    };
 
       template<typename T>
       snapshot_row_writer<T> make_row_writer( const T& data) {

@@ -29,7 +29,11 @@ namespace eosio { namespace chain {
 
     private:
         void dump_accounts();
+        void dump_undo_state() const;
         void restore_accounts();
+        void restore_undo_state();
+        void insert_undo(cyberway::chaindb::service_state service, fc::variant value);
+        void insert_object(cyberway::chaindb::service_state service, fc::variant value, cyberway::chaindb::table_name_t table, account_name code);
 
     private:
         cyberway::chaindb::chaindb_controller& chaindb_controller;

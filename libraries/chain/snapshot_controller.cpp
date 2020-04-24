@@ -16,7 +16,11 @@ enum class undo_data_type {
 namespace eosio { namespace chain {
 
     namespace {
+        const cyberway::chaindb::table_name_t UNDO_TABLE = table_name("undo").value;
+        const cyberway::chaindb::table_name_t UNDO_PRIMARY_INDEX = index_name("primary").value;
+
         const std::string ACCOUNTS_TABLE_SECTION = "account_table";
+        const std::string UNDO_TABLE_SECTION = "undo_table";
     }
 
     snapshot_controller::snapshot_controller(cyberway::chaindb::chaindb_controller& chaindb_controller,
@@ -34,6 +38,7 @@ namespace eosio { namespace chain {
         this->writer = std::move(writer);
 
         dump_accounts();
+        dump_undo_state();
         this->writer->finalize();
     }
 
@@ -48,11 +53,43 @@ namespace eosio { namespace chain {
         });
     }
 
+    void snapshot_controller::dump_undo_state() const {
+        const cyberway::chaindb::index_request request = {config::system_account_name, config::ignore_scope_account, UNDO_TABLE, UNDO_PRIMARY_INDEX};
+
+        writer->write_section(UNDO_TABLE_SECTION, [&] (auto& section) {
+            auto begin = chaindb_controller.begin(request);
+            const auto end = chaindb_controller.end(request);
+            for (cyberway::chaindb::primary_key_t key = begin.pk; key != end.pk; key = chaindb_controller.next({abies.at(config::system_account_name).code(), begin.cursor})) {
+                const auto object = chaindb_controller.object_at_cursor({abies.at(config::system_account_name).code(), begin.cursor});
+
+                section.add_row(cyberway::chaindb::reflectable_service_state(object.service));
+
+                if (object.service.table == UNDO_TABLE && object.value.get_object().contains("npk")) {
+                    section.add_row(static_cast<int>(undo_data_type::undo_npk));
+                } else if (object.value.get_object().size() == 0) {
+                    section.add_row(static_cast<int>(undo_data_type::empty_object));
+                } else {
+                    section.add_row(static_cast<int>(undo_data_type::normal_object));
+
+                    const auto code = object.service.code == 0 ? config::system_account_name : object.service.code;
+
+                    const auto serialized = chaindb_controller.serialize(abies.at(code), object);
+                    section.add_row(serialized);
+
+                    continue;
+                }
+                section.add_row(object.value);
+
+            }
+        });
+    }
     uint32_t snapshot_controller::read_snapshot(std::unique_ptr<snapshot_reader> reader) {
         this->reader = std::move(reader);
         this->reader->validate();
 
         restore_accounts();
+
+        restore_undo_state();
 
         return 0;
     }
@@ -76,6 +113,59 @@ namespace eosio { namespace chain {
                  });
              } while(hasMore);
          });
+     }
+
+    void snapshot_controller::restore_undo_state() {
+        reader->read_section(UNDO_TABLE_SECTION, [&] (auto& section) {
+            if (section.empty()) {
+                return;
+            }
+
+            bool has_more = false;
+            do {
+               cyberway::chaindb::reflectable_service_state service;
+               section.read_row(service);
+
+               int restored_type;
+               section.read_row(restored_type);
+               const auto type = static_cast<undo_data_type>(restored_type);
+
+               if (type == undo_data_type::undo_npk || type == undo_data_type::empty_object) {
+                    fc::variant value;
+                    has_more = section.read_row(value);
+
+                    insert_undo(service, std::move(value));
+                }  else {
+                    bytes bytes;
+                    has_more = section.read_row(bytes);
+
+                    const auto code = service.code == 0 ? config::system_account_name : service.code;
+
+                    auto value = chaindb_controller.deserialize({service.code, service.scope, service.table}, abies.at(code), bytes);
+
+                    insert_undo(service, std::move(value));
+                }
+
+            } while(has_more);
+
+        });
+
+        chaindb_controller.apply_all_changes();
+    }
+
+    void snapshot_controller::insert_undo(cyberway::chaindb::service_state service, fc::variant value) {
+        const auto code = abies.at(config::system_account_name).code();
+
+        insert_object(std::move(service), std::move(value), UNDO_TABLE, code);
+    }
+
+    void snapshot_controller::insert_object(cyberway::chaindb::service_state service,
+                                            fc::variant value,
+                                            cyberway::chaindb::table_name_t table,
+                                            account_name code) {
+
+        cyberway::chaindb::storage_payer_info payer(resource_limits, service.payer, service.payer, 0);
+        chaindb_controller.insert(table, code, {std::move(service), std::move(value)}, std::move(payer));
     }
 
 }} // namespace eosio::chain
