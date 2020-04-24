@@ -30,7 +30,7 @@ namespace eosio { namespace chain {
          using value_type = std::decay_t<T>;
          using snapshot_type = value_type;
 
-         static const snapshot_type& to_snapshot_row( const value_type& value, const chainbase::database& ) {
+         static const snapshot_type& to_snapshot_row( const value_type& value) {
             return value;
          };
       };
@@ -121,8 +121,8 @@ namespace eosio { namespace chain {
          class section_writer {
             public:
                template<typename T>
-               void add_row( const T& row, const chainbase::database& db ) {
-                  _writer.write_row(detail::make_row_writer(detail::snapshot_row_traits<T>::to_snapshot_row(row, db)));
+               void add_row( const T& row) {
+                  _writer.write_row(detail::make_row_writer(detail::snapshot_row_traits<T>::to_snapshot_row(row)));
                }
 
             private:

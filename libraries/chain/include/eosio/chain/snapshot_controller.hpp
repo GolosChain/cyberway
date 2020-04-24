@@ -27,6 +27,9 @@ namespace eosio { namespace chain {
 
         uint32_t read_snapshot(std::unique_ptr<snapshot_reader> reader);
 
+    private:
+        void dump_accounts();
+        void restore_accounts();
 
     private:
         cyberway::chaindb::chaindb_controller& chaindb_controller;
