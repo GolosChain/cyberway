@@ -79,8 +79,8 @@ void producer_api_plugin::plugin_startup() {
 // TODO: Removed By CyberWay
 //       CALL(producer, producer, get_integrity_hash,
 //            INVOKE_R_V(producer, get_integrity_hash), 201),
-//       CALL(producer, producer, create_snapshot,
-//            INVOKE_R_V(producer, create_snapshot), 201),
+       CALL(producer, producer, create_snapshot,
+            INVOKE_R_V(producer, create_snapshot), 201),
    });
 }
 
