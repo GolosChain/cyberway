@@ -430,16 +430,16 @@ struct controller_impl {
 
          chaindb.drop_db();
 
-         snapshot_head_block = snapshot_controller(chaindb, resource_limits, fork_db, head, conf.genesis).read_snapshot(std::move(snapshot));
+         snapshot_head_block = snapshot_controller(chaindb, resource_limits, fork_db, reversible_blocks, head, conf.genesis).read_snapshot(std::move(snapshot));
 
          auto end = blog.read_head();
          if( !end ) {
-            blog.reset( conf.genesis, signed_block_ptr(), head->block_num + 1 );
+            EOS_THROW(block_log_not_found, "Truncted block log not supported");
          } else if( end->block_num() > head->block_num ) {
             replay( shutdown );
          } else {
-            EOS_ASSERT( end->block_num() == head->block_num, fork_database_exception,
-                        "Block log is provided with snapshot but does not contain the head block from the snapshot" );
+            EOS_ASSERT(fork_db.get_child_block(end->id()), fork_database_exception,
+                        "Block log provided with snapshot has no blocks before frok db" );
          }
       } else {
          if( !head ) {
@@ -535,7 +535,7 @@ struct controller_impl {
       sha256::encoder enc;
       auto hash_writer = std::make_unique<integrity_hash_snapshot_writer>(enc);
 
-      snapshot_controller(chaindb, resource_limits, fork_db, head, conf.genesis).write_snapshot(std::move(hash_writer));
+      snapshot_controller(chaindb, resource_limits, fork_db, reversible_blocks, head, conf.genesis).write_snapshot(std::move(hash_writer));
 
       return enc.result();
    }
@@ -2207,7 +2207,7 @@ sha256 controller::calculate_integrity_hash()const { try {
 
 void controller::write_snapshot(snapshot_writer_ptr snapshot ) {
    EOS_ASSERT( !my->pending, block_validate_exception, "cannot take a consistent snapshot with a pending block" );
-   snapshot_controller(my->chaindb, my->resource_limits, my->fork_db, my->head, my->conf.genesis).write_snapshot(std::move(snapshot));
+   snapshot_controller(my->chaindb, my->resource_limits, my->fork_db, my->reversible_blocks, my->head, my->conf.genesis).write_snapshot(std::move(snapshot));
 }
 
 void controller::pop_block() {

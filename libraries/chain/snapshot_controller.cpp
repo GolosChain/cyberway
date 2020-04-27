@@ -6,6 +6,7 @@
 #include <eosio/chain/config.hpp>
 #include <eosio/chain/fork_database.hpp>
 #include <eosio/chain/snapshot_controller.hpp>
+#include <eosio/chain/reversible_block_object.hpp>
 
 enum class undo_data_type {
     normal_object,
@@ -21,7 +22,8 @@ namespace eosio { namespace chain {
 
         const std::string ACCOUNTS_TABLE_SECTION = "account_table";
         const std::string UNDO_TABLE_SECTION = "undo_table";
-
+        const std::string HEAD_BLOCK_SECTION = "head_id";
+        const std::string REVERS_DB_SECTION = "reverse_db";
 
         bool skip_processing_table(cyberway::chaindb::table_name_t table) {
             return table == UNDO_TABLE || table == account_table::table_name();
@@ -35,22 +37,24 @@ namespace eosio { namespace chain {
     snapshot_controller::snapshot_controller(cyberway::chaindb::chaindb_controller& chaindb_controller,
                                              resource_limits_manager& resource_limits,
                                              fork_database& fork_db,
+                                             chainbase::database& reversible_blocks,
                                              block_state_ptr& head,
                                              genesis_state& genesis) :
         chaindb_controller(chaindb_controller),
         resource_limits(resource_limits),
         fork_db(fork_db),
+        reversible_blocks(reversible_blocks),
         head(head),
         genesis(genesis) {}
 
     void snapshot_controller::write_snapshot(std::unique_ptr<snapshot_writer> writer) {
         this->writer = std::move(writer);
 
-        this->writer->write_section<block_state>([this]( auto &section ){
-           section.add_row(*fork_db.head());
-        });
+        dump_fork_db();
 
-        this->writer->write_section<genesis_state>([this]( auto &section ){
+        dump_reverse_db();
+
+        this->writer->write_section<genesis_state>([this]( auto &section ) {
            section.add_row(genesis);
         });
 
@@ -62,6 +66,31 @@ namespace eosio { namespace chain {
            dump_contract_tables(abi.second);
         }
         this->writer->finalize();
+    }
+
+    void snapshot_controller::dump_fork_db() {
+
+        this->writer->write_section(HEAD_BLOCK_SECTION, [this]( auto &section ){
+            section.add_row(*fork_db.head());
+        });
+
+        this->writer->write_section<block_state>([this]( auto &section ){
+            const auto forkdb_content = fork_db.content();
+            for (const auto block_state : forkdb_content) {
+                if (block_state->id != head->id) {
+                    section.add_row(*block_state);
+                }
+            }
+        });
+    }
+
+    void snapshot_controller::dump_reverse_db() {
+        this->writer->write_section(REVERS_DB_SECTION, [this]( auto &section ){
+            const auto& index = reversible_blocks.get_index<eosio::chain::reversible_block_index, eosio::chain::by_num>();
+            for (const auto& reversible_object : index) {
+                section.add_row(reversible_object);
+            }
+        });
     }
 
     void snapshot_controller::dump_accounts() {
@@ -137,6 +166,8 @@ namespace eosio { namespace chain {
 
         const auto snapshot_head_block = restore_forkdb();
 
+        restore_reverse_db();
+
         this->reader->read_section<genesis_state>([this]( auto &section ){
            section.read_row(genesis);
         });
@@ -154,19 +185,51 @@ namespace eosio { namespace chain {
 
     uint32_t snapshot_controller::restore_forkdb() {
         uint32_t snapshot_head_block;
-        reader->read_section<block_state>([&, this]( auto &section ){
-           block_header_state head_header_state;
-           section.read_row(head_header_state);
 
-           auto head_state = std::make_shared<block_state>(head_header_state);
-           fork_db.set(head_state);
-           fork_db.set_validity(head_state, true);
-           fork_db.mark_in_current_chain(head_state, true);
+        reader->read_section(HEAD_BLOCK_SECTION, [&, this]( auto &section ){
+            block_state block;
+            section.read_row(block);
 
-           head = head_state;
-           snapshot_head_block = head->block_num;
+            block_state_ptr head_state = std::make_shared<block_state>(block);
+
+            fork_db.set(head_state);
+            fork_db.set_validity(head_state, true);
+            fork_db.mark_in_current_chain(head_state, true);
+
+            head = head_state;
+            snapshot_head_block = head->block_num;
+
         });
+
+        reader->read_section<block_state>([this]( auto &section ){
+            bool has_more = false;
+            do {
+                if (section.empty()) {
+                    break;
+                }
+                block_state block;
+                has_more = section.read_row(block);
+                fork_db.add(std::make_shared<block_state>(block), true);
+            } while(has_more);
+        });
+
+
         return snapshot_head_block;
+    }
+
+    void snapshot_controller::restore_reverse_db() {
+        reader->read_section(REVERS_DB_SECTION, [this]( auto &section ){
+            bool has_more = false;
+            do {
+                if (section.empty()) {
+                    break;
+                }
+
+                reversible_blocks.create<reversible_block_object>( [&]( auto& rev_object) {
+                    has_more = section.read_row(rev_object);
+                });
+            } while(has_more);
+        });
     }
 
     void snapshot_controller::restore_accounts() {

@@ -20,6 +20,7 @@ namespace eosio { namespace chain {
         snapshot_controller(cyberway::chaindb::chaindb_controller& chaindb_controller,
                             resource_limits_manager& resource_limits,
                             fork_database& fork_db,
+                            chainbase::database& reversible_blocks,
                             block_state_ptr& head,
                             genesis_state& genesis);
 
@@ -28,12 +29,15 @@ namespace eosio { namespace chain {
         uint32_t read_snapshot(std::unique_ptr<snapshot_reader> reader);
 
     private:
+        void dump_fork_db();
+        void dump_reverse_db();
         void dump_accounts();
         void dump_undo_state() const;
         void dump_contract_tables(const cyberway::chaindb::abi_info& abi) const;
         void dump_table(const cyberway::chaindb::table_def& table, const cyberway::chaindb::abi_info& abi) const;
 
         uint32_t restore_forkdb();
+        void restore_reverse_db();
         void restore_accounts();
         void restore_undo_state();
         void insert_undo(cyberway::chaindb::service_state service, fc::variant value);
@@ -46,6 +50,7 @@ namespace eosio { namespace chain {
         cyberway::chaindb::chaindb_controller& chaindb_controller;
         resource_limits_manager& resource_limits;
         fork_database& fork_db;
+        chainbase::database& reversible_blocks;
         block_state_ptr& head;
         genesis_state& genesis;
 
