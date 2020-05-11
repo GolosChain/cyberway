@@ -682,12 +682,6 @@ abi_def eosio_contract_abi(abi_def eos_abi)
       }
    });
 
-   eos_abi.structs.emplace_back( struct_def {
-      "reqauth", "", {
-         {"from",      "account_name"}
-      }
-   });
-
    eos_abi.actions.push_back( action_def{name("newaccount"), "newaccount"} );
    eos_abi.actions.push_back( action_def{name("setcode"), "setcode"} );
    eos_abi.actions.push_back( action_def{name("setabi"), "setabi"} );
@@ -703,7 +697,6 @@ abi_def eosio_contract_abi(abi_def eos_abi)
    eos_abi.actions.push_back( action_def{name("onblock"), "onblock"} );
 
    eos_abi.actions.push_back( action_def{name("setparams"), "setparams"} );
-   eos_abi.actions.push_back( action_def{name("reqauth"), "reqauth"} );
 
    return eos_abi;
 }
