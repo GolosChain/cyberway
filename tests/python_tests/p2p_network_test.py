@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-import testUtils
+from testUtils import Utils
+from Cluster import Cluster
+from WalletMgr import WalletMgr
 import p2p_test_peers
 import impaired_network
 import lossy_network
@@ -22,17 +24,15 @@ DEFAULT_HOST=hosts[0]
 DEFAULT_PORT=ports[0]
 
 parser = argparse.ArgumentParser(add_help=False)
-Print=testUtils.Utils.Print
+Print=Utils.Print
 cmdError=Utils.cmdError
 errorExit=Utils.errorExit
 
 # Override default help argument so that only --help (and not -h) can call help
 parser.add_argument('-?', action='help', default=argparse.SUPPRESS,
                     help=argparse._('show this help message and exit'))
-parser.add_argument("--defproducera_prvt_key", type=str, help="defproducera private key.",
-                    default=testUtils.Cluster.defproduceraAccount.ownerPrivateKey)
-parser.add_argument("--defproducerb_prvt_key", type=str, help="defproducerb private key.",
-                    default=testUtils.Cluster.defproducerbAccount.ownerPrivateKey)
+parser.add_argument("--defproducera_prvt_key", type=str, help="defproducera private key.")
+parser.add_argument("--defproducerb_prvt_key", type=str, help="defproducerb private key.")
 parser.add_argument("--wallet_host", type=str, help="wallet host", default="localhost")
 parser.add_argument("--wallet_port", type=int, help="wallet port", default=8899)
 parser.add_argument("--impaired_network", help="test impaired network", action='store_true')
@@ -45,7 +45,7 @@ enableMongo=False
 defproduceraPrvtKey=args.defproducera_prvt_key
 defproducerbPrvtKey=args.defproducerb_prvt_key
 
-walletMgr=testUtils.WalletMgr(True, port=args.wallet_port, host=args.wallet_host)
+walletMgr=WalletMgr(True, port=args.wallet_port, host=args.wallet_host)
 
 if args.impaired_network:
     module = impaired_network.ImpairedNetwork()
@@ -56,7 +56,7 @@ elif args.stress_network:
 else:
     errorExit("one of impaired_network, lossy_network or stress_network must be set. Please also check peer configs in p2p_test_peers.py.")
 
-cluster=testUtils.Cluster(walletd=True, enableMongo=enableMongo, defproduceraPrvtKey=defproduceraPrvtKey, defproducerbPrvtKey=defproducerbPrvtKey, walletHost=args.wallet_host, walletPort=args.wallet_port)
+cluster=Cluster(walletd=True, enableMongo=enableMongo, defproduceraPrvtKey=defproduceraPrvtKey, defproducerbPrvtKey=defproducerbPrvtKey, walletHost=args.wallet_host, walletPort=args.wallet_port)
 
 print("BEGIN")
 
@@ -81,7 +81,7 @@ if args.not_kill_wallet == False:
 walletMgr.cleanup()
 
 print('creating account keys')
-accounts=testUtils.Cluster.createAccountKeys(3)
+accounts=Cluster.createAccountKeys(3)
 if accounts is None:
     errorExit("FAILURE - create keys")
 testeraAccount=accounts[0]
@@ -123,8 +123,8 @@ defproduceraWalletName="defproducera"
 Print("Creating wallet \"%s\"." % (defproduceraWalletName))
 defproduceraWallet=walletMgr.create(defproduceraWalletName)
 
-defproduceraAccount=testUtils.Cluster.defproduceraAccount
-# defproducerbAccount=testUtils.Cluster.defproducerbAccount
+defproduceraAccount=cluster.defproduceraAccount
+# defproducerbAccount=cluster.defproducerbAccount
 
 Print("Importing keys for account %s into wallet %s." % (defproduceraAccount.name, defproduceraWallet.name))
 if not walletMgr.importKey(defproduceraAccount, defproduceraWallet):
@@ -140,7 +140,7 @@ eosio.name = "cyber"
 Print("Info of each node:")
 for i in range(len(hosts)):
     node = node0
-    cmd="%s %s get info" % (testUtils.Utils.EosClientPath, node.endpointArgs)
+    cmd="%s %s get info" % (Utils.EosClientPath, node.endpointArgs)
     trans = node.runCmdReturnJson(cmd)
     Print("host %s: %s" % (hosts[i], trans))
 
