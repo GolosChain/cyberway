@@ -1729,3 +1729,8 @@ class Node(object):
         status="last getInfo returned None" if not self.infoValid else "at last call to getInfo"
         Utils.Print(" hbn   : %s (%s)" % (self.lastRetrievedHeadBlockNum, status))
         Utils.Print(" lib   : %s (%s)" % (self.lastRetrievedLIB, status))
+    
+    def getConnections(self, silentErrors=True, exitOnError=False, exitMsg=None, returnType=ReturnType.json):
+        cmd="curl %s/v1/net/connections" % (self.endpointHttp)
+        return self.sendCurlCmd(cmd, silentErrors=silentErrors, exitOnError=exitOnError, exitMsg=exitMsg, returnType=returnType)
+    
