@@ -25,6 +25,22 @@ namespace eosio { namespace chain {
         const std::string HEAD_BLOCK_SECTION = "head_id";
         const std::string REVERS_DB_SECTION = "reverse_db";
 
+        eosio::chain::struct_def USED_DGPO_ABI {
+              "dynamic_global_property_object", "", {
+                 {"id", "uint64"},
+                 {"global_action_seq", "uint64"}
+              }
+        };
+
+        eosio::chain::struct_def SERIALIZABLE_DGPO_ABI {
+              "dynamic_global_property_object", "", {
+                 {"id", "uint64"},
+                 {"global_action_sequence", "uint64"}
+              }
+        };
+
+
+
         bool skip_processing_table(cyberway::chaindb::table_name_t table) {
             return table == UNDO_TABLE || table == account_table::table_name();
         }
@@ -93,15 +109,30 @@ namespace eosio { namespace chain {
         });
     }
 
+    void fix_abi(cyberway::chaindb::abi_def& abi);
+
     void snapshot_controller::dump_accounts() {
         writer->write_section("account_table", [&] (auto& section) {
             table_utils<account_table>::walk(chaindb_controller, [&](const auto& account) {
                 if (!account.abi.empty()) {
-                    abies.emplace(std::make_pair<const cyberway::chaindb::account_name_t, const cyberway::chaindb::abi_info>(std::move(account.name.value), {account.name.value, account.get_abi()}));
+                    cyberway::chaindb::abi_def abi = account.get_abi();
+                    if (account.name.value == config::system_account_name) {
+                       fix_abi(abi);
+                    }
+
+                    abies.emplace(std::make_pair<const cyberway::chaindb::account_name_t, const cyberway::chaindb::abi_info>(std::move(account.name.value), {account.name.value, abi}));
                 }
                 section.add_row(account);
             });
         });
+    }
+
+    void fix_abi(cyberway::chaindb::abi_def& abi) {
+        auto dynamic_global_property = std::find(abi.structs.begin(), abi.structs.end(), USED_DGPO_ABI);
+
+        if (dynamic_global_property != abi.structs.end()) {
+            *dynamic_global_property = SERIALIZABLE_DGPO_ABI;
+        }
     }
 
     void snapshot_controller::dump_undo_state() const {
@@ -140,6 +171,7 @@ namespace eosio { namespace chain {
            if (skip_processing_table(abi.code(), table.first)) {
                continue;
            }
+
            dump_table(table.second, abi);
        }
     }
@@ -246,7 +278,11 @@ namespace eosio { namespace chain {
                  accounts.emplace(object.name, cyberway::chaindb::storage_payer_info(), [&](auto& value) {
                      value = object;
                      if (!value.abi.empty()) {
-                         abies.emplace(std::make_pair<const cyberway::chaindb::account_name_t, const cyberway::chaindb::abi_info>(value.name, {value.name, value.get_abi()}));
+                         auto abi = value.get_abi();
+                         if (value.name.value == config::system_account_name) {
+                            fix_abi(abi);
+                         }
+                         abies.emplace(std::make_pair<const cyberway::chaindb::account_name_t, const cyberway::chaindb::abi_info>(value.name, {value.name, abi}));
                      }
                  });
              } while(hasMore);

@@ -238,7 +238,7 @@ abi_def eosio_contract_abi(abi_def eos_abi)
    eos_abi.structs.emplace_back( eosio::chain::struct_def{
       "dynamic_global_property_object", "", {
          {"id", "uint64"},
-         {"global_action_sequence", "uint64"}
+         {"global_action_seq", "uint64"}
       }
    });
 
