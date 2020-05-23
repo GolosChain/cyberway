@@ -330,7 +330,7 @@ namespace cyberway { namespace chaindb {
             document sort;
             auto order = static_cast<int>(direction_);
 
-            if (!is_noscope_table(index) && !ignore_scope(index)) {
+            if (!is_noscope_table(index)) {
                 sort.append(kvp(names::scope_path, order));
             }
 
