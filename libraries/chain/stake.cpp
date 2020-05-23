@@ -185,7 +185,7 @@ void update_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::c
 }
 
 void recall_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::chaindb::storage_payer_info& storage, int64_t now,
-                    symbol_code token_code, account_name grantor_name, account_name recipient_name, int16_t pct) {
+                    symbol_code token_code, account_name grantor_name, account_name recipient_name, int16_t pct, bool zero_amount_allowed) {
                         
     EOS_ASSERT(1 <= pct && pct <= config::percent_100, transaction_exception, "pct must be between 0.01% and 100% (1-10000)");
     EOS_ASSERT((db.find<stake_param_object, by_id>(token_code.value)), transaction_exception, "no staking for token");
@@ -214,7 +214,7 @@ void recall_proxied(cyberway::chaindb::chaindb_controller& db, const cyberway::c
             ++grant_itr;
     }
     
-    EOS_ASSERT(amount > 0, transaction_exception, "amount to recall must be positive");
+    EOS_ASSERT(zero_amount_allowed || amount > 0, transaction_exception, "amount to recall must be positive");
     agents_table.modify(*grantor_as_agent, [&](auto& a) {
         a.balance += amount; //this agent can't be a candidate
         a.proxied -= amount;
