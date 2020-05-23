@@ -17,6 +17,7 @@
 #include <eosio/chain/resource_limits.hpp>
 #include <eosio/chain/stake.hpp>
 #include <eosio/chain/thread_utils.hpp>
+#include <eosio/chain/snapshot_controller.hpp>
 
 #include <chainbase/chainbase.hpp>
 #include <fc/io/json.hpp>
@@ -35,7 +36,7 @@ namespace eosio { namespace chain {
 using resource_limits::resource_limits_manager;
 using cyberway::chaindb::cursor_kind;
 
-using controller_index_set = index_set<
+using controller_index_set = table_set<
    account_table,
    account_sequence_table,
    global_property_table,
@@ -420,26 +421,25 @@ struct controller_impl {
       replay_head_time.reset();
    }
 
-   void init(std::function<bool()> shutdown, const snapshot_reader_ptr& snapshot) {
+   void init(std::function<bool()> shutdown, snapshot_reader_ptr snapshot) {
 
       bool report_integrity_hash = !!snapshot;
       bool initialized = false;
 
-      EOS_ASSERT( !snapshot, fork_database_exception, "Snapshot not supported");
       if (snapshot) {
-         EOS_ASSERT( !head, fork_database_exception, "" );
-         snapshot->validate();
 
-         read_from_snapshot( snapshot );
+         chaindb.drop_db();
+
+         snapshot_head_block = snapshot_controller(chaindb, resource_limits, fork_db, reversible_blocks, head, conf.genesis).read_snapshot(std::move(snapshot));
 
          auto end = blog.read_head();
          if( !end ) {
-            blog.reset( conf.genesis, signed_block_ptr(), head->block_num + 1 );
+            EOS_THROW(block_log_not_found, "Truncted block log not supported");
          } else if( end->block_num() > head->block_num ) {
             replay( shutdown );
          } else {
-            EOS_ASSERT( end->block_num() == head->block_num, fork_database_exception,
-                        "Block log is provided with snapshot but does not contain the head block from the snapshot" );
+            EOS_ASSERT(fork_db.get_child_block(end->id()), fork_database_exception,
+                        "Block log provided with snapshot has no blocks before frok db" );
          }
       } else {
          if( !head ) {
@@ -455,6 +455,8 @@ struct controller_impl {
             report_integrity_hash = true;
          }
       }
+
+      chain_id = conf.genesis.compute_chain_id();
 
       if( shutdown() ) return;
 
@@ -516,11 +518,11 @@ struct controller_impl {
    void add_indices() {
       reversible_blocks.add_index<reversible_block_index>();
 
-      controller_index_set::add_indices(chaindb);
+      controller_index_set::add_tables(chaindb);
 
       authorization.add_indices();
       resource_limits.add_indices();
-      stake::stake_index_set::add_indices(chaindb);
+      stake::stake_index_set::add_tables(chaindb);
    }
 
 // TODO: removed by CyberWay
@@ -529,35 +531,11 @@ struct controller_impl {
 //      db.undo_all();
 //   }
 
-   void add_contract_tables_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
-       // TODO: Removed by CyberWay
-   }
-
-   void read_contract_tables_from_snapshot( const snapshot_reader_ptr& snapshot ) {
-       // TODO: Removed by CyberWay
-   }
-
-   void add_to_snapshot( const snapshot_writer_ptr& snapshot ) const {
-      // TODO: Removed by CyberWay
-
-      authorization.add_to_snapshot(snapshot);
-      resource_limits.add_to_snapshot(snapshot);
-   }
-
-   void read_from_snapshot( const snapshot_reader_ptr& snapshot ) {
-      // TODO: Removed by CyberWay
-
-      authorization.read_from_snapshot(snapshot);
-      resource_limits.read_from_snapshot(snapshot);
-
-      set_revision( head->block_num );
-   }
-
-   sha256 calculate_integrity_hash() const {
+   sha256 calculate_integrity_hash() {
       sha256::encoder enc;
-      auto hash_writer = std::make_shared<integrity_hash_snapshot_writer>(enc);
-      add_to_snapshot(hash_writer);
-      hash_writer->finalize();
+      auto hash_writer = std::make_unique<integrity_hash_snapshot_writer>(enc);
+
+      snapshot_controller(chaindb, resource_limits, fork_db, reversible_blocks, head, conf.genesis).write_snapshot(std::move(hash_writer));
 
       return enc.result();
    }
@@ -2018,19 +1996,16 @@ void controller::add_indices() {
    my->add_indices();
 }
 
-void controller::startup( std::function<bool()> shutdown, const snapshot_reader_ptr& snapshot ) {
+void controller::startup( std::function<bool()> shutdown, snapshot_reader_ptr snapshot ) {
    my->head = my->fork_db.head();
-// TODO: Removed by CyberWay
-//   if( snapshot ) {
-//      ilog( "Starting initialization from snapshot, this may take a significant amount of time" );
-//   }
-//   else
-   if( !my->head ) {
+   if( snapshot ) {
+      ilog( "Starting initialization from snapshot, this may take a significant amount of time" );
+   } else if( !my->head ) {
       elog( "No head block in fork db, perhaps we need to replay" );
    }
 
    try {
-      my->init(shutdown, snapshot);
+      my->init(shutdown, std::move(snapshot));
    } catch (boost::interprocess::bad_alloc& e) {
       if ( snapshot )
          elog( "db storage not configured to have enough storage for the provided snapshot, please increase and retry snapshot" );
@@ -2230,9 +2205,9 @@ sha256 controller::calculate_integrity_hash()const { try {
    return my->calculate_integrity_hash();
 } FC_LOG_AND_RETHROW() }
 
-void controller::write_snapshot( const snapshot_writer_ptr& snapshot ) const {
+void controller::write_snapshot(snapshot_writer_ptr snapshot ) {
    EOS_ASSERT( !my->pending, block_validate_exception, "cannot take a consistent snapshot with a pending block" );
-   return my->add_to_snapshot(snapshot);
+   snapshot_controller(my->chaindb, my->resource_limits, my->fork_db, my->reversible_blocks, my->head, my->conf.genesis).write_snapshot(std::move(snapshot));
 }
 
 void controller::pop_block() {

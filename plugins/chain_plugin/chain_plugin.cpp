@@ -176,8 +176,7 @@ public:
    //txn_msg_rate_limits              rate_limits;
    fc::optional<vm_type>            wasm_runtime;
    fc::microseconds                 abi_serializer_max_time_ms;
-   //fc::optional<bfs::path>          snapshot_path;   // TODO: removed by CyberWay
-
+   fc::optional<bfs::path>          snapshot_path;
 
    // retained references to channels for easy publication
    channels::pre_accepted_block::channel_type&     pre_accepted_block_channel;
@@ -736,36 +735,22 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       }
 
       if (options.count( "snapshot" )) {
-         EOS_ASSERT( false, plugin_config_exception, "Snapshot options disabled");
-// TODO: removed by CyberWay
-//         my->snapshot_path = options.at( "snapshot" ).as<bfs::path>();
-//         EOS_ASSERT( fc::exists(*my->snapshot_path), plugin_config_exception,
-//                     "Cannot load snapshot, ${name} does not exist", ("name", my->snapshot_path->generic_string()) );
-//
-//         // recover genesis information from the snapshot
-//         auto infile = std::ifstream(my->snapshot_path->generic_string(), (std::ios::in | std::ios::binary));
-//         auto reader = std::make_shared<istream_snapshot_reader>(infile);
-//         reader->validate();
-//         reader->read_section<genesis_state>([this]( auto &section ){
-//            section.read_row(my->chain_config->genesis);
-//         });
-//         infile.close();
-//
-//         EOS_ASSERT( options.count( "genesis-json" ) == 0 &&  options.count( "genesis-timestamp" ) == 0,
-//                 plugin_config_exception,
-//                 "--snapshot is incompatible with --genesis-json and --genesis-timestamp as the snapshot contains genesis information");
-//
-//         auto shared_mem_path = my->chain_config->state_dir / "shared_memory.bin";
-//         EOS_ASSERT( !fc::exists(shared_mem_path),
-//                 plugin_config_exception,
-//                 "Snapshot can only be used to initialize an empty database." );
-//
-//         if( fc::is_regular_file( my->blocks_dir / "blocks.log" )) {
-//            auto log_genesis = block_log::extract_genesis_state(my->blocks_dir);
-//            EOS_ASSERT( log_genesis.compute_chain_id() == my->chain_config->genesis.compute_chain_id(),
-//                    plugin_config_exception,
-//                    "Genesis information in blocks.log does not match genesis information in the snapshot");
-//         }
+
+         my->snapshot_path = options.at( "snapshot" ).as<bfs::path>();
+
+         EOS_ASSERT( fc::exists(*my->snapshot_path), plugin_config_exception,
+                            "Cannot load snapshot, ${name} does not exist", ("name", my->snapshot_path->generic_string()));
+
+
+         EOS_ASSERT( options.count( "genesis-json" ) == 0 &&  options.count( "genesis-timestamp" ) == 0,
+                        plugin_config_exception,
+                        "--snapshot is incompatible with --genesis-json and --genesis-timestamp as the snapshot contains genesis information");
+
+         auto forkdb_path = my->chain_config->state_dir / config::forkdb_filename;
+
+         EOS_ASSERT( !fc::exists(forkdb_path ),
+            plugin_config_exception,
+            "Snapshot can only be used to initialize an empty database." );
 
       } else {
          bfs::path genesis_file;
@@ -852,8 +837,6 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
          std::cout << "Genesis data HASH: " << h.str() << std::endl;
       }
       my->chain.emplace( *my->chain_config );
-      my->chain_id.emplace( my->chain->get_chain_id());
-      std::cout << "chain_id: " << my->chain_id->str() << std::endl;
 
       if ( options.at("skip-bad-blocks-check").as<bool>() ) {
          my->chain->skip_bad_blocks_check();
@@ -945,16 +928,19 @@ void chain_plugin::plugin_startup()
    }
    try {
       auto shutdown = [](){ return app().is_quiting(); };
-// TODO: removed by CyberWay
-//      if (my->snapshot_path) {
-//         auto infile = std::ifstream(my->snapshot_path->generic_string(), (std::ios::in | std::ios::binary));
-//         auto reader = std::make_shared<istream_snapshot_reader>(infile);
-//         my->chain->startup(shutdown, reader);
-//         infile.close();
-//      } else {
-//         my->chain->startup(shutdown);
-//      }
-      my->chain->startup(shutdown);
+      if (my->snapshot_path) {
+         auto infile = std::ifstream(my->snapshot_path->generic_string(), (std::ios::in | std::ios::binary));
+
+         auto reader = std::make_unique<istream_snapshot_reader>(infile);
+         my->chain->startup(shutdown, std::move(reader));
+
+         infile.close();
+      } else {
+         my->chain->startup(shutdown);
+      }
+
+      my->chain_id.emplace( my->chain->get_chain_id());
+      ilog("Chain_plugin received chain_id: ${id}", ("id", my->chain_id->str()));
 
       if (my->revert_to_lib) {
          auto lib = std::max(my->chain->last_irreversible_block_num(), uint32_t(1));

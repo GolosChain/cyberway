@@ -45,4 +45,8 @@ namespace cyberway { namespace chaindb {
         return false;
     }
 
+    inline bool ignore_scope(const table_info& info) {
+        return info.scope == eosio::chain::config::ignore_scope_account;
+    }
+
 }  } // namespace cyberway::chaindb

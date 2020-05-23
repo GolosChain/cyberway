@@ -17,7 +17,7 @@ using namespace stake;
 
 using cyberway::chaindb::cursor_kind;
 
-using resource_index_set = index_set<
+using resource_index_set = table_set<
    resource_usage_table,
    resource_limits_state_table,
    resource_limits_config_table
@@ -51,7 +51,7 @@ void resource_limits_state_object::update_virtual_limit(const resource_limits_co
 }
 
 void resource_limits_manager::add_indices() {
-   resource_index_set::add_indices(_chaindb);
+   resource_index_set::add_tables(_chaindb);
 }
 
 void resource_limits_manager::initialize_database() {
