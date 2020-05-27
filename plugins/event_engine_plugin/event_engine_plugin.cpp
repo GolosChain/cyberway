@@ -62,24 +62,25 @@ public:
     bool is_handled_contract(const account_name n) const;
 
 private:
+    void send_stream_data(std::string stream_str) {
+        boost::system::error_code error;
+        boost::asio::write(socket, boost::asio::buffer(stream_str), error);
+
+        if (error) {
+            elog("event engine message sending error: ", ("e", error.message()));
+            appbase::app().quit();
+        }
+    }
+
     template<typename Msg>
     void send_message(const Msg& msg) {
         auto stream_str = fc::json::to_string(fc::variant(msg)) + "\n";
+        // wait for first message with a block
+        //   and save messages in the buffer
         if (!genesis_files.empty()) {
             init_buffer.append(stream_str);
         } else {
-            if (!init_buffer.empty()) {
-                init_buffer.append(stream_str);
-                stream_str = std::move(init_buffer);
-            }
-
-            boost::system::error_code error;
-            boost::asio::write(socket, boost::asio::buffer(stream_str), error);
-
-            if (error) {
-                elog("event engine message sending error: ", ("e", error.message()));
-                appbase::app().quit();
-            }
+            send_stream_data(std::move(stream_str));
         }
     }
 
@@ -182,6 +183,27 @@ event_engine_plugin_impl::~event_engine_plugin_impl() {
 
 void event_engine_plugin_impl::accepted_block( const chain::block_state_ptr& state) {
     ilog("Accepted block: ${block_num}", ("block_num", state->block_num));
+
+    // OK, we receives first message with a block
+    if (!genesis_files.empty()) {
+        // clear list of genesis files
+        auto files = std::move(genesis_files);
+        // the block with number 1 is a genesis
+        if (state->block_num == 2) {
+            send_genesis_start();
+            for (const auto& file: files) try {
+                send_genesis_file(file);
+            } catch(const std::exception& e) {
+                elog("failed to connect to read file ${f}: ${e}", ("f", file.c_str())("e", e.what()));
+                appbase::app().quit();
+            }
+            send_genesis_end();
+        }
+    }
+
+    if (!init_buffer.empty()) {
+        send_stream_data(std::move(init_buffer));
+    }
 
     AcceptedBlockMessage msg(MsgChannel::Blocks, BlockMessage::AcceptBlock, state);
     send_message(msg);
@@ -362,18 +384,7 @@ void event_engine_plugin::plugin_initialize(const variables_map& options) {
     FC_LOG_AND_RETHROW()
 }
 
-void event_engine_plugin::plugin_startup() {
-    auto& chain = app().find_plugin<chain_plugin>()->chain();
-    // Make the magic happen
-    if (chain.head_block_num() == 1) {
-        auto genesis_files = std::move(my->genesis_files);
-        my->send_genesis_start();
-        for(const auto& file: genesis_files) {
-            my->send_genesis_file(file);
-        }
-        my->send_genesis_end();
-    }
-}
+void event_engine_plugin::plugin_startup() { }
 
 void event_engine_plugin::plugin_shutdown() {
    // OK, that's enough magic

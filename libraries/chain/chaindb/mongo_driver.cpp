@@ -364,6 +364,7 @@ namespace cyberway { namespace chaindb {
                 opts.max(bound.view());
             }
 
+
             _detail::auto_reconnect([&]() {
                 skipped_pk_tree_.clear();
                 source_.emplace(_detail::get_db_table(driver_, index).find({}, opts));
@@ -376,7 +377,7 @@ namespace cyberway { namespace chaindb {
             if (src.begin() == src.end()) {
                 return true;
             } else if (!is_noscope_table(index)) {
-                return scope_ != index.scope;
+                return !ignore_scope(index) && scope_ != index.scope ;
             }
             return false;
         }

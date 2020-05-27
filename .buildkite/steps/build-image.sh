@@ -1,9 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+EXPECTED_VERSION=
 case "${BUILDKITE_BRANCH}" in
    v*.*.*)
       COMPILETYPE=Release
+      EXPECTED_VERSION="${BUILDKITE_BRANCH}"
       git fetch origin --tags "${BUILDKITE_BRANCH}"
       ;;
    master) COMPILETYPE=Release;;
@@ -11,7 +13,16 @@ case "${BUILDKITE_BRANCH}" in
 esac
 
 GIT_REVISION=$(git rev-parse HEAD)
-VERSION_STRING=$(git describe --tags --dirty)
+
+if [ -n "$EXPECTED_VERSION" ]; then
+    VERSION_STRING=$(git describe --tags --dirty --match "${EXPECTED_VERSION}")
+    if [ "${VERSION_STRING}" != "${EXPECTED_VERSION}" ]; then
+        echo "Version does not equal to expected. Current: ${VERSION_STRING}, expect: ${EXPECTED_VERSION}"
+        exit 1
+    fi
+else
+    VERSION_STRING=$(git describe --tags --dirty)
+fi
 
 echo "BUILDKITE_BRANCH: ${BUILDKITE_BRANCH}"
 echo "GIT_REVISION: ${GIT_REVISION}"

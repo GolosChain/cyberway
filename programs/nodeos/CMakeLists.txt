@@ -14,6 +14,12 @@ if( GPERFTOOLS_FOUND )
     list( APPEND PLATFORM_SPECIFIC_LIBS tcmalloc )
 endif()
 
+if(DEFINED REVISION)
+    string(SUBSTRING ${REVISION} 0 8 nodeos_BUILD_REVISION)
+else()
+    set(nodeos_BUILD_REVISION 0)
+endif()
+
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../../.git)
   find_package(Git)
   if(GIT_FOUND)
@@ -23,13 +29,13 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../../.git)
       OUTPUT_VARIABLE "nodeos_BUILD_VERSION"
       ERROR_QUIET
       OUTPUT_STRIP_TRAILING_WHITESPACE)
-    message(STATUS "Git commit revision: ${nodeos_BUILD_VERSION}")
   else()
-    set(nodeos_BUILD_VERSION 0)
+    set(nodeos_BUILD_VERSION ${nodeos_BUILD_REVISION})
   endif()
 else()
-  set(nodeos_BUILD_VERSION 0)
+  set(nodeos_BUILD_VERSION ${nodeos_BUILD_REVISION})
 endif()
+message(STATUS "Git commit revision: ${nodeos_BUILD_VERSION}")
 
 configure_file(config.hpp.in config.hpp ESCAPE_QUOTES)
 

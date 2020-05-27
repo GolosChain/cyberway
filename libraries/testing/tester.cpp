@@ -115,9 +115,9 @@ namespace eosio { namespace testing {
         push_genesis_block();
    }
 
-   void base_tester::init(controller::config config, const snapshot_reader_ptr& snapshot) {
+   void base_tester::init(controller::config config, snapshot_reader_ptr snapshot) {
       cfg = config;
-      open(snapshot);
+      open(std::move(snapshot));
    }
 
 
@@ -127,10 +127,10 @@ namespace eosio { namespace testing {
    }
 
 
-   void base_tester::open( const snapshot_reader_ptr& snapshot) {
+   void base_tester::open(snapshot_reader_ptr snapshot) {
       control.reset( new controller(cfg) );
       control->add_indices();
-      control->startup( []() { return false; }, snapshot);
+      control->startup( []() { return false; }, std::move(snapshot));
       chain_transactions.clear();
       control->accepted_block.connect([this]( const block_state_ptr& block_state ){
         FC_ASSERT( block_state->block );

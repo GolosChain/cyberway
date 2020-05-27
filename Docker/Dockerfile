@@ -3,6 +3,7 @@ FROM cyberway/builder:$builder as builder
 ARG symbol=CYBER
 ARG compiletype=RelWithDebInfo
 ARG versionstring
+ARG revision
 
 COPY . ./cyberway
 
@@ -10,6 +11,7 @@ RUN cd cyberway \
     && cmake -H. -B"/tmp/build" \
         -GNinja \
         -DVERSION_STRING=$versionstring \
+        -DREVISION=$revision \
         -DCMAKE_BUILD_TYPE=$compiletype \
         -DWASM_ROOT=/opt/wasm \
         -DCMAKE_CXX_COMPILER=clang++ \
@@ -20,7 +22,6 @@ RUN cd cyberway \
     && cmake --build /tmp/build --target install
 
 FROM ubuntu:18.04
-ARG revision
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get -y install openssl ca-certificates libusb-1.0-0-dev libcurl4-gnutls-dev \

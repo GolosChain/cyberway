@@ -48,6 +48,7 @@ const static uint64_t domain_account_name    = N(cyber.domain);
 const static uint64_t history_account_name   = N(.history);
 const static uint64_t govern_account_name    = N(cyber.govern);
 const static uint64_t stake_account_name     = N(cyber.stake);
+const static uint64_t ignore_scope_account   = N(.ignore.scp);
 
 // Active permission of producers account requires greater than 2/3 of the producers to authorize
 const static uint64_t majority_producers_permission_name = N(prod.major); // greater than 1/2 of producers needed to authorize

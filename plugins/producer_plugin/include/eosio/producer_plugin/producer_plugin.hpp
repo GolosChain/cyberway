@@ -78,4 +78,4 @@ FC_REFLECT(eosio::producer_plugin::runtime_options,
     (subjective_cpu_leeway_us)(subjective_ram_size)(subjective_reserved_ram_size)(ram_load_multiplier)(incoming_defer_ratio));
 //TODO: Removed by CyberWay
 //FC_REFLECT(eosio::producer_plugin::integrity_hash_information, (head_block_id)(integrity_hash))
-//FC_REFLECT(eosio::producer_plugin::snapshot_information, (head_block_id)(snapshot_name))
+FC_REFLECT(eosio::producer_plugin::snapshot_information, (head_block_id)(snapshot_name))

@@ -101,10 +101,10 @@ namespace eosio { namespace testing {
          static controller::config default_config(string chaindb_sys_name = string());
 
          void init(controller::config config, bool push_genesis = true, db_read_mode read_mode = db_read_mode::SPECULATIVE);
-         void init(controller::config config, const snapshot_reader_ptr& snapshot = nullptr);
+         void init(controller::config config, snapshot_reader_ptr snapshot = nullptr);
 
          void close();
-         void open( const snapshot_reader_ptr& snapshot );
+         void open( snapshot_reader_ptr snapshot );
          bool is_same_chain( base_tester& other );
 
          virtual signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms), uint32_t skip_flag = 0/*skip_missed_block_penalty*/, const std::set<account_name>& disabled_producers = std::set<account_name>() ) = 0;

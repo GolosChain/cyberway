@@ -179,7 +179,7 @@ namespace eosio { namespace chain {
          ~controller();
 
          void add_indices();
-         void startup( std::function<bool()> shutdown, const snapshot_reader_ptr& snapshot = nullptr );
+         void startup( std::function<bool()> shutdown, snapshot_reader_ptr snapshot = nullptr );
 
          /**
           * Starts a new pending block session upon which new transactions can
@@ -271,7 +271,7 @@ namespace eosio { namespace chain {
          block_id_type get_block_id_for_num( uint32_t block_num )const;
 
          sha256 calculate_integrity_hash()const;
-         void write_snapshot( const snapshot_writer_ptr& snapshot )const;
+         void write_snapshot(snapshot_writer_ptr snapshot);
 
          void check_actor_list( const flat_set<account_name>& actors )const;
          void check_contract_list( account_name code )const;
@@ -344,7 +344,6 @@ namespace eosio { namespace chain {
          friend class transaction_context;
 
          std::unique_ptr<controller_impl> my;
-
    };
 
 } }  /// eosio::chain

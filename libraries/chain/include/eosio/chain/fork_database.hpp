@@ -70,6 +70,13 @@ namespace eosio { namespace chain {
           */
          signal<void(block_state_ptr)> irreversible;
 
+         /**
+          * methods to iterate through forkdb
+          */
+
+         const std::vector<block_state_ptr> content() const;
+         block_state_ptr get_child_block(const block_id_type& parent_id) const;
+
       private:
          void set_bft_irreversible( block_id_type id );
          unique_ptr<fork_database_impl> my;

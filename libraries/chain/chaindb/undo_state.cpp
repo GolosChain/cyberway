@@ -382,6 +382,12 @@ namespace cyberway { namespace chaindb {
             }
         }
 
+        void force_undo(const table_info& table, object_value obj) {
+            auto  ctx = journal_.create_ctx(table);
+            undo_pk_ = std::max(undo_pk_, obj.service.undo_pk) + 1;
+            journal_.write_undo(ctx, write_operation::insert(std::move(obj)));
+        }
+
         void insert(const table_info& table, object_value obj) {
             verifier_.verify(table, obj);
             cache_.clear_unsuccess(table);
@@ -1094,6 +1100,10 @@ namespace cyberway { namespace chaindb {
 
     void undo_stack::commit(const revision_t commit_rev) const {
         impl_->commit(commit_rev);
+    }
+
+    void undo_stack::force_undo(const table_info& table, object_value obj) const {
+        impl_->force_undo(table, std::move(obj));
     }
 
     void undo_stack::insert(const table_info& table, object_value obj) const {

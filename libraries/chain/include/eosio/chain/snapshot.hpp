@@ -4,11 +4,14 @@
  */
 #pragma once
 
+#include <ostream>
+
+#include <boost/core/demangle.hpp>
+
+#include <fc/variant_object.hpp>
+
 #include <eosio/chain/database_utils.hpp>
 #include <eosio/chain/exceptions.hpp>
-#include <fc/variant_object.hpp>
-#include <boost/core/demangle.hpp>
-#include <ostream>
 
 namespace eosio { namespace chain {
    /**
@@ -30,7 +33,7 @@ namespace eosio { namespace chain {
          using value_type = std::decay_t<T>;
          using snapshot_type = value_type;
 
-         static const snapshot_type& to_snapshot_row( const value_type& value, const chainbase::database& ) {
+         static const snapshot_type& to_snapshot_row( const value_type& value) {
             return value;
          };
       };
@@ -98,9 +101,7 @@ namespace eosio { namespace chain {
          }
 
          fc::variant to_variant() const override {
-            variant var;
-            fc::to_variant(data, var);
-            return var;
+           return fc::variant(data);
          }
 
          std::string row_type_name() const override {
@@ -109,6 +110,35 @@ namespace eosio { namespace chain {
 
          const T& data;
       };
+
+    template<>
+    struct snapshot_row_writer<fc::variant> : abstract_snapshot_row_writer {
+       explicit snapshot_row_writer( const fc::variant& data )
+       :data(data) {}
+
+       template<typename DataStream>
+       void write_stream(DataStream& out) const {
+          fc::raw::pack(out, data);
+       }
+
+       void write(ostream_wrapper& out) const override {
+          write_stream(out);
+       }
+
+       void write(fc::sha256::encoder& out) const override {
+          write_stream(out);
+       }
+
+       fc::variant to_variant() const override {
+          return data;
+       }
+
+      std::string row_type_name() const override {
+          return boost::core::demangle( typeid( fc::variant ).name() );
+       }
+
+       const fc::variant& data;
+    };
 
       template<typename T>
       snapshot_row_writer<T> make_row_writer( const T& data) {
@@ -121,8 +151,8 @@ namespace eosio { namespace chain {
          class section_writer {
             public:
                template<typename T>
-               void add_row( const T& row, const chainbase::database& db ) {
-                  _writer.write_row(detail::make_row_writer(detail::snapshot_row_traits<T>::to_snapshot_row(row, db)));
+               void add_row( const T& row) {
+                  _writer.write_row(detail::make_row_writer(detail::snapshot_row_traits<T>::to_snapshot_row(row)));
                }
 
             private:
@@ -148,7 +178,10 @@ namespace eosio { namespace chain {
             write_section(detail::snapshot_section_traits<T>::section_name(), f);
          }
 
-      virtual ~snapshot_writer(){};
+         virtual void finalize() = 0;
+
+
+      virtual ~snapshot_writer(){}
 
       protected:
          virtual void write_start_section( const std::string& section_name ) = 0;
@@ -156,7 +189,7 @@ namespace eosio { namespace chain {
          virtual void write_end_section() = 0;
    };
 
-   using snapshot_writer_ptr = std::shared_ptr<snapshot_writer>;
+   using snapshot_writer_ptr = std::unique_ptr<snapshot_writer>;
 
    namespace detail {
       struct abstract_snapshot_row_reader {
@@ -293,7 +326,7 @@ namespace eosio { namespace chain {
          virtual void clear_section() = 0;
    };
 
-   using snapshot_reader_ptr = std::shared_ptr<snapshot_reader>;
+   using snapshot_reader_ptr = std::unique_ptr<snapshot_reader>;
 
    class variant_snapshot_writer : public snapshot_writer {
       public:
@@ -302,7 +335,7 @@ namespace eosio { namespace chain {
          void write_start_section( const std::string& section_name ) override;
          void write_row( const detail::abstract_snapshot_row_writer& row_writer ) override;
          void write_end_section( ) override;
-         void finalize();
+         void finalize() override;
 
       private:
          fc::mutable_variant_object& snapshot;
@@ -334,7 +367,7 @@ namespace eosio { namespace chain {
          void write_start_section( const std::string& section_name ) override;
          void write_row( const detail::abstract_snapshot_row_writer& row_writer ) override;
          void write_end_section( ) override;
-         void finalize();
+         void finalize() override;
 
          static const uint32_t magic_number = 0x30510550;
 
@@ -373,7 +406,7 @@ namespace eosio { namespace chain {
          void write_start_section( const std::string& section_name ) override;
          void write_row( const detail::abstract_snapshot_row_writer& row_writer ) override;
          void write_end_section( ) override;
-         void finalize();
+         void finalize() override;
 
       private:
          fc::sha256::encoder&  enc;
