@@ -5,6 +5,31 @@ ARG compiletype=RelWithDebInfo
 ARG versionstring
 ARG revision
 
+ARG SONAR_SCANNER_HOME=/opt/sonar-scanner
+ARG BUILD_WRAPPER_HOME=/opt/build-wrapper
+ARG SONAR_LOGIN
+
+ENV SONAR_SCANNER_HOME=${SONAR_SCANNER_HOME} \
+    SONAR_SCANNER_VERSION=4.2.0.1873 \
+    SONAR_LOGIN=${SONAR_LOGIN} \
+    BUILD_WRAPPER_HOME=${BUILD_WRAPPER_HOME} \
+    PATH=${SONAR_SCANNER_HOME}/bin:${BUILD_WRAPPER_HOME}:${PATH} \
+    SONAR_SCANNER_OPTS="-server"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git wget unzip xz-utils pylint \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt
+RUN wget -q -O /opt/sonar-scanner-cli.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip \
+    && unzip sonar-scanner-cli.zip \
+    && rm sonar-scanner-cli.zip \
+    && mv sonar-scanner-${SONAR_SCANNER_VERSION}-linux ${SONAR_SCANNER_HOME} \
+    && wget -q -O /opt/build-wrapper.zip https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip \
+    && unzip build-wrapper.zip \
+    && rm build-wrapper.zip \
+    && mv build-wrapper-linux-x86 ${BUILD_WRAPPER_HOME}
+
 COPY . ./cyberway
 
 RUN cd cyberway \
@@ -19,7 +44,15 @@ RUN cd cyberway \
         -DCMAKE_INSTALL_PREFIX=/opt/cyberway \
         -DBUILD_MONGO_DB_PLUGIN=false \
         -DCORE_SYMBOL_NAME=$symbol \
-    && cmake --build /tmp/build --target install
+    && build-wrapper-linux-x86-64 --out-dir bw-output cmake --build /tmp/build --target install
+
+RUN sonar-scanner \
+  -Dsonar.organization=cyberway \
+  -Dsonar.projectKey=cyberway_cyberway \
+  -Dsonar.sources=. \
+  -Dsonar.host.url=https://sonarcloud.io \
+  -Dsonar.cfamily.build-wrapper-output=bw-output \
+  -Dsonar.login=${SONAR_LOGIN}
 
 FROM ubuntu:18.04
 
