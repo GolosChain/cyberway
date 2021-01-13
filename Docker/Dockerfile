@@ -24,7 +24,7 @@ RUN cd cyberway \
 FROM ubuntu:18.04
 
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get -y install openssl ca-certificates libusb-1.0-0-dev libcurl4-gnutls-dev \
+    && DEBIAN_FRONTEND=noninteractive apt-get -y install openssl ca-certificates libusb-1.0-0-dev libcurl4-gnutls-dev pbzip2 \
     && rm -rf /var/lib/apt/lists/* \
     && echo "$revision" > /etc/cyberway-version
 
